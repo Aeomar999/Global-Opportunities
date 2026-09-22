@@ -7,7 +7,7 @@ import { Image } from 'react-native';
 
 const LogoSVG = () => (
   <Image
-    source={require('../../../assets/images/logo.png')}
+    source={require('@/assets/images/logo.png')}
     style={{ width: 100, height: 100, borderRadius: 50 }}
     resizeMode="contain"
   />
