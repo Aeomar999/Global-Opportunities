@@ -3,11 +3,21 @@ import { View, Text, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as SecureStore from 'expo-secure-store';
 
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
 
 export default function Onboarding3Screen() {
   const router = useRouter();
+
+  const handleGetStarted = async () => {
+    try {
+      await SecureStore.setItemAsync('hasSeenOnboarding', 'true');
+    } catch {
+      // Ignore storage errors
+    }
+    router.replace('/(auth)/index');
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#6671E4' }}>
@@ -120,7 +130,7 @@ export default function Onboarding3Screen() {
 
           {/* Call to Action */}
           <TouchableOpacity
-            onPress={() => router.replace('/(auth)/login')}
+            onPress={handleGetStarted}
             className="bg-white w-full items-center shadow-sm"
             style={{ height: 47, borderRadius: 8, justifyContent: 'center' }}
           >

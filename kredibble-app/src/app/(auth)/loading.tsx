@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { View, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { G, Rect, Defs, ClipPath } from 'react-native-svg';
+import * as SecureStore from 'expo-secure-store';
 
 const LogoSVG = () => (
   <Image 
@@ -24,9 +25,28 @@ export default function LoadingScreen() {
       })
     ).start();
 
+    const checkOnboarding = async () => {
+      try {
+        const hasSeenOnboarding = await SecureStore.getItemAsync('hasSeenOnboarding');
+        console.log('[LoadingScreen] hasSeenOnboarding:', hasSeenOnboarding);
+        if (hasSeenOnboarding === 'true') {
+          console.log('[LoadingScreen] Redirecting to /(tabs)');
+          router.replace('/(tabs)');
+        } else {
+          console.log('[LoadingScreen] Redirecting to /(onboarding)/1');
+          router.replace('/(onboarding)/1');
+        }
+      } catch (error) {
+        console.log('[LoadingScreen] Error reading storage, fallback to tabs:', error);
+        // Fallback to tabs if storage fails
+        router.replace('/(tabs)');
+      }
+    };
+
+    // Small delay for animation, then check onboarding
     const timer = setTimeout(() => {
-      router.replace('/(tabs)');
-    }, 10000);
+      checkOnboarding();
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, []);

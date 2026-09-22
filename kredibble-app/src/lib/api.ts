@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
 export type AuthRole = 'seeker' | 'hirer' | 'admin';
 
@@ -38,19 +39,34 @@ export const API_BASE_URL = getApiUrl();
 const TOKEN_KEY = 'kredibble_app_token';
 const USER_KEY = 'kredibble_app_user';
 
-const canUseLocalStorage = () => typeof window !== 'undefined' && !!window.localStorage;
-
-export const saveMobileSession = ({ token, user }: AuthResponse) => {
-  if (!canUseLocalStorage()) return;
-  window.localStorage.setItem(TOKEN_KEY, token);
-  window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+const saveMobileSession = async ({ token, user }: AuthResponse) => {
+  try {
+    await SecureStore.setItemAsync(TOKEN_KEY, token);
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+  } catch {
+    // Silently fail if secure store unavailable
+  }
 };
 
-export const getMobileToken = () =>
-  canUseLocalStorage() ? window.localStorage.getItem(TOKEN_KEY) : null;
+export const getMobileToken = async () => {
+  try {
+    return await SecureStore.getItemAsync(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const getMobileUser = async () => {
+  try {
+    const userJson = await SecureStore.getItemAsync(USER_KEY);
+    return userJson ? JSON.parse(userJson) : null;
+  } catch {
+    return null;
+  }
+};
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getMobileToken();
+  const token = await getMobileToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
@@ -87,7 +103,7 @@ export const loginMobile = async (email: string, password: string) => {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  saveMobileSession(session);
+  await saveMobileSession(session);
   return session;
 };
 
@@ -116,6 +132,15 @@ export const signupMobile = async (values: {
     method: 'POST',
     body: JSON.stringify(values),
   });
-  saveMobileSession(session);
+  await saveMobileSession(session);
   return session;
+};
+
+export const clearMobileSession = async () => {
+  try {
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(USER_KEY);
+  } catch {
+    // Ignore errors
+  }
 };

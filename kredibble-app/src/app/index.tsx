@@ -1,10 +1,20 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Home } from 'lucide-react-native';
+import { Home, Trash2 } from 'lucide-react-native';
+import * as SecureStore from 'expo-secure-store';
 
 export default function AuthEntryScreen() {
   const router = useRouter();
+
+  const clearOnboarding = async () => {
+    try {
+      await SecureStore.deleteItemAsync('hasSeenOnboarding');
+      Alert.alert('Cleared', 'Onboarding flag cleared. Next app launch will show onboarding.');
+    } catch (e) {
+      Alert.alert('Error', 'Failed to clear onboarding flag');
+    }
+  };
 
   return (
     <View className="flex-1 bg-[#F7F7F9] px-6 items-center justify-center">
@@ -74,6 +84,26 @@ export default function AuthEntryScreen() {
         <Home size={18} color="#8A8D9F" />
         <Text className="font-sans text-[#8A8D9F]" style={{ fontSize: 14 }}>
           Browse as Guest
+        </Text>
+      </TouchableOpacity>
+
+      {/* Debug: Clear onboarding flag */}
+      <TouchableOpacity
+        onPress={clearOnboarding}
+        style={{
+          marginTop: 40,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          backgroundColor: 'rgba(237, 76, 92, 0.1)',
+          borderRadius: 8,
+        }}
+      >
+        <Trash2 size={16} color="#ED4C5C" />
+        <Text className="font-sans text-[#ED4C5C]" style={{ fontSize: 12 }}>
+          Clear Onboarding Flag (Debug)
         </Text>
       </TouchableOpacity>
     </View>

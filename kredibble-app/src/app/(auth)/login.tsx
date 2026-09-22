@@ -147,7 +147,7 @@ export default function LoginScreen() {
       const backendRole = session.user.role === 'hirer' ? 'hirer' : 'seeker';
       authStore.setSession(session.token, session.user);
       authStore.setRole(backendRole);
-      router.replace('/(tabs)');
+      router.replace('/(auth)/loading');
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Unable to sign in');
     } finally {

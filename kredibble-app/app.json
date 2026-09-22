@@ -35,7 +35,8 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -44,8 +45,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "82916fc2-12c0-4bf1-b458-c269ea67cb4d"
+        "projectId": "9d567049-d386-4b4b-b386-6ea3e826d473"
       }
-    }
+    },
+    "owner": "amoahjerry835"
   }
 }

@@ -1,2 +1,7 @@
 
 .mcp.json
+kredibble-backend/scripts/seed-test-credentials.js
+kredibble-app/.env
+kredibble-app/.env.production
+kredibble-app/.env
+kredibble-app/.env
