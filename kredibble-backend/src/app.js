@@ -17,6 +17,10 @@ const isAllowedOrigin = (origin) => {
   if (env.corsOrigins.includes(origin)) return true;
   if (env.isDevelopment && localDevOriginPattern.test(origin)) return true;
   if (origin.endsWith('.vercel.app') || origin.endsWith('.onrender.com')) return true;
+  // Allow Expo/React Native app origins (no CORS for native apps)
+  if (origin.startsWith('exp://') || origin.startsWith('kredibbleapp://')) return true;
+  // Allow native app requests (no origin header)
+  if (origin === 'null' || origin === 'file://') return true;
   return false;
 };
 
