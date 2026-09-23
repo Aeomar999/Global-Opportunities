@@ -5,3 +5,6 @@ kredibble-app/.env
 kredibble-app/.env.production
 kredibble-app/.env
 kredibble-app/.env
+
+.vercel
+.env*
