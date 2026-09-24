@@ -20,8 +20,11 @@ export const env = {
 if (!env.isDevelopment) {
   const secrets = ['jwtSecret', 'adminJwtSecret'];
   for (const key of secrets) {
-    if (env[key].includes('replace-with') || env[key].includes('placeholder')) {
-      throw new Error(`CRITICAL SECURITY ERROR: ${key} is using a placeholder value in production!`);
+    if (env[key].includes('replace-with') || env[key].includes('placeholder') || env[key] === '4f7b8d9c2e1a3b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c' || env[key] === 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2') {
+      throw new Error(`CRITICAL SECURITY ERROR: ${key} is using a fallback or placeholder value in production! You must set proper environment variables.`);
     }
+  }
+  if (!env.databaseUrl) {
+    throw new Error(`CRITICAL ERROR: databaseUrl is missing in production!`);
   }
 }
