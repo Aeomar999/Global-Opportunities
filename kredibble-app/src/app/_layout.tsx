@@ -11,7 +11,6 @@ export default function RootLayout() {
         <View style={Platform.OS === 'web' ? { flex: 1, width: '100%', maxWidth: 480, backgroundColor: '#ffffff', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' } : { flex: 1 }}>
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="splash" />
           <Stack.Screen name="index" />
           <Stack.Screen name="(onboarding)" />
           <Stack.Screen name="(auth)" />
