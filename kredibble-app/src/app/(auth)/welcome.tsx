@@ -9,7 +9,7 @@ export default function AuthEntryScreen() {
   return (
     <View className="flex-1 bg-[#F7F7F9] px-6 items-center justify-center">
       <Image
-        source={require('../../assets/images/logo_light.png')}
+        source={require('../../../assets/images/logo_light.png')}
         style={{ width: 78, height: 78, marginBottom: 24 }}
         resizeMode="contain"
       />
