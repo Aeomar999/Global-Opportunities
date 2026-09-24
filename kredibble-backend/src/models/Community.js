@@ -8,12 +8,20 @@ const channelSchema = new mongoose.Schema({
   followers: String,
   postsCount: { type: Number, default: 0 },
   status: { type: String, default: 'active', index: true },
+  avatar: { type: String },
+  bio: { type: String },
 }, { timestamps: true });
 
 const channelPostSchema = new mongoose.Schema({
   channelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel', required: true, index: true },
   authorName: { type: String, required: true },
   body: { type: String, required: true },
+  title: { type: String },
+  bannerImage: { type: String },
+  link: { type: String },
+  linkText: { type: String },
+  hasRespondButton: { type: Boolean, default: false },
+  reactions: { type: mongoose.Schema.Types.Mixed, default: [] },
   date: String,
   flagged: { type: Boolean, default: false },
 }, { timestamps: true });

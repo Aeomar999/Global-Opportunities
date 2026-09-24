@@ -48,10 +48,27 @@ export default function CareerResourcesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [activeArticle, setActiveArticle] = useState<Article | null>(null);
+  
+  const [articles, setArticles] = useState<Article[]>(ARTICLES);
+
+  React.useEffect(() => {
+    const fetchArticles = async () => {
+      try {
+        const { getArticles } = require('../../lib/api');
+        const data = await getArticles();
+        if (data && data.length > 0) {
+          setArticles(data);
+        }
+      } catch (err) {
+        console.warn('Failed to load articles from API', err);
+      }
+    };
+    fetchArticles();
+  }, []);
 
   const categories = ['All', 'Resume Writing', 'Interview Prep', 'Career Planning'];
 
-  const filteredArticles = ARTICLES.filter(article => {
+  const filteredArticles = articles.filter(article => {
     const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           article.summary.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || article.category === selectedCategory;

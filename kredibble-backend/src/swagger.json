@@ -1,0 +1,2837 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Kredibble API",
+    "version": "1.0.0",
+    "description": "Auto-generated API documentation for Kredibble backend"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000/api"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "User": {
+        "title": "User",
+        "required": [
+          "name",
+          "email",
+          "role"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "seeker",
+              "hirer",
+              "admin"
+            ]
+          },
+          "passwordHash": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "StaffMember": {
+        "title": "StaffMember",
+        "required": [
+          "userId",
+          "name",
+          "email",
+          "role"
+        ],
+        "properties": {
+          "userId": {
+            "type": "schemaobjectid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "joinedDate": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SeekerProfile": {
+        "title": "SeekerProfile",
+        "required": [
+          "userId",
+          "profession"
+        ],
+        "properties": {
+          "userId": {
+            "type": "schemaobjectid"
+          },
+          "profession": {
+            "type": "string"
+          },
+          "university": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "number"
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "professionalSummary": {
+            "type": "string"
+          },
+          "experienceLevel": {
+            "type": "string"
+          },
+          "technicalSkills": {
+            "type": "string"
+          },
+          "softSkills": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "string"
+          },
+          "certifications": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "joinedDate": {
+            "type": "string"
+          },
+          "applicationsCount": {
+            "type": "number"
+          },
+          "savedCount": {
+            "type": "number"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "HirerAccount": {
+        "title": "HirerAccount",
+        "required": [
+          "companyName",
+          "industry",
+          "location",
+          "companyEmail"
+        ],
+        "properties": {
+          "userId": {
+            "type": "schemaobjectid"
+          },
+          "companyName": {
+            "type": "string"
+          },
+          "tagline": {
+            "type": "string"
+          },
+          "logo": {
+            "type": "string"
+          },
+          "bannerImage": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          },
+          "companySize": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          },
+          "companyEmail": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "recruiterName": {
+            "type": "string"
+          },
+          "recruiterRole": {
+            "type": "string"
+          },
+          "recruiterEmail": {
+            "type": "string"
+          },
+          "recruiterPhone": {
+            "type": "string"
+          },
+          "recruiterLinkedin": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "string"
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "joinedDate": {
+            "type": "string"
+          },
+          "postingsCount": {
+            "type": "number"
+          },
+          "publicCompanyProfile": {
+            "type": "boolean"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Opportunity": {
+        "title": "Opportunity",
+        "required": [
+          "title",
+          "type",
+          "company",
+          "location",
+          "description"
+        ],
+        "properties": {
+          "hirerId": {
+            "type": "schemaobjectid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "applicantsCount": {
+            "type": "number"
+          },
+          "date": {
+            "type": "string"
+          },
+          "moderationStatus": {
+            "type": "string"
+          },
+          "workType": {
+            "type": "string"
+          },
+          "salary": {
+            "type": "string"
+          },
+          "experienceLevels": {
+            "type": "string"
+          },
+          "eventDateTime": {
+            "type": "string"
+          },
+          "eventRegion": {
+            "type": "string"
+          },
+          "eventCategory": {
+            "type": "string"
+          },
+          "grantBudgetRange": {
+            "type": "string"
+          },
+          "grantSector": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Applicant": {
+        "title": "Applicant",
+        "required": [
+          "opportunityId"
+        ],
+        "properties": {
+          "opportunityId": {
+            "type": "schemaobjectid"
+          },
+          "seekerId": {
+            "type": "schemaobjectid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "skills": {
+            "type": "string"
+          },
+          "resumeUrl": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Event": {
+        "title": "Event",
+        "required": [
+          "title",
+          "hirer",
+          "location",
+          "dateTime",
+          "capacity"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "hirer": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "dateTime": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "number"
+          },
+          "attendeesCount": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Grant": {
+        "title": "Grant",
+        "required": [
+          "title",
+          "hirer",
+          "sector",
+          "fundingPool"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "hirer": {
+            "type": "string"
+          },
+          "sector": {
+            "type": "string"
+          },
+          "fundingPool": {
+            "type": "number"
+          },
+          "allocated": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GrantApplication": {
+        "title": "GrantApplication",
+        "required": [
+          "grantId",
+          "applicantName",
+          "requestedAmount"
+        ],
+        "properties": {
+          "grantId": {
+            "type": "schemaobjectid"
+          },
+          "applicantName": {
+            "type": "string"
+          },
+          "requestedAmount": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CompanyVerification": {
+        "title": "CompanyVerification",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "hirerId": {
+            "type": "schemaobjectid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          },
+          "companySize": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          },
+          "companyEmail": {
+            "type": "string"
+          },
+          "recruiterName": {
+            "type": "string"
+          },
+          "recruiterRole": {
+            "type": "string"
+          },
+          "recruiterEmail": {
+            "type": "string"
+          },
+          "submittedDate": {
+            "type": "string"
+          },
+          "overallStatus": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "VerificationDoc": {
+        "title": "VerificationDoc",
+        "required": [
+          "companyId",
+          "key"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "schemaobjectid"
+          },
+          "verificationCaseId": {
+            "type": "schemaobjectid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          }
+        }
+      },
+      "Channel": {
+        "title": "Channel",
+        "required": [
+          "name",
+          "category"
+        ],
+        "properties": {
+          "hirerId": {
+            "type": "schemaobjectid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "followers": {
+            "type": "string"
+          },
+          "postsCount": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "avatar": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ChannelPost": {
+        "title": "ChannelPost",
+        "required": [
+          "channelId",
+          "authorName",
+          "body"
+        ],
+        "properties": {
+          "channelId": {
+            "type": "schemaobjectid"
+          },
+          "authorName": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "bannerImage": {
+            "type": "string"
+          },
+          "link": {
+            "type": "string"
+          },
+          "linkText": {
+            "type": "string"
+          },
+          "hasRespondButton": {
+            "type": "boolean"
+          },
+          "reactions": {
+            "type": "object",
+            "properties": {}
+          },
+          "date": {
+            "type": "string"
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Report": {
+        "title": "Report",
+        "required": [
+          "targetType",
+          "reason"
+        ],
+        "properties": {
+          "targetType": {
+            "type": "string"
+          },
+          "targetLabel": {
+            "type": "string"
+          },
+          "reporterName": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "linkedChannelId": {
+            "type": "schemaobjectid"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Article": {
+        "title": "Article",
+        "required": [
+          "category",
+          "title",
+          "summary",
+          "content"
+        ],
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "bannerImage": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Notification": {
+        "title": "Notification",
+        "required": [
+          "title",
+          "message",
+          "audience"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "string"
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SavedItem": {
+        "title": "SavedItem",
+        "required": [
+          "userId",
+          "itemId",
+          "itemType"
+        ],
+        "properties": {
+          "userId": {
+            "type": "schemaobjectid"
+          },
+          "itemId": {
+            "type": "schemaobjectid"
+          },
+          "itemType": {
+            "type": "string",
+            "enum": [
+              "opportunities",
+              "events",
+              "grants",
+              "internships"
+            ]
+          },
+          "_id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List Users",
+        "tags": [
+          "User"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a User",
+        "tags": [
+          "User"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "summary": "Get a User",
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a User",
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a User",
+        "tags": [
+          "User"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/staff": {
+      "get": {
+        "summary": "List StaffMembers",
+        "tags": [
+          "StaffMember"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StaffMember"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a StaffMember",
+        "tags": [
+          "StaffMember"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/staff/{id}": {
+      "get": {
+        "summary": "Get a StaffMember",
+        "tags": [
+          "StaffMember"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a StaffMember",
+        "tags": [
+          "StaffMember"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a StaffMember",
+        "tags": [
+          "StaffMember"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/seekers": {
+      "get": {
+        "summary": "List SeekerProfiles",
+        "tags": [
+          "SeekerProfile"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SeekerProfile"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a SeekerProfile",
+        "tags": [
+          "SeekerProfile"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeekerProfile"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/seekers/{id}": {
+      "get": {
+        "summary": "Get a SeekerProfile",
+        "tags": [
+          "SeekerProfile"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a SeekerProfile",
+        "tags": [
+          "SeekerProfile"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeekerProfile"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a SeekerProfile",
+        "tags": [
+          "SeekerProfile"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/hirers": {
+      "get": {
+        "summary": "List HirerAccounts",
+        "tags": [
+          "HirerAccount"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HirerAccount"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a HirerAccount",
+        "tags": [
+          "HirerAccount"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HirerAccount"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/hirers/{id}": {
+      "get": {
+        "summary": "Get a HirerAccount",
+        "tags": [
+          "HirerAccount"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a HirerAccount",
+        "tags": [
+          "HirerAccount"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HirerAccount"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a HirerAccount",
+        "tags": [
+          "HirerAccount"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/opportunities": {
+      "get": {
+        "summary": "List Opportunitys",
+        "tags": [
+          "Opportunity"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Opportunity"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Opportunity",
+        "tags": [
+          "Opportunity"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Opportunity"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/opportunities/{id}": {
+      "get": {
+        "summary": "Get a Opportunity",
+        "tags": [
+          "Opportunity"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a Opportunity",
+        "tags": [
+          "Opportunity"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Opportunity"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Opportunity",
+        "tags": [
+          "Opportunity"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/applicants": {
+      "get": {
+        "summary": "List Applicants",
+        "tags": [
+          "Applicant"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Applicant"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Applicant",
+        "tags": [
+          "Applicant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Applicant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/applicants/{id}": {
+      "get": {
+        "summary": "Get a Applicant",
+        "tags": [
+          "Applicant"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a Applicant",
+        "tags": [
+          "Applicant"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Applicant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Applicant",
+        "tags": [
+          "Applicant"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "summary": "List Events",
+        "tags": [
+          "Event"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Event",
+        "tags": [
+          "Event"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/events/{id}": {
+      "get": {
+        "summary": "Get a Event",
+        "tags": [
+          "Event"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a Event",
+        "tags": [
+          "Event"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Event",
+        "tags": [
+          "Event"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/grants": {
+      "get": {
+        "summary": "List Grants",
+        "tags": [
+          "Grant"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Grant"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Grant",
+        "tags": [
+          "Grant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Grant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/grants/{id}": {
+      "get": {
+        "summary": "Get a Grant",
+        "tags": [
+          "Grant"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a Grant",
+        "tags": [
+          "Grant"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Grant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Grant",
+        "tags": [
+          "Grant"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/grant-applications": {
+      "get": {
+        "summary": "List GrantApplications",
+        "tags": [
+          "GrantApplication"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GrantApplication"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a GrantApplication",
+        "tags": [
+          "GrantApplication"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantApplication"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/grant-applications/{id}": {
+      "get": {
+        "summary": "Get a GrantApplication",
+        "tags": [
+          "GrantApplication"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a GrantApplication",
+        "tags": [
+          "GrantApplication"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantApplication"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a GrantApplication",
+        "tags": [
+          "GrantApplication"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/verification/companies": {
+      "get": {
+        "summary": "List CompanyVerifications",
+        "tags": [
+          "CompanyVerification"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CompanyVerification"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a CompanyVerification",
+        "tags": [
+          "CompanyVerification"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyVerification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/verification/companies/{id}": {
+      "get": {
+        "summary": "Get a CompanyVerification",
+        "tags": [
+          "CompanyVerification"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a CompanyVerification",
+        "tags": [
+          "CompanyVerification"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyVerification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a CompanyVerification",
+        "tags": [
+          "CompanyVerification"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/verification/documents": {
+      "get": {
+        "summary": "List VerificationDocs",
+        "tags": [
+          "VerificationDoc"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VerificationDoc"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a VerificationDoc",
+        "tags": [
+          "VerificationDoc"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationDoc"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/verification/documents/{id}": {
+      "get": {
+        "summary": "Get a VerificationDoc",
+        "tags": [
+          "VerificationDoc"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a VerificationDoc",
+        "tags": [
+          "VerificationDoc"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationDoc"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a VerificationDoc",
+        "tags": [
+          "VerificationDoc"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/community/channels": {
+      "get": {
+        "summary": "List Channels",
+        "tags": [
+          "Channel"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Channel"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Channel",
+        "tags": [
+          "Channel"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Channel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/community/channels/{id}": {
+      "get": {
+        "summary": "Get a Channel",
+        "tags": [
+          "Channel"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a Channel",
+        "tags": [
+          "Channel"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Channel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Channel",
+        "tags": [
+          "Channel"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/community/posts": {
+      "get": {
+        "summary": "List ChannelPosts",
+        "tags": [
+          "ChannelPost"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChannelPost"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a ChannelPost",
+        "tags": [
+          "ChannelPost"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelPost"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/community/posts/{id}": {
+      "get": {
+        "summary": "Get a ChannelPost",
+        "tags": [
+          "ChannelPost"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a ChannelPost",
+        "tags": [
+          "ChannelPost"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelPost"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a ChannelPost",
+        "tags": [
+          "ChannelPost"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/reports": {
+      "get": {
+        "summary": "List Reports",
+        "tags": [
+          "Report"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Report"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Report",
+        "tags": [
+          "Report"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Report"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/reports/{id}": {
+      "get": {
+        "summary": "Get a Report",
+        "tags": [
+          "Report"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a Report",
+        "tags": [
+          "Report"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Report"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Report",
+        "tags": [
+          "Report"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/articles": {
+      "get": {
+        "summary": "List Articles",
+        "tags": [
+          "Article"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Article"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Article",
+        "tags": [
+          "Article"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Article"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/articles/{id}": {
+      "get": {
+        "summary": "Get a Article",
+        "tags": [
+          "Article"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a Article",
+        "tags": [
+          "Article"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Article"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Article",
+        "tags": [
+          "Article"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "summary": "List Notifications",
+        "tags": [
+          "Notification"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Notification"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a Notification",
+        "tags": [
+          "Notification"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Notification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/notifications/{id}": {
+      "get": {
+        "summary": "Get a Notification",
+        "tags": [
+          "Notification"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a Notification",
+        "tags": [
+          "Notification"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Notification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a Notification",
+        "tags": [
+          "Notification"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/saved": {
+      "get": {
+        "summary": "List SavedItems",
+        "tags": [
+          "SavedItem"
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SavedItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a SavedItem",
+        "tags": [
+          "SavedItem"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedItem"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/saved/{id}": {
+      "get": {
+        "summary": "Get a SavedItem",
+        "tags": [
+          "SavedItem"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record found"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update a SavedItem",
+        "tags": [
+          "SavedItem"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedItem"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a SavedItem",
+        "tags": [
+          "SavedItem"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          }
+        }
+      }
+    }
+  }
+}

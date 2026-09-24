@@ -183,10 +183,46 @@ export const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => 
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+import { getOpportunities } from '../../lib/api';
+
 export default function JobsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ filterCount?: string }>();
+  const params = useLocalSearchParams<{ filterCount?: string; query?: string }>();
   const filterCount = parseInt(params.filterCount ?? '0', 10);
+  
+  const [liveJobs, setLiveJobs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchJobs = async () => {
+      setIsLoading(true);
+      try {
+        const data = await getOpportunities({
+          type: 'jobs',
+          q: params.query
+        });
+        setLiveJobs(data);
+      } catch (err) {
+        console.error("Failed to fetch jobs:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchJobs();
+  }, [params.query]);
+
+  // Merge live jobs with mock jobs so the screen isn't empty if the backend has no jobs
+  const displayJobs = liveJobs.length > 0 ? liveJobs.map(j => ({
+    id: j.id,
+    title: j.title,
+    location: j.location || 'Remote',
+    company: j.company || 'Company',
+    logoColor: j.logoColor || '#6671E4',
+    initial: j.initial || 'J',
+    description: j.description || '',
+    applied: `${j.applicantsCount || 0} applied`,
+    match: '92% Match',
+  })) : JOBS_DATA;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }} edges={['top', 'left', 'right']}>
@@ -218,8 +254,8 @@ export default function JobsScreen() {
             style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
           >
             <Search size={18} color="#A1A1AA" style={{ marginRight: 10 }} />
-            <Text style={{ fontSize: 14, color: '#A1A1AA' }} className="font-sans">
-              Browse for jobs
+            <Text style={{ fontSize: 14, color: params.query ? '#1A1A1A' : '#A1A1AA' }} className="font-sans">
+              {params.query || 'Browse for jobs'}
             </Text>
           </TouchableOpacity>
 
@@ -240,7 +276,7 @@ export default function JobsScreen() {
         </View>
 
         {/* Job cards */}
-        {JOBS_DATA.map(job => (
+        {displayJobs.map(job => (
           <JobCard
             key={job.id}
             job={job}

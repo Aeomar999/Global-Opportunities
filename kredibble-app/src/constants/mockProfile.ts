@@ -137,6 +137,21 @@ class ProfileStateStore {
       this.saved.push({ id, type });
     }
     this.notify();
+
+    try {
+      const { authStore } = require('./authStore');
+      const { toggleSavedItem } = require('../lib/api');
+      
+      const userId = authStore.user?.id;
+      if (userId) {
+        let itemType = type === 'jobs' ? 'opportunities' : type;
+        toggleSavedItem(userId, { itemId: id, itemType: itemType }).catch((err: any) => {
+          console.warn('Failed to persist bookmark to server', err);
+        });
+      }
+    } catch (err) {
+      console.warn('Could not load auth store for saving item');
+    }
   }
 
   isSaved(id: string, type: 'jobs' | 'internships' | 'events' | 'grants'): boolean {

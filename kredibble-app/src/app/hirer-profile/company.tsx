@@ -9,19 +9,19 @@ export default function CompanyProfileScreen() {
   const router = useRouter();
   const [company, setCompany] = useState(authStore.company);
 
-  const [name, setName] = useState(company.name);
-  const [tagline, setTagline] = useState(company.tagline);
-  const [industry, setIndustry] = useState(company.industry);
-  const [companySize, setCompanySize] = useState(company.companySize);
-  const [location, setLocation] = useState(company.location);
-  const [website, setWebsite] = useState(company.website);
-  const [companyEmail, setCompanyEmail] = useState(company.companyEmail);
-  const [description, setDescription] = useState(company.description);
-  const [logo, setLogo] = useState(company.logo);
-  const [bannerImage, setBannerImage] = useState(company.bannerImage);
+  const [name, setName] = useState(company?.name || '');
+  const [tagline, setTagline] = useState(company?.tagline || '');
+  const [industry, setIndustry] = useState(company?.industry || '');
+  const [companySize, setCompanySize] = useState(company?.companySize || '');
+  const [location, setLocation] = useState(company?.location || '');
+  const [website, setWebsite] = useState(company?.website || '');
+  const [companyEmail, setCompanyEmail] = useState(company?.companyEmail || '');
+  const [description, setDescription] = useState(company?.description || '');
+  const [logo, setLogo] = useState(company?.logo || '');
+  const [bannerImage, setBannerImage] = useState(company?.bannerImage || '');
 
   useEffect(() => {
-    const unsubscribe = authStore.subscribe(() => setCompany({ ...authStore.company }));
+    const unsubscribe = authStore.subscribe(() => setCompany(authStore.company ? { ...authStore.company } : null));
     return unsubscribe;
   }, []);
 
@@ -39,12 +39,29 @@ export default function CompanyProfileScreen() {
 
   const isValid = name.trim() && tagline.trim() && industry.trim() && location.trim();
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isValid) return;
-    authStore.updateCompany({
+    
+    const companyData = {
       name, tagline, industry, companySize, location, website, companyEmail, description, logo, bannerImage,
-    });
-    router.back();
+    };
+
+    try {
+      const { updateHirerProfile } = require('../../lib/api');
+      const hirerId = (authStore as any).user?.hirer?.id;
+      if (hirerId) {
+        await updateHirerProfile(hirerId, {
+          companyName: companyData.name, // The backend expects companyName instead of name
+          ...companyData
+        });
+      }
+      
+      authStore.updateCompany(companyData);
+      router.back();
+    } catch (err) {
+      alert('Failed to save company profile');
+      console.error(err);
+    }
   };
 
   return (

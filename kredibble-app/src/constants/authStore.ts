@@ -61,6 +61,7 @@ export interface PostedOpportunity {
 }
 
 export interface RecruiterCompany {
+  id?: string;
   name: string;
   tagline: string;
   logo: string;
@@ -359,19 +360,20 @@ class AuthStateStore {
     if (user.role === 'hirer' && user.hirer) {
       const h = user.hirer as any;
       this.company = {
-        name: h.companyName,
+        id: h.id,
+        name: h.companyName || 'Unknown Company',
         tagline: h.tagline || '',
         logo: h.logo || '',
         bannerImage: h.bannerImage || '',
-        industry: h.industry,
+        industry: h.industry || '',
         companySize: h.companySize || '',
-        location: h.location,
+        location: h.location || '',
         website: h.website || '',
-        companyEmail: h.companyEmail,
+        companyEmail: h.companyEmail || '',
         description: h.description || '',
-        recruiterName: h.recruiterName,
+        recruiterName: h.recruiterName || '',
         recruiterRole: h.recruiterRole || '',
-        recruiterEmail: h.recruiterEmail,
+        recruiterEmail: h.recruiterEmail || '',
         recruiterPhone: h.recruiterPhone || '',
         recruiterLinkedin: h.recruiterLinkedin || '',
         verified: h.verified || false,
@@ -396,15 +398,17 @@ class AuthStateStore {
   }
 
   updateCompany(updated: Partial<RecruiterCompany>) {
-    this.company = { ...this.company, ...updated };
+    if (this.company) {
+      this.company = { ...this.company, ...updated } as RecruiterCompany;
+    }
     this.notify();
   }
 
   updateVerificationDoc(doc: keyof VerificationDocs, status: DocStatus) {
     this.verificationDocs = { ...this.verificationDocs, [doc]: status };
     const allDone = Object.values(this.verificationDocs).every(s => s === 'done');
-    if (allDone !== this.company.verified) {
-      this.company = { ...this.company, verified: allDone };
+    if (this.company && allDone !== this.company.verified) {
+      this.company = { ...this.company, verified: allDone } as RecruiterCompany;
     }
     this.notify();
   }

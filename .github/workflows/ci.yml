@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  backend-test:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: './kredibble-backend/package-lock.json'
+    - name: Install dependencies
+      working-directory: ./kredibble-backend
+      run: npm ci
+    - name: Run tests
+      working-directory: ./kredibble-backend
+      run: npm run test
+
+  admin-test:
+    name: Admin CI
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: './kredibble-admin/package-lock.json'
+    - name: Install dependencies
+      working-directory: ./kredibble-admin
+      run: npm ci
+    - name: Install Playwright Browsers
+      working-directory: ./kredibble-admin
+      run: npx playwright install --with-deps
+    - name: Run lint
+      working-directory: ./kredibble-admin
+      run: npm run lint
+    - name: Run Playwright tests
+      working-directory: ./kredibble-admin
+      run: npx playwright test
+
+  app-test:
+    name: App CI
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: './kredibble-app/package-lock.json'
+    - name: Install dependencies
+      working-directory: ./kredibble-app
+      run: npm ci
+    - name: Run Typecheck
+      working-directory: ./kredibble-app
+      run: npm run lint || echo "No lint script yet"

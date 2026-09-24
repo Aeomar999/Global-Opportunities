@@ -134,11 +134,22 @@ export default function HomeScreen() {
           const data = await getOpportunities();
           authStore.setOpportunities(data);
         } else {
-          // Hirer needs dashboard summary
-          // const summary = await getDashboardSummary();
-          // For now, let's just fetch opportunities to show counts
+          // Hirer needs their opportunities and the applicants for pipeline math
+          const { getApplicants } = require('../../lib/api');
           const data = await getOpportunities();
-          authStore.setOpportunities(data);
+          
+          // Fetch applicants for each opportunity to calculate pipeline stats
+          const oppsWithApplicants = await Promise.all(
+            data.map(async (opp: any) => {
+              try {
+                const applicants = await getApplicants(opp.id);
+                return { ...opp, applicants, applicantsCount: applicants.length || opp.applicantsCount || 0 };
+              } catch (e) {
+                return { ...opp, applicants: [], applicantsCount: 0 };
+              }
+            })
+          );
+          authStore.setOpportunities(oppsWithApplicants);
         }
       } catch (err) {
         console.error('Failed to fetch home data:', err);

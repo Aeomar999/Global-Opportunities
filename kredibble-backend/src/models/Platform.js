@@ -86,5 +86,15 @@ export const Applicant = mongoose.model('Applicant', applicantSchema);
 export const Event = mongoose.model('Event', eventSchema);
 export const Grant = mongoose.model('Grant', grantSchema);
 export const GrantApplication = mongoose.model('GrantApplication', grantApplicationSchema);
+
+const eventAttendeeSchema = new mongoose.Schema({
+  eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true, index: true },
+  fullName: { type: String, required: true },
+  email: { type: String, required: true },
+  quantity: { type: Number, default: 1 },
+  status: { type: String, default: 'confirmed' },
+}, { timestamps: true });
+export const EventAttendee = mongoose.model('EventAttendee', eventAttendeeSchema);
+
 export const CompanyVerification = mongoose.model('CompanyVerification', companyVerificationSchema);
 export const VerificationDoc = mongoose.model('VerificationDoc', verificationDocSchema);

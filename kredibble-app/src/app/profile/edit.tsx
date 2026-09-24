@@ -26,9 +26,22 @@ export default function EditProfileScreen() {
   const [skillModalVisible, setSkillModalVisible] = useState(false);
   const [toolModalVisible, setToolModalVisible] = useState(false);
 
-  const handleSave = () => {
-    profileStore.updateProfile(user);
-    router.replace('/profile/manage');
+  const handleSave = async () => {
+    try {
+      const { authStore } = require('../../constants/authStore');
+      const { updateSeekerProfile } = require('../../lib/api');
+      
+      const seekerId = (authStore as any).user?.seeker?.id;
+      if (seekerId) {
+        await updateSeekerProfile(seekerId, user);
+      }
+      
+      profileStore.updateProfile(user);
+      router.replace('/profile/manage');
+    } catch (err) {
+      alert('Failed to save profile');
+      console.error(err);
+    }
   };
 
   const updateField = (key: string, value: any) => {

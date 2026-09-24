@@ -5,6 +5,7 @@ import { ChevronLeft, Ticket, CreditCard, ShieldCheck } from 'lucide-react-nativ
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { EVENTS_DATA } from './index';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
+import { bookEvent } from '../../lib/api';
 
 export default function TicketBookingScreen() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function TicketBookingScreen() {
   const isPaid = event.priceNum > 0;
   const totalPrice = event.priceNum * quantity;
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     // Form Validation
     if (!fullName.trim()) {
       Alert.alert('Validation Error', 'Full name is required.');
@@ -53,11 +54,21 @@ export default function TicketBookingScreen() {
       }
     }
 
-    // Success! Route to order confirmation page.
-    router.replace({
-      pathname: '/events/confirmation',
-      params: { id: event.id, quantity: String(quantity), total: isPaid ? `GHS ${totalPrice.toFixed(2)}` : 'Free' }
-    });
+    try {
+      await bookEvent(event.id, {
+        fullName,
+        email,
+        quantity,
+        status: isPaid ? 'confirmed' : 'confirmed',
+      });
+      // Success! Route to order confirmation page.
+      router.replace({
+        pathname: '/events/confirmation',
+        params: { id: event.id, quantity: String(quantity), total: isPaid ? `GHS ${totalPrice.toFixed(2)}` : 'Free' }
+      });
+    } catch (err: any) {
+      Alert.alert('Booking Error', err.message || 'Failed to book event.');
+    }
   };
 
   return (

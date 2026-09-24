@@ -2,6 +2,9 @@ import { app } from './app.js';
 import { env } from './config/env.js';
 import { connectToDatabase } from './lib/mongodb.js';
 
+import http from 'http';
+import { initSocket } from './socket.js';
+
 async function startServer() {
   try {
     console.log('Connecting to database...');
@@ -20,7 +23,10 @@ async function startServer() {
     }
   }
 
-  app.listen(env.port, () => {
+  const server = http.createServer(app);
+  initSocket(server);
+
+  server.listen(env.port, () => {
     console.log(`🚀 Kredibble API listening on http://localhost:${env.port}/api`);
   });
 }
