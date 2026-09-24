@@ -1,10 +1,10 @@
 services:
   - type: web
-    name: kredibble-backend
+    name: kredibble-api
     env: docker
-    region: ohio
+    region: oregon
     rootDir: kredibble-backend
-    plan: starter
+    plan: free
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
