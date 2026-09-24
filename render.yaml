@@ -2,7 +2,7 @@ services:
   - type: web
     name: kredibble-backend
     env: docker
-    region: ohio
+    region: oregon
     rootDir: kredibble-backend
     plan: free
     healthCheckPath: /api/health
