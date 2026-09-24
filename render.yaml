@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: kredibble-backend
+    name: kredibble-api
     env: docker
     region: oregon
     rootDir: kredibble-backend
