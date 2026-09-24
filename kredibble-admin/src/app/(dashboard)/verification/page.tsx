@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Loader2, Search } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { getVerifications } from "@/lib/api";
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -11,16 +11,26 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
 };
 
+interface CompanyVerification {
+  id: string;
+  name: string;
+  recruiterEmail: string;
+  industry: string;
+  submittedDate: string;
+  overallStatus: string;
+}
+
 export default function VerificationQueuePage() {
-  const [companies, setCompanies] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<CompanyVerification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    setIsLoading(true);
+    const timer = setTimeout(() => setIsLoading(true), 0);
     getVerifications(filter === "all" ? undefined : filter)
-      .then(setCompanies)
+      .then((data) => setCompanies(data as CompanyVerification[]))
       .finally(() => setIsLoading(false));
+    return () => clearTimeout(timer);
   }, [filter]);
 
   return (

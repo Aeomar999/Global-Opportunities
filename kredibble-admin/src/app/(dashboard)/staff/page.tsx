@@ -9,9 +9,14 @@ export default function StaffPage() {
   const [members, setMembers] = useState<StaffMember[]>(staffStore.members);
 
   useEffect(() => {
-    setMembers([...staffStore.members]);
+    const timer = setTimeout(() => {
+      setMembers([...staffStore.members]);
+    }, 0);
     const unsubscribe = staffStore.subscribe(() => setMembers([...staffStore.members]));
-    return unsubscribe;
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
 
   return (

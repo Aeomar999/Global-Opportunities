@@ -19,7 +19,8 @@ export default function DashboardLayout({
       return;
     }
 
-    setIsCheckingSession(false);
+    const timer = setTimeout(() => setIsCheckingSession(false), 0);
+    return () => clearTimeout(timer);
   }, [router]);
 
   if (isCheckingSession) {

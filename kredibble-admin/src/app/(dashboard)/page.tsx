@@ -4,12 +4,22 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   ShieldCheck, Briefcase, Users, Building2, Hash, Flag, BarChart3,
-  Clock, CheckCircle2, XCircle, ArrowRight, Loader2,
+  Clock, CheckCircle2, ArrowRight, Loader2,
 } from "lucide-react";
 import { getDashboardSummary } from "@/lib/api";
 
+interface SummaryData {
+  pendingVerifications: number;
+  pendingOpportunities: number;
+  activeSeekers: number;
+  activeHirers: number;
+  openReports: number;
+  totalUsers: number;
+  totalOpportunities: number;
+}
+
 export default function DashboardHomePage() {
-  const [summary, setSummary] = useState<any>(null);
+  const [summary, setSummary] = useState<SummaryData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

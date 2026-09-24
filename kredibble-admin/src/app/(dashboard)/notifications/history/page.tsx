@@ -15,11 +15,16 @@ export default function NotificationHistoryPage() {
   const [history, setHistory] = useState<SentNotification[]>(notificationBroadcastStore.history);
 
   useEffect(() => {
-    setHistory([...notificationBroadcastStore.history]);
+    const timer = setTimeout(() => {
+      setHistory([...notificationBroadcastStore.history]);
+    }, 0);
     const unsubscribe = notificationBroadcastStore.subscribe(() => {
       setHistory([...notificationBroadcastStore.history]);
     });
-    return unsubscribe;
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
 
   return (
