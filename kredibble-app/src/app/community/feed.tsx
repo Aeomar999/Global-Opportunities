@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Modal, Animated, Dimensions, Platform } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Modal, Animated, Dimensions, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronLeft, Bell, BellOff, MoreHorizontal, LogOut, Send, X, Link as LinkIcon,
@@ -7,21 +7,25 @@ import {
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
-import { communityStore, Channel, Post } from '../../constants/mockCommunity';
 import { authStore } from '../../constants/authStore';
+import { getChannel, getChannelPosts, createChannelPost } from '../../lib/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function ChannelFeedScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const channelId = (params.id as string) || 'breaking-into-tech';
+  const channelId = (params.id as string) || '';
   const insets = useSafeAreaInsets();
 
-  const [channel, setChannel] = useState<Channel | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [channel, setChannel] = useState<any | null>(null);
+  const [posts, setPosts] = useState<any[]>([]);
   const [notificationsMuted, setNotificationsMuted] = useState(false);
-  const isOwner = authStore.role === 'hirer' && authStore.managedGroups.some(g => g.id === channelId);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Checking ownership just based on company matching for now (since mock had it)
+  const isOwner = authStore.role === 'hirer' && channel?.owner === authStore.company?.name;
+
   const [announceText, setAnnounceText] = useState('');
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -44,19 +48,54 @@ export default function ChannelFeedScreen() {
   const bottomSheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
 
-  // Subscribe to store changes
+  // Fetch from APIs
   useEffect(() => {
-    const fetchStoreData = () => {
-      const ch = communityStore.channels.find(c => c.id === channelId);
-      if (ch) {
+    if (!channelId) return;
+
+    const fetchStoreData = async () => {
+      setIsLoading(true);
+      try {
+        const [ch, fetchedPosts] = await Promise.all([
+          getChannel(channelId),
+          getChannelPosts(channelId)
+        ]);
         setChannel(ch);
+        setPosts(fetchedPosts);
+      } catch (err) {
+        console.error('Error fetching channel data:', err);
+      } finally {
+        setIsLoading(false);
       }
-      setPosts([...communityStore.posts]);
     };
 
     fetchStoreData();
-    const unsubscribe = communityStore.subscribe(fetchStoreData);
-    return unsubscribe;
+  }, [channelId]);
+
+  // Real-time socket events
+  useEffect(() => {
+    if (!channelId) return;
+    const { socketService } = require('../../lib/socket');
+    
+    socketService.connect();
+    const socket = socketService.socket;
+    
+    if (socket) {
+      socket.emit('join_channel', channelId);
+      
+      socket.on('receive_message', (newPost: any) => {
+        // If the new post was just created by this user, it's already in the feed
+        setPosts(prev => {
+          if (prev.find(p => p.id === newPost.id)) return prev;
+          return [newPost, ...prev];
+        });
+      });
+    }
+    
+    return () => {
+      if (socket) {
+        socket.off('receive_message');
+      }
+    };
   }, [channelId]);
 
   // Show Toast helper
@@ -84,7 +123,6 @@ export default function ChannelFeedScreen() {
 
   const handleUnfollow = () => {
     setShowDropdown(false);
-    communityStore.unfollowChannel(channelId);
     triggerToast('Unfollowed channel');
     setTimeout(() => {
       router.back();
@@ -92,7 +130,8 @@ export default function ChannelFeedScreen() {
   };
 
   const handleToggleReaction = (postId: string, emoji: string) => {
-    communityStore.addReaction(postId, emoji);
+    // API logic for reaction would go here
+    triggerToast('Reaction added');
   };
 
   // Bottom Sheet animation control
@@ -134,18 +173,26 @@ export default function ChannelFeedScreen() {
 
   const handleSendResponse = () => {
     if (responseText.trim() === '' || !activePostId) return;
-    communityStore.addResponseMessage(activePostId, responseText);
+    // communityStore.addResponseMessage(activePostId, responseText);
     closeBottomSheet();
     triggerToast('Response shared successfully');
   };
 
   // ─── Owner compose bar (WhatsApp-style) ──────────────────────────────────────
 
-  const handleSendText = () => {
+  const handleSendText = async () => {
     if (!announceText.trim()) return;
-    communityStore.addPost(channelId, announceText.trim());
-    setAnnounceText('');
-    triggerToast('Posted to channel');
+    try {
+      const newPost = await createChannelPost(channelId, {
+        body: announceText.trim(),
+        authorName: authStore.company?.name || 'Hirer',
+      });
+      setPosts([newPost, ...posts]);
+      setAnnounceText('');
+      triggerToast('Posted to channel');
+    } catch (err) {
+      alert('Failed to post');
+    }
   };
 
   const pickImageAndPost = () => {
@@ -154,25 +201,43 @@ export default function ChannelFeedScreen() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    (input as any).onchange = (e: any) => {
+    (input as any).onchange = async (e: any) => {
       const file = e.target?.files?.[0];
       if (file) {
-        const url = URL.createObjectURL(file);
-        communityStore.addPost(channelId, '', { bannerImage: url });
-        triggerToast('Photo posted');
+        const url = URL.createObjectURL(file); // Mock upload for UI preview
+        try {
+          const newPost = await createChannelPost(channelId, {
+            body: 'Posted an image',
+            authorName: authStore.company?.name || 'Hirer',
+            bannerImage: url
+          });
+          setPosts([newPost, ...posts]);
+          triggerToast('Photo posted');
+        } catch(err) {
+          alert('Failed to post photo');
+        }
       }
     };
     input.click();
   };
 
-  const promptAndPost = (kind: 'Poll' | 'Quiz' | 'Question') => {
+  const promptAndPost = async (kind: 'Poll' | 'Quiz' | 'Question') => {
     setAttachMenuOpen(false);
     if (Platform.OS !== 'web') return;
     const text = window.prompt(`Write your ${kind.toLowerCase()}`);
     if (text && text.trim()) {
       const emoji = kind === 'Poll' ? '📊' : kind === 'Quiz' ? '📝' : '❓';
-      communityStore.addPost(channelId, text.trim(), { title: `${emoji} ${kind}` });
-      triggerToast(`${kind} posted`);
+      try {
+        const newPost = await createChannelPost(channelId, {
+          title: `${emoji} ${kind}`,
+          body: text.trim(),
+          authorName: authStore.company?.name || 'Hirer'
+        });
+        setPosts([newPost, ...posts]);
+        triggerToast(`${kind} posted`);
+      } catch (err) {
+        alert(`Failed to post ${kind}`);
+      }
     }
   };
 
@@ -204,14 +269,23 @@ export default function ChannelFeedScreen() {
     setRecordSeconds(0);
   };
 
-  const sendRecording = () => {
+  const sendRecording = async () => {
     stopRecordTimer();
     const mm = Math.floor(recordSeconds / 60);
     const ss = String(recordSeconds % 60).padStart(2, '0');
-    communityStore.addPost(channelId, `🎤 Voice message · ${mm}:${ss}`);
-    setIsRecording(false);
-    setRecordSeconds(0);
-    triggerToast('Voice message sent');
+    
+    try {
+      const newPost = await createChannelPost(channelId, {
+        body: `🎤 Voice message · ${mm}:${ss}`,
+        authorName: authStore.company?.name || 'Hirer'
+      });
+      setPosts([newPost, ...posts]);
+      setIsRecording(false);
+      setRecordSeconds(0);
+      triggerToast('Voice message sent');
+    } catch(err) {
+      alert('Failed to send voice message');
+    }
   };
 
   useEffect(() => stopRecordTimer, []);
@@ -454,7 +528,7 @@ export default function ChannelFeedScreen() {
             </View>
 
             {/* Reaction badge row outside of/under the card */}
-            {post.reactions.length > 0 && (
+            {(post.reactions && post.reactions.length > 0) && (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8, paddingHorizontal: 4 }}>
                 <View
                   style={{
@@ -466,7 +540,7 @@ export default function ChannelFeedScreen() {
                     paddingVertical: 6,
                   }}
                 >
-                  {post.reactions.map((r, i) => (
+                  {post.reactions.map((r: any, i: number) => (
                     <TouchableOpacity
                       key={i}
                       onPress={() => handleToggleReaction(post.id, r.emoji)}
@@ -476,7 +550,7 @@ export default function ChannelFeedScreen() {
                     </TouchableOpacity>
                   ))}
                   <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: 'bold', marginLeft: 4 }}>
-                    {post.reactions.reduce((sum, current) => sum + current.count, 0)}
+                    {post.reactions.reduce((sum: number, current: any) => sum + (current.count || 0), 0)}
                   </Text>
                 </View>
               </View>

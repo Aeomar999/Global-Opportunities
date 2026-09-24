@@ -87,7 +87,7 @@ export default function HirerDetailPage() {
               Verification
             </p>
             <p className="text-sm text-kb-text-body mb-3">
-              This company's verification documents are {v.label.toLowerCase()}.
+              This company&apos;s verification documents are {v.label.toLowerCase()}.
             </p>
             <Link
               href={`/verification/${hirer.linkedVerificationId}`}

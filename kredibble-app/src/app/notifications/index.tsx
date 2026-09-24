@@ -18,6 +18,25 @@ export default function NotificationsScreen() {
   const [items, setItems] = useState<NotificationItem[]>(notificationStore.items);
 
   useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const { authStore } = require('../../constants/authStore');
+        const { getNotifications } = require('../../lib/api');
+        const userId = authStore.user?.id;
+        if (userId) {
+          const apiNotifications = await getNotifications(userId);
+          if (apiNotifications && apiNotifications.length > 0) {
+            notificationStore.items = apiNotifications;
+            setItems(apiNotifications);
+            notificationStore.notify();
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load notifications from API', err);
+      }
+    };
+    fetchNotifications();
+
     const unsubscribe = notificationStore.subscribe(() => setItems([...notificationStore.items]));
     return unsubscribe;
   }, []);

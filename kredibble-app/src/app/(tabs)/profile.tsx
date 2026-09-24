@@ -263,7 +263,7 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* User Card */}
         <View style={styles.userContainer}>
-          <Image source={{ uri: authUser?.avatarUrl || 'https://via.placeholder.com/150' }} style={styles.avatar} />
+          <Image source={{ uri: (authUser as any)?.avatarUrl || 'https://via.placeholder.com/150' }} style={styles.avatar} />
           
           {(authUser?.seeker as any)?.verified && (
             <View style={styles.verifiedBadge}>

@@ -11,7 +11,7 @@ import { useToast } from '../../components/ui/ToastProvider';
 
 export const EVENTS_DATA = [
   {
-    id: '1',
+    id: '64a1b2c3d4e5f60011223347',
     title: 'Climate Champion Competition Ghana',
     location: 'British Council Accra, Greater Accra Region',
     venueName: 'British Council',
@@ -32,7 +32,7 @@ export const EVENTS_DATA = [
     description: 'This competition aims to surface the most promising climate tech and green business solutions in Ghana. Finalists will pitch to a panel of international impact investors and climate action advocates, securing grants, mentorship, and commercialization pathways to scale their innovations.'
   },
   {
-    id: '2',
+    id: '64a1b2c3d4e5f60011223348',
     title: 'Tech Leadership Summit Accra',
     location: 'Accra International Conference Center',
     venueName: 'AICC',
@@ -53,7 +53,7 @@ export const EVENTS_DATA = [
     description: 'Join industry pioneers, policy makers, and leading software developers for a day of panels, workshops, and high-impact networking covering artificial intelligence, mobile finance frameworks, blockchain scaling, and cloud architecture across Sub-Saharan Africa.'
   },
   {
-    id: '3',
+    id: '64a1b2c3d4e5f60011223349',
     title: 'Fretwork & Jazz Night',
     location: 'Alliance Française, Greater Accra Region',
     venueName: 'Alliance Française d\'Accra',
@@ -74,7 +74,7 @@ export const EVENTS_DATA = [
     description: 'Experience an unforgettable evening of live jazz music featuring Accra\'s finest contemporary afro-jazz instrumentalists. This in-person concert celebrates local guitar techniques merged with classic brass arrangements, creating a soul-stirring auditory journey.'
   },
   {
-    id: '4',
+    id: '64a1b2c3d4e5f60011223350',
     title: 'Startup Growth Accelerator Workshop',
     location: 'Online Webinar',
     venueName: 'Zoom Webinar',
@@ -195,8 +195,45 @@ export default function EventsScreen() {
     (params.ticketType ? params.ticketType.split(',').length : 0) +
     (params.eventType ? params.eventType.split(',').length : 0);
 
-  // Filter events dynamically matching any of the selected values per field
-  const filteredEvents = EVENTS_DATA.filter(event => {
+  const [liveEvents, setLiveEvents] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      setIsLoading(true);
+      try {
+        const { getEvents } = require('../../lib/api');
+        const data = await getEvents({
+          q: params.searchQuery,
+          date: params.date,
+          region: params.region,
+          category: params.category,
+          ticketType: params.ticketType,
+          eventType: params.eventType
+        });
+        setLiveEvents(data);
+      } catch (err) {
+        console.error("Failed to fetch events:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchEvents();
+  }, [params]);
+
+  // Merge live events with mock events so the screen isn't empty if the backend has no events
+  const filteredEvents = liveEvents.length > 0 ? liveEvents.map(j => ({
+    id: j.id,
+    title: j.title,
+    location: j.eventRegion || j.location || 'Remote',
+    dateLabel: j.eventDateTime || 'Upcoming',
+    region: j.eventRegion || 'Ghana',
+    category: j.eventCategory || 'Technology',
+    ticketType: j.eventTicketType || 'Free',
+    eventType: j.eventStyle || 'In-Person',
+    price: j.eventTicketType === 'Paid' ? 'Paid' : 'Free',
+    image: j.eventBannerUri || 'https://via.placeholder.com/300x120',
+  })) : EVENTS_DATA.filter(event => {
     if (params.date) {
       const dates = params.date.split(',');
       if (!dates.includes(event.dateLabel)) return false;
@@ -248,8 +285,8 @@ export default function EventsScreen() {
             style={styles.searchPrompt}
           >
             <Search size={18} color={Colors.textPlaceholder} style={{ marginRight: 10 }} />
-            <Text style={styles.searchPlaceholder} className="font-sans">
-              Browse for events or location
+            <Text style={[styles.searchPlaceholder, { color: params.searchQuery ? Colors.textHeading : Colors.textPlaceholder }]} className="font-sans">
+              {params.searchQuery || 'Browse for events or location'}
             </Text>
           </TouchableOpacity>
 
@@ -385,7 +422,11 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   bannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.15)',
   },
   bannerTheme: {

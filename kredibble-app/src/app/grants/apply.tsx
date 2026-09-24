@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { GRANTS_DATA } from './index';
 import { Colors } from '../../constants/design';
 import { useToast } from '../../components/ui/ToastProvider';
+import { applyForGrant } from '../../lib/api';
 
 const DURATION_OPTIONS = ['Less than 3 months', '3 - 6 months', '6 - 12 months', '1 - 2 years', 'More than 2 years'];
 const ENTITY_OPTIONS = ['Non-Governmental Organization (NGO)', 'Startup', 'Corporation', 'Individual / Freelancer', 'Academic Institution', 'Other'];
@@ -71,15 +72,21 @@ export default function ApplyGrantScreen() {
   const autoFilledName = "Jane Doe";
   const autoFilledEmail = "jane.doe@example.com";
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!consentAccuracy || !consentContact) {
       showToast('Please check all consent boxes to proceed.', 'info');
       return;
     }
     
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await applyForGrant(grant.id, {
+        applicantName: autoFilledName,
+        requestedAmount: parseFloat(projectBudget) || 0,
+        organizationName: orgName,
+        projectTitle,
+      });
+
       setIsApplied(true);
       showToast('Your application has been successfully submitted!', 'success');
       
@@ -99,7 +106,11 @@ export default function ApplyGrantScreen() {
       setProjectSummary('');
       setConsentAccuracy(false);
       setConsentContact(false);
-    }, 1500);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to submit application', 'info');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -411,7 +422,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   asterisk: {
-    color: Colors.danger || '#EF4444',
+    color: '#EF4444',
   },
   input: {
     backgroundColor: Colors.white,

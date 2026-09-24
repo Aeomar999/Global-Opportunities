@@ -11,7 +11,7 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
 };
 
-const TYPE_META: Record<string, { label: string; icon: any; color: string }> = {
+const TYPE_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   jobs: { label: "Job", icon: Briefcase, color: "#6671E4" },
   internships: { label: "Internship", icon: GraduationCap, color: "#F59E0B" },
   events: { label: "Event", icon: CalendarDays, color: "#10B981" },
@@ -26,16 +26,27 @@ const FILTERS: { label: string; value: string | "all" }[] = [
   { label: "Grants", value: "grants" },
 ];
 
+interface Opportunity {
+  id: string;
+  type: string;
+  title: string;
+  company: string;
+  date: string;
+  moderationStatus: string;
+  applicantsCount: number;
+}
+
 export default function OpportunitiesQueuePage() {
   const [filter, setFilter] = useState<string | "all">("all");
-  const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setIsLoading(true);
+    const timer = setTimeout(() => setIsLoading(true), 0);
     getOpportunities()
-      .then(setOpportunities)
+      .then((data) => setOpportunities(data as Opportunity[]))
       .finally(() => setIsLoading(false));
+    return () => clearTimeout(timer);
   }, []);
 
   const filtered =

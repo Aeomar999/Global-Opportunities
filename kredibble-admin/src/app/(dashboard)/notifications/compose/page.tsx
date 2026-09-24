@@ -29,7 +29,7 @@ export default function NotificationComposerPage() {
     <div className="max-w-xl">
       <h1 className="text-xl font-bold text-kb-text-body mb-1">Notification Composer</h1>
       <p className="text-sm text-kb-text-muted mb-6">
-        Send a broadcast message into the recipients' in-app notification feed.
+        Send a broadcast message into the recipients&apos; in-app notification feed.
       </p>
 
       <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5 flex flex-col gap-4">

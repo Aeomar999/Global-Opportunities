@@ -7,7 +7,7 @@ import { User, StaffMember } from '../models/User.js';
 import { SeekerProfile, HirerAccount, Candidate } from '../models/Profiles.js';
 import {
   Opportunity, Applicant, Event, Grant,
-  GrantApplication, CompanyVerification, VerificationDoc
+  GrantApplication, CompanyVerification, VerificationDoc, EventAttendee
 } from '../models/Platform.js';
 import { Channel, ChannelPost, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
@@ -229,6 +229,11 @@ apiRouter.post('/opportunities/:opportunityId/applicants', asyncHandler(async (r
     res.status(201).json({ data: applicant });
 }));
 
+apiRouter.get('/opportunities/:opportunityId/applicants', asyncHandler(async (req, res) => {
+    const applicants = await Applicant.find({ opportunityId: req.params.opportunityId }).sort({ createdAt: -1 });
+    listResponse(res, applicants.map(toClientObject));
+}));
+
 apiRouter.post('/community/channels/:channelId/posts', asyncHandler(async (req, res) => {
     const post = new ChannelPost({
       ...req.body,
@@ -236,5 +241,126 @@ apiRouter.post('/community/channels/:channelId/posts', asyncHandler(async (req, 
     });
     await post.save();
     await Channel.findByIdAndUpdate(req.params.channelId, { $inc: { postsCount: 1 } });
+    
+    try {
+      const { getIO } = await import('../socket.js');
+      const io = getIO();
+      io.to(`channel_${req.params.channelId}`).emit('receive_message', toClientObject(post.toObject()));
+    } catch (err) {
+      console.warn('Socket not initialized or failed to broadcast:', err.message);
+    }
+    
     res.status(201).json({ data: post });
 }));
+
+apiRouter.get('/community/channels/:channelId/posts', asyncHandler(async (req, res) => {
+    const posts = await ChannelPost.find({ channelId: req.params.channelId }).sort({ createdAt: -1 });
+    listResponse(res, posts.map(toClientObject));
+}));
+
+apiRouter.post('/grants/:grantId/applications', asyncHandler(async (req, res) => {
+    const application = new GrantApplication({
+      ...req.body,
+      grantId: req.params.grantId,
+    });
+    await application.save();
+    res.status(201).json({ data: application });
+}));
+
+apiRouter.post('/events/:eventId/attendees', asyncHandler(async (req, res) => {
+    const attendee = new EventAttendee({
+      ...req.body,
+      eventId: req.params.eventId,
+    });
+    await attendee.save();
+    // also increment the Event attendeesCount if you wish:
+    await Event.findByIdAndUpdate(req.params.eventId, { $inc: { attendeesCount: req.body.quantity || 1 } });
+    res.status(201).json({ data: attendee });
+}));
+
+apiRouter.get('/events/:eventId/attendees', asyncHandler(async (req, res) => {
+    const attendees = await EventAttendee.find({ eventId: req.params.eventId }).sort({ createdAt: -1 });
+    listResponse(res, attendees.map(toClientObject));
+}));
+
+apiRouter.get('/grants/:grantId/applications', asyncHandler(async (req, res) => {
+    const applications = await GrantApplication.find({ grantId: req.params.grantId }).sort({ createdAt: -1 });
+    listResponse(res, applications.map(toClientObject));
+}));
+
+apiRouter.post('/verification/companies/:id/documents', asyncHandler(async (req, res) => {
+    const doc = new VerificationDoc({
+      ...req.body,
+      companyId: req.params.id,
+    });
+    await doc.save();
+    res.status(201).json({ data: doc });
+}));
+
+apiRouter.get('/verification/companies/:id/documents', asyncHandler(async (req, res) => {
+    const docs = await VerificationDoc.find({ companyId: req.params.id }).sort({ createdAt: -1 });
+    listResponse(res, docs.map(toClientObject));
+}));
+
+apiRouter.get('/candidates/search', asyncHandler(async (req, res) => {
+    const { skills, university, country, q } = req.query;
+    const filter = {};
+    
+    if (q) filter.$or = [{ name: { $regex: q, $options: 'i' } }, { profession: { $regex: q, $options: 'i' } }];
+    if (country) filter.location = { $regex: country, $options: 'i' };
+    if (university) filter.university = { $regex: university, $options: 'i' };
+    if (skills) {
+      const skillsArray = skills.split(',').map(s => s.trim()).filter(Boolean);
+      if (skillsArray.length > 0) {
+        filter.skills = { $regex: skillsArray.join('|'), $options: 'i' };
+      }
+    }
+
+    const data = await Candidate.find(filter).sort({ createdAt: -1 });
+    listResponse(res, data.map(withParsedCandidate));
+}));
+
+apiRouter.get('/seekers/search', asyncHandler(async (req, res) => {
+    const { skills, university, country, q } = req.query;
+    const filter = {};
+    
+    if (q) filter.$or = [{ profession: { $regex: q, $options: 'i' } }];
+    if (country) filter.country = { $regex: country, $options: 'i' };
+    if (university) filter.university = { $regex: university, $options: 'i' };
+    if (skills) {
+      const skillsArray = skills.split(',').map(s => s.trim()).filter(Boolean);
+      if (skillsArray.length > 0) {
+        filter.technicalSkills = { $regex: skillsArray.join('|'), $options: 'i' };
+      }
+    }
+
+    const data = await SeekerProfile.find(filter).sort({ createdAt: -1 });
+    listResponse(res, data.map(withParsedProfile));
+}));
+
+// Provide basic CRUD for these nested resources so they can be read, updated, or deleted directly by ID
+apiRouter.use('/applicants', collectionRoutes({ Model: Applicant, resourceName: 'Applicant' }));
+apiRouter.use('/grant-applications', collectionRoutes({ Model: GrantApplication, resourceName: 'GrantApplication' }));
+apiRouter.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc' }));
+apiRouter.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost' }));
+
+apiRouter.post('/users/:userId/saved', asyncHandler(async (req, res) => {
+  const { SavedItem } = await import('../models/User.js');
+  const { itemId, itemType } = req.body;
+  const existing = await SavedItem.findOne({ userId: req.params.userId, itemId, itemType });
+  if (existing) {
+    await SavedItem.findByIdAndDelete(existing._id);
+    res.json({ action: 'removed' });
+  } else {
+    const newItem = new SavedItem({ userId: req.params.userId, itemId, itemType });
+    await newItem.save();
+    res.status(201).json({ action: 'added', data: newItem });
+  }
+}));
+
+apiRouter.get('/users/:userId/saved', asyncHandler(async (req, res) => {
+  const { SavedItem } = await import('../models/User.js');
+  const savedItems = await SavedItem.find({ userId: req.params.userId }).sort({ createdAt: -1 });
+  listResponse(res, savedItems.map(toClientObject));
+}));
+

@@ -10,7 +10,7 @@ import { useToast } from '../../components/ui/ToastProvider';
 
 export const GRANTS_DATA = [
   {
-    id: '1',
+    id: '64a1b2c3d4e5f60011223344',
     title: 'Small Grants for Community WASH Projects in Sub-Saharan Africa and the Middle East & North Africa',
     org: 'Luena Foundation',
     logoColor: '#3D2A6B',
@@ -31,7 +31,7 @@ export const GRANTS_DATA = [
     datePosted: 'Apr 22, 2026',
   },
   {
-    id: '2',
+    id: '64a1b2c3d4e5f60011223345',
     title: 'Social & Criminal Justice',
     org: 'Charles Hayward Foundation',
     logoColor: '#1B4332',
@@ -52,7 +52,7 @@ export const GRANTS_DATA = [
     datePosted: 'Apr 18, 2026',
   },
   {
-    id: '3',
+    id: '64a1b2c3d4e5f60011223346',
     title: 'Business Partnership Support',
     org: 'Ministry for Foreign Affairs of Finland',
     logoColor: '#1E3A8A',
@@ -214,10 +214,44 @@ export const GrantCard = ({ grant, onPress }: { grant: Grant; onPress: () => voi
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+import { getGrants } from '../../lib/api';
+
 export default function GrantsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ filterCount?: string }>();
+  const params = useLocalSearchParams<{ filterCount?: string; query?: string }>();
   const filterCount = parseInt(params.filterCount ?? '0', 10);
+  
+  const [liveGrants, setLiveGrants] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchGrants = async () => {
+      setIsLoading(true);
+      try {
+        const data = await getGrants({
+          q: params.query
+        });
+        setLiveGrants(data);
+      } catch (err) {
+        console.error("Failed to fetch grants:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchGrants();
+  }, [params.query]);
+
+  // Merge live grants with mock grants so the screen isn't empty if the backend has no grants
+  const displayGrants = liveGrants.length > 0 ? liveGrants.map(j => ({
+    id: j.id,
+    title: j.title,
+    org: j.company || 'Company',
+    logoColor: j.logoColor || '#FBBF24',
+    initial: j.initial || 'G',
+    description: j.description || '',
+    applied: `${j.applicantsCount || 0} applied`,
+    match: '92% Match',
+  })) : GRANTS_DATA;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }} edges={['top', 'left', 'right']}>
@@ -249,8 +283,8 @@ export default function GrantsScreen() {
             style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
           >
             <Search size={18} color="#A1A1AA" style={{ marginRight: 10 }} />
-            <Text style={{ fontSize: 14, color: '#A1A1AA' }} className="font-sans">
-              Browse for grants
+            <Text style={{ fontSize: 14, color: params.query ? '#1A1A1A' : '#A1A1AA' }} className="font-sans">
+              {params.query || 'Browse for grants'}
             </Text>
           </TouchableOpacity>
 
@@ -271,7 +305,7 @@ export default function GrantsScreen() {
         </View>
 
         {/* Grant cards */}
-        {GRANTS_DATA.map(grant => (
+        {displayGrants.map(grant => (
           <GrantCard
             key={grant.id}
             grant={grant}

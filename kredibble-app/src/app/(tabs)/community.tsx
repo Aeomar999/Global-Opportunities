@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, X, Plus, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
-import { communityStore, Channel } from '../../constants/mockCommunity';
 import { authStore, ManagedGroup } from '../../constants/authStore';
+import { getChannels, createChannel } from '../../lib/api';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 const LogoSVG = () => (
@@ -22,12 +22,12 @@ export default function CommunityScreen() {
   const [role, setRole] = useState(authStore.role);
   
   // Seeker states
-  const [channels, setChannels] = useState<Channel[]>([]);
+  const [channels, setChannels] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   // Hirer states
   const [hirerTab, setHirerTab] = useState<'discover' | 'managed'>('managed');
-  const [managedGroups, setManagedGroups] = useState<ManagedGroup[]>(authStore.managedGroups);
   
   // Create Channel Modal state
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -35,42 +35,49 @@ export default function CommunityScreen() {
   const [newChannelCategory, setNewChannelCategory] = useState('');
   const [newChannelBio, setNewChannelBio] = useState('');
 
-  // Subscribe to community & auth store updates
+  // Fetch channels from backend
+  const fetchChannels = async () => {
+    setIsLoading(true);
+    try {
+      const data = await getChannels();
+      setChannels(data);
+    } catch (e) {
+      console.error('Failed to fetch channels:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Subscribe to auth store updates & fetch initial data
   useEffect(() => {
     setRole(authStore.role);
-    setChannels([...communityStore.channels]);
-    setManagedGroups([...authStore.managedGroups]);
+    fetchChannels();
 
     const unsubAuth = authStore.subscribe(() => {
       setRole(authStore.role);
-      setManagedGroups([...authStore.managedGroups]);
-    });
-
-    const unsubComm = communityStore.subscribe(() => {
-      setChannels([...communityStore.channels]);
     });
 
     return () => {
       unsubAuth();
-      unsubComm();
     };
   }, []);
 
   const handleFollow = (id: string) => {
-    communityStore.followChannel(id);
+    // Optimistic UI update or integrate API
+    alert(`Followed channel ${id}`);
   };
 
   const handleDismiss = (id: string) => {
-    communityStore.dismissChannel(id);
+    // Local filter out
+    setChannels(prev => prev.filter(c => c.id !== id));
   };
 
-  const handleCreateChannel = () => {
+  const handleCreateChannel = async () => {
     if (!newChannelName || !newChannelCategory || !newChannelBio) {
       alert('Please fill out all fields.');
       return;
     }
     
-    // Choose a random beautiful Unsplash image for avatar
     const avatars = [
       'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=120&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=120&auto=format&fit=crop&q=80',
@@ -78,40 +85,39 @@ export default function CommunityScreen() {
       'https://images.unsplash.com/photo-1561070791-26c113006238?w=120&auto=format&fit=crop&q=80'
     ];
     const chosenAvatar = avatars[Math.floor(Math.random() * avatars.length)];
-    const newId = `group-${Date.now()}`;
 
-    authStore.addManagedGroup({
-      id: newId,
-      name: newChannelName,
-      category: newChannelCategory,
-      bio: newChannelBio,
-      avatar: chosenAvatar
-    });
+    try {
+      const newChannel = await createChannel({
+        name: newChannelName,
+        category: newChannelCategory,
+        bio: newChannelBio,
+        avatar: chosenAvatar,
+        followers: '1 member',
+        owner: authStore.company?.name || 'Public'
+      });
 
-    // Also add to public channels (same id) so the channel feed page works
-    // identically for Seeker and Hirer roles, and seekers can discover it.
-    communityStore.addChannel({
-      id: newId,
-      name: newChannelName,
-      avatar: chosenAvatar,
-      followers: '1 follower',
-      followed: false,
-    });
+      setChannels([newChannel, ...channels]);
+      
+      setNewChannelName('');
+      setNewChannelCategory('');
+      setNewChannelBio('');
+      setCreateModalVisible(false);
 
-    setNewChannelName('');
-    setNewChannelCategory('');
-    setNewChannelBio('');
-    setCreateModalVisible(false);
-
-    alert(`Success: Community Channel "${newChannelName}" created successfully!`);
+      alert(`Success: Community Channel "${newChannelName}" created successfully!`);
+    } catch (e) {
+      alert('Failed to create channel.');
+    }
   };
 
-  // Seeker Filter
+  // Filter channels for Seeker & Hirer Discovery
   const filteredChannels = channels.filter(channel =>
-    channel.name.toLowerCase().includes(searchQuery.toLowerCase())
+    channel.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const followedChannels = filteredChannels.filter(c => c.followed);
   const recommendedChannels = filteredChannels.filter(c => !c.followed);
+  
+  // For Hirer managed tab, we just show channels they own (mocked as owner matching company name)
+  const managedGroups = channels.filter(c => c.owner === authStore.company?.name || c.id.startsWith('group-'));
 
   if (role === 'hirer') {
     return (
@@ -142,6 +148,7 @@ export default function CommunityScreen() {
         </View>
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+          {isLoading && <ActivityIndicator size="small" color="#6671E4" style={{ marginTop: 20, marginBottom: 20 }} />}
           {hirerTab === 'managed' ? (
             <View>
               {/* Quick Action: Create a Group */}
@@ -174,10 +181,10 @@ export default function CommunityScreen() {
                       padding: 16, borderWidth: 1, borderColor: '#E5E6F2',
                     }}
                   >
-                    <Image source={{ uri: group.avatar }} style={{ width: 50, height: 50, borderRadius: 25, marginRight: 12 }} />
+                    <Image source={{ uri: group.avatar || 'https://via.placeholder.com/50' }} style={{ width: 50, height: 50, borderRadius: 25, marginRight: 12 }} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1A1A1A' }} className="font-sans">{group.name}</Text>
-                      <Text style={{ fontSize: 12, color: '#8A8D9F', marginTop: 2 }} className="font-sans">{group.category} • {group.members}</Text>
+                      <Text style={{ fontSize: 12, color: '#8A8D9F', marginTop: 2 }} className="font-sans">{group.category} • {group.followers || group.members || '1 member'}</Text>
                     </View>
                     <ChevronRight size={18} color="#A1A1AA" />
                   </TouchableOpacity>
@@ -209,11 +216,11 @@ export default function CommunityScreen() {
               </View>
 
               {/* Channels this Hirer has joined — accessible above ALL COMMUNITIES */}
-              {filteredChannels.some(c => c.followed) && (
+              {followedChannels.length > 0 && (
                 <View style={{ marginBottom: 24 }}>
                   <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#8A8D9F', marginBottom: 12 }} className="font-sans">YOUR CHANNELS</Text>
                   <View style={{ gap: 16 }}>
-                    {filteredChannels.filter(c => c.followed).map(channel => (
+                    {followedChannels.map(channel => (
                       <TouchableOpacity
                         key={channel.id}
                         onPress={() => router.push({ pathname: '/community/feed', params: { id: channel.id } })}
@@ -223,7 +230,7 @@ export default function CommunityScreen() {
                           padding: 16, borderWidth: 1, borderColor: '#E5E6F2',
                         }}
                       >
-                        <Image source={{ uri: channel.avatar }} style={{ width: 44, height: 44, borderRadius: 22, marginRight: 12 }} />
+                        <Image source={{ uri: channel.avatar || 'https://via.placeholder.com/50' }} style={{ width: 44, height: 44, borderRadius: 22, marginRight: 12 }} />
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1A1A1A' }} className="font-sans">{channel.name}</Text>
                           <Text style={{ fontSize: 12, color: '#8A8D9F', marginTop: 2 }} className="font-sans">{channel.followers || '850 members'}</Text>
@@ -238,7 +245,7 @@ export default function CommunityScreen() {
               <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#8A8D9F', marginBottom: 12 }} className="font-sans">ALL COMMUNITIES</Text>
 
               <View style={{ gap: 16 }}>
-                {filteredChannels.filter(c => !c.followed).map(channel => (
+                {recommendedChannels.map(channel => (
                   <View
                     key={channel.id}
                     style={{
@@ -247,7 +254,7 @@ export default function CommunityScreen() {
                       padding: 16, borderWidth: 1, borderColor: '#E5E6F2',
                     }}
                   >
-                    <Image source={{ uri: channel.avatar }} style={{ width: 44, height: 44, borderRadius: 22, marginRight: 12 }} />
+                    <Image source={{ uri: channel.avatar || 'https://via.placeholder.com/50' }} style={{ width: 44, height: 44, borderRadius: 22, marginRight: 12 }} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#1A1A1A' }} className="font-sans">{channel.name}</Text>
                       <Text style={{ fontSize: 12, color: '#8A8D9F', marginTop: 2 }} className="font-sans">{channel.followers || '850 members'}</Text>
@@ -371,6 +378,8 @@ export default function CommunityScreen() {
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
       >
+        {isLoading && <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 20, marginBottom: 20 }} />}
+        
         {/* Search Bar */}
         <View
           style={{
@@ -421,7 +430,7 @@ export default function CommunityScreen() {
               }}
             >
               <Image
-                source={{ uri: channel.avatar }}
+                source={{ uri: channel.avatar || 'https://via.placeholder.com/50' }}
                 style={{
                   width: 50,
                   height: 50,
@@ -486,7 +495,7 @@ export default function CommunityScreen() {
               }}
             >
               <Image
-                source={{ uri: channel.avatar }}
+                source={{ uri: channel.avatar || 'https://via.placeholder.com/50' }}
                 style={{
                   width: 50,
                   height: 50,

@@ -26,3 +26,12 @@ const staffMemberSchema = new mongoose.Schema({
 
 export const User = mongoose.model('User', userSchema);
 export const StaffMember = mongoose.model('StaffMember', staffMemberSchema);
+
+const savedItemSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  itemId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  itemType: { type: String, enum: ['opportunities', 'events', 'grants', 'internships'], required: true }
+}, { timestamps: true });
+
+export const SavedItem = mongoose.model('SavedItem', savedItemSchema);
+

@@ -25,6 +25,34 @@ export default function SavedOpportunitiesScreen() {
   const [savedItems, setSavedItems] = useState(profileStore.saved);
 
   useEffect(() => {
+    const fetchSaved = async () => {
+      try {
+        const { authStore } = require('../../constants/authStore');
+        const { getSavedItems } = require('../../lib/api');
+        const userId = authStore.user?.id;
+        
+        if (userId) {
+          const apiItems = await getSavedItems(userId);
+          
+          // Map backend itemType to frontend type
+          const mappedItems = apiItems.map((item: any) => {
+            let mappedType = item.itemType;
+            if (mappedType === 'opportunities') mappedType = 'jobs'; // Simple mock heuristic
+            return { id: item.itemId, type: mappedType };
+          });
+          
+          // Hydrate the store so everything stays in sync
+          profileStore.saved = mappedItems;
+          setSavedItems(mappedItems);
+          profileStore.notify();
+        }
+      } catch (err) {
+        console.warn('Failed to fetch saved items from server', err);
+      }
+    };
+    
+    fetchSaved();
+
     const unsubscribe = profileStore.subscribe(() => {
       setSavedItems([...profileStore.saved]);
     });

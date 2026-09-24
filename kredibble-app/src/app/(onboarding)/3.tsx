@@ -16,7 +16,7 @@ export default function Onboarding3Screen() {
     } catch {
       // Ignore storage errors
     }
-    router.replace('/(auth)/index');
+    router.replace('/(auth)/welcome' as any);
   };
 
   return (

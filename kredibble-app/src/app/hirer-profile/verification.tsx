@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Check, ShieldCheck, ShieldAlert, FileText } from 'lucide-react-native';
 import { authStore, DocStatus, VerificationDocs } from '../../constants/authStore';
+import { uploadVerificationDoc } from '../../lib/api';
 
 const DOC_META: { key: keyof VerificationDocs; label: string; hint: string; accept: string }[] = [
   { key: 'businessReg', label: 'Business Registration Document', hint: 'txt, docx, pdf — Up to 5MB', accept: '.txt,.docx,.pdf' },
@@ -19,22 +20,36 @@ export default function VerificationCenterScreen() {
 
   useEffect(() => {
     const unsubscribe = authStore.subscribe(() => {
-      setCompany({ ...authStore.company });
+      setCompany(authStore.company ? { ...authStore.company } : null);
       setDocs({ ...authStore.verificationDocs });
     });
     return unsubscribe;
   }, []);
 
-  const handleReupload = (key: keyof VerificationDocs, accept: string) => {
+  const handleReupload = async (key: keyof VerificationDocs, accept: string) => {
     if (Platform.OS !== 'web') return;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = accept;
-    (input as any).onchange = (e: any) => {
+    (input as any).onchange = async (e: any) => {
       const file = e.target?.files?.[0];
       if (!file) return;
       authStore.updateVerificationDoc(key, 'loading');
-      setTimeout(() => authStore.updateVerificationDoc(key, 'done'), 1500);
+      try {
+        if (company?.id) {
+          // Send to actual backend
+          await uploadVerificationDoc(company.id, {
+            docType: key,
+            fileName: file.name,
+            fileSize: file.size,
+            status: 'approved',
+          });
+        }
+        setTimeout(() => authStore.updateVerificationDoc(key, 'done'), 500);
+      } catch (err) {
+        console.error('Failed to upload verification document:', err);
+        authStore.updateVerificationDoc(key, 'idle'); // revert on error
+      }
     };
     input.click();
   };
@@ -50,18 +65,18 @@ export default function VerificationCenterScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={[styles.statusBanner, company.verified ? styles.statusVerified : styles.statusPending]}>
-          {company.verified ? (
+        <View style={[styles.statusBanner, company?.verified ? styles.statusVerified : styles.statusPending]}>
+          {company?.verified ? (
             <ShieldCheck size={22} color="#16A34A" style={{ marginRight: 10 }} />
           ) : (
             <ShieldAlert size={22} color="#F6B612" style={{ marginRight: 10 }} />
           )}
           <View style={{ flex: 1 }}>
-            <Text style={[styles.statusTitle, { color: company.verified ? '#16A34A' : '#B7791F' }]} className="font-sans">
-              {company.verified ? 'Verified Enterprise' : 'Verification Pending'}
+            <Text style={[styles.statusTitle, { color: company?.verified ? '#16A34A' : '#B7791F' }]} className="font-sans">
+              {company?.verified ? 'Verified Enterprise' : 'Verification Pending'}
             </Text>
             <Text style={styles.statusSubtitle} className="font-sans">
-              {company.verified
+              {company?.verified
                 ? 'All required documents are approved.'
                 : 'Upload the documents below to get verified.'}
             </Text>

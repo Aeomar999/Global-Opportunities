@@ -21,6 +21,10 @@ export default function SearchInternshipsScreen() {
     ? SUGGESTIONS.filter(s => s.toLowerCase().includes(query.toLowerCase()))
     : SUGGESTIONS;
 
+  const handleSearch = (searchQuery: string) => {
+    router.push({ pathname: '/internships', params: { query: searchQuery } });
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }} edges={['top', 'left', 'right']}>
       {/* Header */}
@@ -52,6 +56,7 @@ export default function SearchInternshipsScreen() {
             placeholderTextColor="#A1A1AA"
             value={query}
             onChangeText={setQuery}
+            onSubmitEditing={() => handleSearch(query)}
             style={{ flex: 1, fontSize: 14, color: '#1A1A1A', outline: 'none' } as any}
             className="font-sans"
           />
@@ -66,7 +71,7 @@ export default function SearchInternshipsScreen() {
             <View key={item}>
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14 }}
-                onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/opportunities')}
+                onPress={() => handleSearch(item)}
               >
                 <Search size={16} color="#A1A1AA" style={{ marginRight: 14 }} />
                 <Text style={{ fontSize: 14, color: '#8A8D9F', fontWeight: '400' }} className="font-sans">

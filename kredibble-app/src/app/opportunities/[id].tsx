@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Sparkles, Check, FileText } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { authStore, PostedOpportunity, Applicant } from '../../constants/authStore';
+import { deleteOpportunity, updateApplicantStatus as apiUpdateApplicantStatus } from '../../lib/api';
 import { useToast } from '../../components/ui/ToastProvider';
 import { mockExperts } from '../../constants/mockExperts';
 
@@ -45,18 +46,30 @@ export default function OpportunityDetailScreen() {
 
   const { showToast } = useToast();
 
-  const handleStatusChange = (applicantId: string, status: Applicant['status']) => {
+  const handleStatusChange = async (applicantId: string, status: Applicant['status']) => {
     if (!opp) return;
-    authStore.updateApplicantStatus(opp.id, applicantId, status);
+    try {
+      await apiUpdateApplicantStatus(applicantId, status);
+      // Fallback: update local store so UI instantly reflects
+      authStore.updateApplicantStatus(opp.id, applicantId, status);
+      showToast(`Applicant status changed to ${status}`, 'success');
+    } catch (err) {
+      showToast('Failed to update status', 'info');
+    }
   };
 
   const handleDelete = () => {
     if (!opp) return;
 
-    const performDelete = () => {
-      authStore.deleteOpportunity(opp.id);
-      showToast('Opportunity deleted successfully', 'info');
-      router.back();
+    const performDelete = async () => {
+      try {
+        await deleteOpportunity(opp.id);
+        authStore.deleteOpportunity(opp.id);
+        showToast('Opportunity deleted successfully', 'info');
+        router.back();
+      } catch (err) {
+        showToast('Failed to delete opportunity', 'info');
+      }
     };
 
     if (Platform.OS === 'web') {

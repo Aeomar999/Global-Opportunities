@@ -1,0 +1,33 @@
+name: CD App
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'kredibble-app/**'
+
+jobs:
+  eas-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './kredibble-app/package-lock.json'
+      
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          
+      - name: Install dependencies
+        working-directory: ./kredibble-app
+        run: npm ci
+        
+      - name: Publish EAS Update
+        working-directory: ./kredibble-app
+        run: eas update --auto --non-interactive

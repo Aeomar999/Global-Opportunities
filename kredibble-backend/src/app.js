@@ -2,15 +2,21 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
+import fs from 'fs';
+import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { connectToDatabase } from './lib/mongodb.js';
 import { apiRouter } from './routes/index.js';
 import { ApiError } from './utils/http.js';
 
+const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
+
 const app = express();
 
 const localDevOriginPattern =
   /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
 
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
@@ -39,6 +45,14 @@ app.use(
   }),
 );
 
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: { error: { message: 'Too many requests, please try again later.' } }
+});
+app.use('/api', limiter);
+
+
 // 2. Ensure DB connection for serverless environments
 app.use(async (req, res, next) => {
   try {
@@ -64,6 +78,8 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
   res.json({ message: 'Kredibble API is running', env: env.nodeEnv });
 });
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.use('/api', apiRouter);
 // Fallback for calls missing the /api prefix

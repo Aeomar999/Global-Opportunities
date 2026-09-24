@@ -86,8 +86,36 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   return payload.data as T;
 }
 
-export const getOpportunities = async () => {
+export const getOpportunities = async (params?: Record<string, any>) => {
+  if (params) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v) query.append(k, String(v));
+    });
+    const qs = query.toString();
+    return request<any[]>(`/opportunities${qs ? `?${qs}` : ''}`);
+  }
   return request<any[]>('/opportunities');
+};
+
+export const createOpportunity = async (data: any) => {
+  return request<any>('/opportunities', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateOpportunity = async (id: string, data: any) => {
+  return request<any>(`/opportunities/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteOpportunity = async (id: string) => {
+  return request<any>(`/opportunities/${id}`, {
+    method: 'DELETE',
+  });
 };
 
 export const getDashboardSummary = async () => {
@@ -144,3 +172,178 @@ export const clearMobileSession = async () => {
     // Ignore errors
   }
 };
+
+// --- Applicant Management ---
+
+export const getApplicants = async (opportunityId: string) => {
+  return request<any[]>(`/opportunities/${opportunityId}/applicants`);
+};
+
+export const getApplicant = async (id: string) => {
+  return request<any>(`/applicants/${id}`);
+};
+
+export const updateApplicantStatus = async (id: string, status: string) => {
+  return request<any>(`/applicants/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+};
+
+// --- Advanced Search & Filtering ---
+
+export const searchCandidates = async (params: { skills?: string, university?: string, country?: string, q?: string }) => {
+  const query = new URLSearchParams();
+  if (params.skills) query.append('skills', params.skills);
+  if (params.university) query.append('university', params.university);
+  if (params.country) query.append('country', params.country);
+  if (params.q) query.append('q', params.q);
+  
+  return request<any[]>(`/candidates/search?${query.toString()}`);
+};
+
+export const searchSeekers = async (params: { skills?: string, university?: string, country?: string, q?: string }) => {
+  const query = new URLSearchParams();
+  if (params.skills) query.append('skills', params.skills);
+  if (params.university) query.append('university', params.university);
+  if (params.country) query.append('country', params.country);
+  if (params.q) query.append('q', params.q);
+  
+  return request<any[]>(`/seekers/search?${query.toString()}`);
+};
+
+// --- Community Channels & Posts ---
+
+export const getChannels = async () => {
+  return request<any[]>('/community/channels');
+};
+
+export const getChannel = async (id: string) => {
+  return request<any>(`/community/channels/${id}`);
+};
+
+export const createChannel = async (data: any) => {
+  return request<any>('/community/channels', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+export const getChannelPosts = async (channelId: string) => {
+  return request<any[]>(`/community/channels/${channelId}/posts`);
+};
+
+export const createChannelPost = async (channelId: string, data: any) => {
+  return request<any>(`/community/channels/${channelId}/posts`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateChannelPost = async (id: string, data: any) => {
+  return request<any>(`/community/posts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteChannelPost = async (id: string) => {
+  return request<any>(`/community/posts/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+// --- Applications ---
+
+export const applyForOpportunity = async (opportunityId: string, data: any) => {
+  return request<any>(`/opportunities/${opportunityId}/applicants`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const applyForGrant = async (grantId: string, data: any) => {
+  return request<any>(`/grants/${grantId}/applications`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const bookEvent = async (eventId: string, data: any) => {
+  return request<any>(`/events/${eventId}/attendees`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const uploadVerificationDoc = async (companyId: string, data: any) => {
+  return request<any>(`/verification/companies/${companyId}/documents`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const getEvents = async (params?: Record<string, any>) => {
+  if (params) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) query.append(key, String(value));
+    });
+    return request<any[]>(`/events?${query.toString()}`);
+  }
+  return request<any[]>('/events');
+};
+
+export const getGrants = async (params?: Record<string, any>) => {
+  if (params) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) query.append(key, String(value));
+    });
+    return request<any[]>(`/grants?${query.toString()}`);
+  }
+  return request<any[]>('/grants');
+};
+
+export const updateSeekerProfile = async (id: string, data: any) => {
+  return request<any>(`/seekers/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateHirerProfile = async (id: string, data: any) => {
+  return request<any>(`/hirers/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+};
+
+
+export const toggleSavedItem = async (userId: string, data: { itemId: string, itemType: string }) => {
+  return request<any>(`/users/${userId}/saved`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const getSavedItems = async (userId: string) => {
+  return request<any[]>(`/users/${userId}/saved`);
+};
+
+
+export const getArticles = async (params: any = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  return request<any[]>(`/articles?${qs}`);
+};
+
+export const getNotifications = async (userId: string) => {
+  return request<any[]>(`/notifications?userId=${userId}`);
+};
+
+export const createReport = async (data: any) => {
+  return request<any>('/reports', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+};
+

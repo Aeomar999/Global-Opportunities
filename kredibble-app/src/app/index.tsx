@@ -21,13 +21,13 @@ export default function SplashScreen() {
       try {
         const hasSeenOnboarding = await SecureStore.getItemAsync('hasSeenOnboarding');
         if (hasSeenOnboarding === 'true') {
-          router.replace('/(auth)/welcome');
+          router.replace('/(auth)/welcome' as any);
         } else {
-          router.replace('/(onboarding)/1');
+          router.replace('/(onboarding)/1' as any);
         }
       } catch {
         // Fallback to auth if storage fails
-        router.replace('/(auth)/welcome');
+        router.replace('/(auth)/welcome' as any);
       }
     };
 

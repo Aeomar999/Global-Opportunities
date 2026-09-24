@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal, TextInput, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bookmark, Sparkles, Plus, X, ChevronLeft, MapPin, Briefcase, Award, Calendar, FileText, Download, Users } from 'lucide-react-native';
 import Svg, { G, Rect, Defs, ClipPath, RadialGradient, Stop, Ellipse } from 'react-native-svg';
-import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useRouter, useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import { authStore, PostedOpportunity, Applicant } from '../../constants/authStore';
+import { getOpportunities } from '../../lib/api';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 
@@ -260,6 +261,33 @@ export default function OpportunitiesScreen() {
     };
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (role === 'hirer') {
+        const fetchOpps = async () => {
+          try {
+            const data = await getOpportunities();
+            const { getApplicants } = require('../../lib/api');
+            const oppsWithApplicants = await Promise.all(
+              data.map(async (opp: any) => {
+                try {
+                  const applicants = await getApplicants(opp.id);
+                  return { ...opp, applicants, applicantsCount: applicants.length || opp.applicantsCount || 0 };
+                } catch (e) {
+                  return { ...opp, applicants: [], applicantsCount: 0 };
+                }
+              })
+            );
+            authStore.setOpportunities(oppsWithApplicants);
+          } catch (e) {
+            console.error(e);
+          }
+        };
+        fetchOpps();
+      }
+    }, [role])
+  );
+
   const handleStatusChange = (oppId: string, applicantId: string, status: Applicant['status']) => {
     authStore.updateApplicantStatus(oppId, applicantId, status);
   };
@@ -415,7 +443,7 @@ export default function OpportunitiesScreen() {
                           <Text style={{ color: '#8A8D9F', fontWeight: '400' }}> · {opp.location}</Text>
                         </Text>
                         <Text style={{ fontSize: 13, fontWeight: '400', color: '#8A8D9F', marginTop: 2 }} className="font-sans">
-                          {authStore.company.name}
+                          {authStore.company?.name || 'Company'}
                         </Text>
                       </View>
 

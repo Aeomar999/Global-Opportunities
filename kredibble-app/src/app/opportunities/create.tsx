@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronDown } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { authStore } from '../../constants/authStore';
+import { createOpportunity, updateOpportunity } from '../../lib/api';
 import { useToast } from '../../components/ui/ToastProvider';
 import { DateTimePickerModal } from '../../components/ui/DateTimePickerModal';
 
@@ -302,7 +303,9 @@ export default function CreateOpportunityScreen() {
     setEventBannerUri('');
   };
 
-  const handlePostOpportunity = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePostOpportunity = async () => {
     if (!title.trim() || !location.trim() || !description.trim()) {
       showToast('Please fill out all core fields.', 'info');
       return;
@@ -335,127 +338,55 @@ export default function CreateOpportunityScreen() {
 
     const finalSalary = salaryOption === 'Enter custom salary...' ? customSalary : salaryOption;
 
-    if (isEditing && editId) {
-      authStore.updateOpportunity(editId, {
-        title: title.trim(),
-        type,
-        location: location.trim(),
-        logoColor,
-        initial,
-        description: description.trim(),
-        ...(type === 'jobs' || type === 'internships' ? {
-          workType,
-          ...(type === 'jobs' ? { salary: finalSalary.trim() } : {}),
-          experienceLevels,
-          organizationType: orgType,
-          grantSector: undefined,
-          grantApplicantType: undefined,
-          grantFundingAgency: undefined,
-          grantCountry: undefined,
-          grantPurpose: undefined,
-          grantAppMethod: undefined,
-          grantBudgetRange: undefined,
-          eventDateTime: undefined,
-          eventRegion: undefined,
-          eventCategory: undefined,
-          eventTicketType: undefined,
-          eventStyle: undefined,
-        } : type === 'grants' ? {
-          workType: undefined,
-          salary: undefined,
-          experienceLevels: undefined,
-          organizationType: undefined,
-          grantSector,
-          grantApplicantType,
-          grantFundingAgency,
-          grantCountry,
-          grantPurpose,
-          grantAppMethod,
-          grantBudgetRange,
-          grantLogoUri: grantLogoUri || undefined,
-          eventDateTime: undefined,
-          eventRegion: undefined,
-          eventCategory: undefined,
-          eventTicketType: undefined,
-          eventStyle: undefined,
-        } : type === 'events' ? {
-          workType: undefined,
-          salary: undefined,
-          experienceLevels: undefined,
-          organizationType: undefined,
-          grantSector: undefined,
-          grantApplicantType: undefined,
-          grantFundingAgency: undefined,
-          grantCountry: undefined,
-          grantPurpose: undefined,
-          grantAppMethod: undefined,
-          grantBudgetRange: undefined,
-          eventDateTime: eventDateTime.trim(),
-          eventRegion,
-          eventCategory,
-          eventTicketType,
-          eventStyle,
-          eventBannerUri: eventBannerUri || undefined,
-        } : {
-          workType: undefined,
-          salary: undefined,
-          experienceLevels: undefined,
-          organizationType: undefined,
-          grantSector: undefined,
-          grantApplicantType: undefined,
-          grantFundingAgency: undefined,
-          grantCountry: undefined,
-          grantPurpose: undefined,
-          grantAppMethod: undefined,
-          grantBudgetRange: undefined,
-          eventDateTime: undefined,
-          eventRegion: undefined,
-          eventCategory: undefined,
-          eventTicketType: undefined,
-          eventStyle: undefined,
-        })
-      });
+    const payload: any = {
+      title: title.trim(),
+      type,
+      company: authStore.company?.name || 'Company',
+      location: location.trim(),
+      logoColor,
+      initial,
+      description: description.trim(),
+      ...(type === 'jobs' || type === 'internships' ? {
+        workType,
+        ...(type === 'jobs' ? { salary: finalSalary.trim() } : {}),
+        experienceLevels,
+        organizationType: orgType,
+      } : type === 'grants' ? {
+        grantSector,
+        grantApplicantType,
+        grantFundingAgency,
+        grantCountry,
+        grantPurpose,
+        grantAppMethod,
+        grantBudgetRange,
+        grantLogoUri: grantLogoUri || undefined,
+      } : type === 'events' ? {
+        eventDateTime: eventDateTime.trim(),
+        eventRegion,
+        eventCategory,
+        eventTicketType,
+        eventStyle,
+        eventBannerUri: eventBannerUri || undefined,
+      } : {})
+    };
 
+    setIsSubmitting(true);
+    try {
+      if (isEditing && editId) {
+        await updateOpportunity(editId, payload);
+        authStore.updateOpportunity(editId, payload);
+        showToast('Opportunity updated successfully', 'success');
+      } else {
+        await createOpportunity(payload);
+        authStore.addOpportunity(payload);
+        showToast('Opportunity published successfully', 'success');
+      }
       clearForm();
-      showToast('Opportunity updated successfully', 'success');
       router.back();
-    } else {
-      authStore.addOpportunity({
-        title: title.trim(),
-        type,
-        company: authStore.company.name,
-        location: location.trim(),
-        logoColor,
-        initial,
-        description: description.trim(),
-        // Add optional job-specific / internship-specific / grant-specific / event-specific fields
-        ...(type === 'jobs' || type === 'internships' ? {
-          workType,
-          ...(type === 'jobs' ? { salary: finalSalary.trim() } : {}),
-          experienceLevels,
-          organizationType: orgType,
-        } : type === 'grants' ? {
-          grantSector,
-          grantApplicantType,
-          grantFundingAgency,
-          grantCountry,
-          grantPurpose,
-          grantAppMethod,
-          grantBudgetRange,
-          grantLogoUri: grantLogoUri || undefined,
-        } : type === 'events' ? {
-          eventDateTime: eventDateTime.trim(),
-          eventRegion,
-          eventCategory,
-          eventTicketType,
-          eventStyle,
-          eventBannerUri: eventBannerUri || undefined,
-        } : {})
-      });
-
-      clearForm();
-      showToast('Opportunity published successfully', 'success');
-      router.back();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save opportunity', 'info');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

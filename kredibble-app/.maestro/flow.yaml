@@ -1,0 +1,6 @@
+appId: com.kredibble.app
+---
+- launchApp:
+    clearState: true
+- tapOn: "Get Started"
+- assertVisible: "Login"

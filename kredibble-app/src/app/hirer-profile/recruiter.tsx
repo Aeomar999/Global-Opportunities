@@ -9,23 +9,37 @@ export default function RecruiterDetailsScreen() {
   const router = useRouter();
   const [company, setCompany] = useState(authStore.company);
 
-  const [recruiterName, setRecruiterName] = useState(company.recruiterName);
-  const [recruiterRole, setRecruiterRole] = useState(company.recruiterRole);
-  const [recruiterEmail, setRecruiterEmail] = useState(company.recruiterEmail);
-  const [recruiterPhone, setRecruiterPhone] = useState(company.recruiterPhone);
-  const [recruiterLinkedin, setRecruiterLinkedin] = useState(company.recruiterLinkedin);
+  const [recruiterName, setRecruiterName] = useState(company?.recruiterName || '');
+  const [recruiterRole, setRecruiterRole] = useState(company?.recruiterRole || '');
+  const [recruiterEmail, setRecruiterEmail] = useState(company?.recruiterEmail || '');
+  const [recruiterPhone, setRecruiterPhone] = useState(company?.recruiterPhone || '');
+  const [recruiterLinkedin, setRecruiterLinkedin] = useState(company?.recruiterLinkedin || '');
 
   useEffect(() => {
-    const unsubscribe = authStore.subscribe(() => setCompany({ ...authStore.company }));
+    const unsubscribe = authStore.subscribe(() => setCompany(authStore.company ? { ...authStore.company } : null));
     return unsubscribe;
   }, []);
 
   const isValid = recruiterName.trim() && recruiterRole.trim() && recruiterEmail.trim();
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isValid) return;
-    authStore.updateCompany({ recruiterName, recruiterRole, recruiterEmail, recruiterPhone, recruiterLinkedin });
-    router.back();
+    
+    const recruiterData = { recruiterName, recruiterRole, recruiterEmail, recruiterPhone, recruiterLinkedin };
+    
+    try {
+      const { updateHirerProfile } = require('../../lib/api');
+      const hirerId = (authStore as any).user?.hirer?.id;
+      if (hirerId) {
+        await updateHirerProfile(hirerId, recruiterData);
+      }
+      
+      authStore.updateCompany(recruiterData);
+      router.back();
+    } catch (err) {
+      alert('Failed to save recruiter profile');
+      console.error(err);
+    }
   };
 
   return (

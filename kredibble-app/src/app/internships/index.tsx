@@ -179,10 +179,46 @@ export const InternshipCard = ({ item, onPress }: { item: Internship; onPress: (
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+import { getOpportunities } from '../../lib/api';
+
 export default function InternshipsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ filterCount?: string }>();
+  const params = useLocalSearchParams<{ filterCount?: string; query?: string }>();
   const filterCount = parseInt(params.filterCount ?? '0', 10);
+  
+  const [liveInternships, setLiveInternships] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchInternships = async () => {
+      setIsLoading(true);
+      try {
+        const data = await getOpportunities({
+          type: 'internships',
+          q: params.query
+        });
+        setLiveInternships(data);
+      } catch (err) {
+        console.error("Failed to fetch internships:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInternships();
+  }, [params.query]);
+
+  // Merge live internships with mock internships so the screen isn't empty if the backend has no internships
+  const displayInternships = liveInternships.length > 0 ? liveInternships.map(j => ({
+    id: j.id,
+    title: j.title,
+    location: j.location || 'Remote',
+    company: j.company || 'Company',
+    logoColor: j.logoColor || '#34D399',
+    initial: j.initial || 'I',
+    description: j.description || '',
+    applied: `${j.applicantsCount || 0} applied`,
+    match: '92% Match',
+  })) : INTERNSHIPS_DATA;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }} edges={['top', 'left', 'right']}>
@@ -214,8 +250,8 @@ export default function InternshipsScreen() {
             style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
           >
             <Search size={18} color="#A1A1AA" style={{ marginRight: 10 }} />
-            <Text style={{ fontSize: 14, color: '#A1A1AA' }} className="font-sans">
-              Browse for internships
+            <Text style={{ fontSize: 14, color: params.query ? '#1A1A1A' : '#A1A1AA' }} className="font-sans">
+              {params.query || 'Browse for internships'}
             </Text>
           </TouchableOpacity>
 
@@ -236,7 +272,7 @@ export default function InternshipsScreen() {
         </View>
 
         {/* Internship cards */}
-        {INTERNSHIPS_DATA.map(item => (
+        {displayInternships.map(item => (
           <InternshipCard
             key={item.id}
             item={item}
