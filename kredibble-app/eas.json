@@ -13,12 +13,12 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://kredibble-backend.vercel.app/api"
+        "EXPO_PUBLIC_API_URL": "https://kredibble-api.onrender.com/api"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://kredibble-backend.vercel.app/api"
+        "EXPO_PUBLIC_API_URL": "https://kredibble-api.onrender.com/api"
       }
     }
   },
