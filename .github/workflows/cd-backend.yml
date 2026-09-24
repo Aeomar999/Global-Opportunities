@@ -26,5 +26,10 @@ jobs:
         push: true
         tags: ghcr.io/${{ github.repository }}/kredibble-backend:latest
         
-    - name: Trigger Deployment
-      run: echo "Call webhook to trigger deployment (e.g. Render, Railway, AWS)"
+    - name: Trigger Render Deployment
+      run: |
+        if [ -n "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+        else
+          echo "RENDER_DEPLOY_HOOK_URL secret is not set, skipping automatic deploy."
+        fi
