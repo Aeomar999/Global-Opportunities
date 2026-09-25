@@ -712,35 +712,7 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }} edges={['top', 'left', 'right']}>
-      {/* Header with Home directional access */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: 24,
-          paddingVertical: 12,
-          backgroundColor: '#F7F7F9',
-        }}
-      >
-        <TouchableOpacity
-          onPress={() => router.replace('/(tabs)')}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: 'rgba(102, 113, 228, 0.1)',
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 20,
-            gap: 6,
-          }}
-        >
-          <Home size={16} color="#6671E4" />
-          <Text style={{ fontSize: 13, color: '#6671E4', fontWeight: '600' }} className="font-sans">
-            Home
-          </Text>
-        </TouchableOpacity>
-      </View>
+
 
       {/* Progress bar */}
       <View style={{ height: 4, backgroundColor: '#E5E6F2' }}>

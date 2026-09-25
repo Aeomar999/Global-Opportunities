@@ -157,34 +157,6 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }}>
-      {/* Header with Home directional access */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          paddingHorizontal: 24,
-          paddingVertical: 12,
-        }}
-      >
-        <TouchableOpacity
-          onPress={() => router.replace('/(tabs)')}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: 'rgba(102, 113, 228, 0.1)',
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 20,
-            gap: 6,
-          }}
-        >
-          <Home size={16} color="#6671E4" />
-          <Text style={{ fontSize: 13, color: '#6671E4', fontWeight: '600' }} className="font-sans">
-            Home
-          </Text>
-        </TouchableOpacity>
-      </View>
 
       {/* ── Login form ── */}
       <KeyboardAvoidingView
