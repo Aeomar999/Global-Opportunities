@@ -2,12 +2,14 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { authRouter } from './auth.js';
 import { uploadRouter } from './upload.js';
+import { assistantRouter } from './assistant.js';
+import { newsRouter } from './news.js';
 import { asyncHandler, itemResponse, listResponse, notFound } from '../utils/http.js';
 import { User, StaffMember } from '../models/User.js';
 import { SeekerProfile, HirerAccount, Candidate } from '../models/Profiles.js';
 import {
   Opportunity, Applicant, Event, Grant,
-  GrantApplication, CompanyVerification, VerificationDoc, EventAttendee
+  GrantApplication, CompanyVerification, VerificationDoc, EventAttendee, opportunityTypes
 } from '../models/Platform.js';
 import { Channel, ChannelPost, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
@@ -184,6 +186,8 @@ apiRouter.get('/dashboard/summary', asyncHandler(async (req, res) => {
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/upload', uploadRouter);
+apiRouter.use('/assistant', assistantRouter);
+apiRouter.use('/news', newsRouter);
 
 // Resource Routes
 apiRouter.use('/users', collectionRoutes({ Model: User, resourceName: 'User', searchFields: ['name', 'email'] }));
@@ -203,6 +207,10 @@ apiRouter.use('/opportunities', collectionRoutes({
   normalizeOut: withParsedOpportunity,
   searchFields: ['title', 'company', 'location']
 }));
+
+apiRouter.get('/opportunity-types', (req, res) => {
+  itemResponse(res, opportunityTypes);
+});
 apiRouter.use('/candidates', collectionRoutes({
   Model: Candidate,
   resourceName: 'Candidate',

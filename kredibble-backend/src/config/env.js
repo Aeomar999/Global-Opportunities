@@ -15,6 +15,16 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL || process.env.MONGODB_URI || process.env.MONGO_URI,
   jwtSecret: process.env.JWT_SECRET || '4f7b8d9c2e1a3b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c',
   adminJwtSecret: process.env.ADMIN_JWT_SECRET || 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2',
+  aiProvider: process.env.AI_PROVIDER || 'openai',
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  openaiModel: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+  insightGhanaWordpressUrl: process.env.INSIGHT_GHANA_WORDPRESS_URL,
+  africanJournalWordpressUrl: process.env.AFRICAN_JOURNAL_WORDPRESS_URL,
+  resendApiKey: process.env.RESEND_API_KEY,
+  resendFromEmail: process.env.RESEND_FROM_EMAIL,
+  emailVerificationCodeTtlMinutes: Number(process.env.EMAIL_VERIFICATION_CODE_TTL_MINUTES || 10),
 };
 
 if (!env.isDevelopment) {

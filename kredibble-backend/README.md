@@ -1,6 +1,6 @@
 # Kredibble Backend
 
-Express API built with Native MongoDB and Cloudinary.
+Express API built with MongoDB, Cloudinary, AI assistant providers, WordPress content feeds, and Resend email verification.
 
 ## Setup
 
@@ -27,6 +27,9 @@ Default API URL: `http://localhost:4000/api`
    - `CLOUDINARY_CLOUD_NAME`: *(From Cloudinary dashboard)*
    - `CLOUDINARY_API_KEY`: *(From Cloudinary dashboard)*
    - `CLOUDINARY_API_SECRET`: *(From Cloudinary dashboard)*
+   - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: *(For the selected `AI_PROVIDER`)*
+   - `INSIGHT_GHANA_WORDPRESS_URL` and `AFRICAN_JOURNAL_WORDPRESS_URL`: *(Publication site roots)*
+   - `RESEND_API_KEY` and `RESEND_FROM_EMAIL`: *(Resend API key and verified sender)*
    - `CORS_ORIGIN`: *(The URLs of your deployed admin/web apps, comma-separated)*
 
 ## Useful Routes
@@ -35,3 +38,11 @@ Default API URL: `http://localhost:4000/api`
 - `POST /api/auth/register` - User signup
 - `POST /api/auth/login` - User login
 - `POST /api/upload` - File upload to Cloudinary (Requires Auth)
+- `GET /api/opportunities?type=competition` - Filter opportunity listings by type
+- `GET /api/opportunities?type=fellowship` - List fellowship opportunities
+- `GET /api/opportunities?type=training-workshop` - List training and workshop opportunities
+- `GET /api/opportunity-types` - Available listing type values
+- `POST /api/assistant/chat` - AI assistant chat using `openai` or `anthropic` (Requires Auth)
+- `GET /api/news?source=insightGhana` - Normalized WordPress posts; omit `source` for both configured sources
+- `POST /api/auth/verification-code/send` - Send an email verification code with Resend
+- `POST /api/auth/verification-code/verify` - Verify an email code
