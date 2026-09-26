@@ -15,6 +15,8 @@ const upload = multer({
   },
 });
 
+const safeFolder = (value) => String(value || 'general').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'general';
+
 /**
  * Generic upload route
  * Expects a file in the 'file' field and an optional 'folder' query param
@@ -28,7 +30,7 @@ uploadRouter.post(
       throw new ApiError(400, 'No file uploaded');
     }
 
-    const folder = req.query.folder || 'general';
+    const folder = safeFolder(req.query.folder || req.body?.folder);
 
     // Upload buffer to Cloudinary
     const result = await uploadBufferToCloudinary(req.file.buffer, folder);
@@ -39,6 +41,8 @@ uploadRouter.post(
         publicId: result.public_id,
         format: result.format,
         bytes: result.bytes,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
       },
     });
   })

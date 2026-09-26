@@ -90,6 +90,16 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    res.status(413).json({ error: { message: 'Uploaded file must be 5MB or smaller' } });
+    return;
+  }
+
+  if (err.name === 'MulterError') {
+    res.status(400).json({ error: { message: err.message } });
+    return;
+  }
+
   if (err.code === 'P2025') {
     res.status(404).json({ error: { message: 'Resource not found' } });
     return;

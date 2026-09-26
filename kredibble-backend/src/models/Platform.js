@@ -1,9 +1,19 @@
 import mongoose from 'mongoose';
 
+export const opportunityTypes = [
+  'job',
+  'jobs',
+  'internship',
+  'internships',
+  'competition',
+  'fellowship',
+  'training-workshop',
+];
+
 const opportunitySchema = new mongoose.Schema({
   hirerId: { type: mongoose.Schema.Types.ObjectId, ref: 'HirerAccount', index: true },
   title: { type: String, required: true },
-  type: { type: String, required: true, index: true }, // jobs, internships, etc
+  type: { type: String, required: true, enum: opportunityTypes, index: true },
   company: { type: String, required: true },
   location: { type: String, required: true },
   description: { type: String, required: true },
@@ -13,6 +23,26 @@ const opportunitySchema = new mongoose.Schema({
   workType: String,
   salary: String,
   experienceLevels: { type: String, default: '[]' },
+  applicationUrl: String,
+  deadline: Date,
+  eligibility: String,
+  benefits: String,
+  organizer: String,
+  coverImage: String,
+  externalReferenceUrl: String,
+  // Competition specific
+  competitionCategory: String,
+  prizeDetails: String,
+  submissionRequirements: String,
+  // Fellowship specific
+  fellowshipDuration: String,
+  fellowshipFormat: String,
+  stipendDetails: String,
+  // Training and workshop specific
+  trainingFormat: String,
+  trainingDuration: String,
+  registrationFee: String,
+  certificateOffered: Boolean,
   // Event specific
   eventDateTime: String,
   eventRegion: String,

@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
   role: { type: String, required: true, enum: ['seeker', 'hirer', 'admin'] },
   passwordHash: { type: String },
   avatarUrl: { type: String },
+  emailVerified: { type: Boolean, default: false },
 }, { timestamps: true });
 
 // Virtuals to mimic the previous Prisma/Native structure for the frontend
@@ -26,6 +27,14 @@ const staffMemberSchema = new mongoose.Schema({
 
 export const User = mongoose.model('User', userSchema);
 export const StaffMember = mongoose.model('StaffMember', staffMemberSchema);
+
+const emailVerificationCodeSchema = new mongoose.Schema({
+  email: { type: String, required: true, lowercase: true, trim: true, index: true },
+  codeHash: { type: String, required: true },
+  expiresAt: { type: Date, required: true, index: { expires: 0 } },
+}, { timestamps: true });
+
+export const EmailVerificationCode = mongoose.model('EmailVerificationCode', emailVerificationCodeSchema);
 
 const savedItemSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
