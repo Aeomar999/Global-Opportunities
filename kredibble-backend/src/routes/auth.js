@@ -27,11 +27,16 @@ const publicUser = (user) => {
   return { id: _id, ...safeUser };
 };
 
+// Second gate behind registerSchema. Even if validation were ever relaxed or
+// bypassed, an anonymous request can never persist the 'admin' role.
+const PUBLIC_ROLES = ['seeker', 'hirer'];
+
 authRouter.post(
   '/register',
   validate(registerSchema),
   asyncHandler(async (req, res) => {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
+    const role = PUBLIC_ROLES.includes(req.body.role) ? req.body.role : 'seeker';
 
     const existing = await User.findOne({ email });
     if (existing) throw new ApiError(409, 'User already exists');

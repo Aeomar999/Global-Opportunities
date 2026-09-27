@@ -7,13 +7,17 @@ const passwordSchema = z.string()
   // .regex(/[0-9]/, 'Password must contain at least one number')
   // .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
 
+// Public registration may only mint these two roles. 'admin' is intentionally
+// absent: it must never be reachable from an anonymous request body.
+const PUBLIC_ROLES = ['seeker', 'hirer'];
+
 export const registerSchema = z.object({
   body: z.object({
     name: z.string().min(2, 'Name is too short').max(50),
     email: z.string().email('Invalid email format'),
     password: passwordSchema,
-    role: z.enum(['seeker', 'hirer', 'admin'], {
-      errorMap: () => ({ message: 'Role must be seeker, hirer, or admin' }),
+    role: z.enum(PUBLIC_ROLES, {
+      errorMap: () => ({ message: `Role must be one of: ${PUBLIC_ROLES.join(', ')}` }),
     }),
     // Seeker optional fields
     profession: z.string().optional(),

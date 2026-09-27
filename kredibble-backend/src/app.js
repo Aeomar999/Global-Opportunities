@@ -8,27 +8,12 @@ import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { connectToDatabase } from './lib/mongodb.js';
 import { apiRouter } from './routes/index.js';
+import { isAllowedOrigin } from './lib/cors.js';
 import { ApiError } from './utils/http.js';
 
 const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
 
 const app = express();
-
-const localDevOriginPattern =
-  /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
-
-
-const isAllowedOrigin = (origin) => {
-  if (!origin) return true;
-  if (env.corsOrigins.includes(origin)) return true;
-  if (env.isDevelopment && localDevOriginPattern.test(origin)) return true;
-  if (origin.endsWith('.vercel.app') || origin.endsWith('.onrender.com')) return true;
-  // Allow Expo/React Native app origins (no CORS for native apps)
-  if (origin.startsWith('exp://') || origin.startsWith('kredibbleapp://')) return true;
-  // Allow native app requests (no origin header)
-  if (origin === 'null' || origin === 'file://') return true;
-  return false;
-};
 
 // 1. Basic security and CORS (Must be at the top)
 app.use(helmet());
@@ -48,7 +33,12 @@ app.use(
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
-  message: { error: { message: 'Too many requests, please try again later.' } }
+  message: { error: { message: 'Too many requests, please try again later.' } },
+  // The suite walks all 100+ routes in one process, which would trip the
+  // limiter partway through and report a 429 for routes it never reached -
+  // masking the auth result the assertion is actually about. Skipped in test
+  // only; production and development limits are unchanged.
+  skip: () => env.isTest,
 });
 app.use('/api', limiter);
 
@@ -81,9 +71,13 @@ app.get('/', (req, res) => {
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+// SEC-015: the router is mounted exactly once, under /api. It used to be mounted a
+// second time at "/" as a "fallback for calls missing the /api prefix", but that
+// duplicate mount sat *outside* the rate limiter above, so every endpoint was
+// reachable unthrottled via /<resource>. Both clients already call /api
+// (kredibble-app/.env and the NEXT_PUBLIC_API_URL default), so the fallback only
+// widened the attack surface. It is gone rather than rate-limited twice.
 app.use('/api', apiRouter);
-// Fallback for calls missing the /api prefix
-app.use('/', apiRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found' } });
@@ -95,7 +89,16 @@ app.use((err, req, res, next) => {
     return;
   }
 
-  const status = err.status || 500;
+  // Client-input failures must not surface as 5xx. A Mongoose ValidationError
+  // (missing required field, bad enum) or a CastError (malformed ObjectId in the
+  // path) is a bad request, not a server fault — otherwise bad input pollutes
+  // error dashboards and tells callers to retry something that will never work.
+  const isBadRequest =
+    err.name === 'ValidationError' ||
+    err.name === 'CastError' ||
+    err.name === 'StrictModeError';
+
+  const status = isBadRequest ? 400 : err.status || 500;
   res.status(status).json({
     error: {
       message: err.message || 'Internal server error',

@@ -101,11 +101,6 @@ export const loginAdmin = async (email: string, password: string) => {
   return session;
 };
 
-export const signupAdmin = async (values: { name: string; email: string; password: string }) => {
-  const session = await request<AuthResponse>("/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ ...values, role: "admin" }),
-  });
-  saveAdminSession(session);
-  return session;
-};
+// There is deliberately no admin self-service signup. Public registration
+// cannot mint the 'admin' role, so admins are provisioned server-side with
+// `npm run user:create-admin -- --email ... --name ...` in kredibble-backend.

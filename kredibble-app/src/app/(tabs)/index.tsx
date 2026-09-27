@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { authStore } from '../../constants/authStore';
 import { notificationStore } from '../../constants/mockNotifications';
 import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
-import { getOpportunities, getDashboardSummary } from '../../lib/api';
+import { getOpportunities } from '../../lib/api';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 

@@ -75,25 +75,39 @@ export default function ChannelFeedScreen() {
   useEffect(() => {
     if (!channelId) return;
     const { socketService } = require('../../lib/socket');
-    
-    socketService.connect();
-    const socket = socketService.socket;
-    
-    if (socket) {
-      socket.emit('join_channel', channelId);
-      
-      socket.on('receive_message', (newPost: any) => {
-        // If the new post was just created by this user, it's already in the feed
-        setPosts(prev => {
-          if (prev.find(p => p.id === newPost.id)) return prev;
-          return [newPost, ...prev];
-        });
+
+    // connect() is async now that it reads the session token from secure store,
+    // so the socket does not exist on the next line. `cancelled` keeps a
+    // late-resolving connect() from attaching a listener to an unmounted feed.
+    let cancelled = false;
+    let attached: any = null;
+
+    const onReceive = (newPost: any) => {
+      // If the new post was just created by this user, it's already in the feed
+      setPosts(prev => {
+        if (prev.find(p => p.id === newPost.id)) return prev;
+        return [newPost, ...prev];
       });
-    }
-    
+    };
+
+    socketService
+      .connect()
+      .then(() => {
+        if (cancelled) return;
+        const socket = socketService.socket;
+        if (!socket) return;
+        attached = socket;
+        socket.emit('join_channel', channelId);
+        socket.on('receive_message', onReceive);
+      })
+      .catch(() => {
+        // Realtime is an enhancement; the feed still renders from fetchStoreData.
+      });
+
     return () => {
-      if (socket) {
-        socket.off('receive_message');
+      cancelled = true;
+      if (attached) {
+        attached.off('receive_message', onReceive);
       }
     };
   }, [channelId]);
