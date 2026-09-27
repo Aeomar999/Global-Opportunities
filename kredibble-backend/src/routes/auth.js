@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { requireAuth, signToken } from '../middleware/auth.js';
+import { requireAuth, requireAdminAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
@@ -27,8 +27,6 @@ const publicUser = (user) => {
   return { id: _id, ...safeUser };
 };
 
-// Second gate behind registerSchema. Even if validation were ever relaxed or
-// bypassed, an anonymous request can never persist the 'admin' role.
 const PUBLIC_ROLES = ['seeker', 'hirer'];
 
 authRouter.post(
@@ -99,7 +97,6 @@ authRouter.post(
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new ApiError(401, 'Invalid email or password');
 
-    // Mongoose handles population easily if defined, but for now manual fetch for exact structure
     let profile = null;
     if (user.role === 'seeker') profile = await SeekerProfile.findOne({ userId: user._id });
     if (user.role === 'hirer') profile = await HirerAccount.findOne({ userId: user._id });
@@ -108,6 +105,37 @@ authRouter.post(
     finalUser[user.role] = profile;
 
     res.json({ data: { user: publicUser(finalUser), token: signToken(user) } });
+  }),
+);
+
+// Admin login — sets httpOnly cookie, returns user only (no token in body)
+authRouter.post(
+  '/admin/login',
+  validate(loginSchema),
+  asyncHandler(async (req, res) => {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user?.passwordHash || user.role !== 'admin') {
+      throw new ApiError(401, 'Invalid admin credentials');
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) throw new ApiError(401, 'Invalid admin credentials');
+
+    const adminToken = signAdminToken(user);
+    setAdminCookie(res, adminToken);
+
+    res.json({ data: { user: publicUser(user) } });
+  }),
+);
+
+// Admin logout — clears cookie
+authRouter.post(
+  '/admin/logout',
+  asyncHandler(async (req, res) => {
+    clearAdminCookie(res);
+    res.json({ data: { message: 'Logged out' } });
   }),
 );
 

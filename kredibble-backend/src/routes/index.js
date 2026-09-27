@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { authRouter } from './auth.js';
 import { uploadRouter } from './upload.js';
 import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError } from '../utils/http.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireAdminAuth, requireRole } from '../middleware/auth.js';
 import {
   RESOURCE_POLICIES,
   ADMIN,
@@ -283,9 +283,9 @@ apiRouter.get('/health', (req, res) => {
 });
 
 // SEC-003: the summary exposes platform-wide counts (total users, open reports,
-// pending moderation queues), so it is admin-only. `requireAuth` runs first so an
-// anonymous caller gets 401 rather than 403.
-apiRouter.get('/dashboard/summary', requireAuth, requireRole(ADMIN), asyncHandler(async (req, res) => {
+ // pending moderation queues), so it is admin-only. `requireAdminAuth` validates
+ // the admin cookie or header and enforces role=admin + audience=kredibble-admin.
+ apiRouter.get('/dashboard/summary', requireAdminAuth, asyncHandler(async (req, res) => {
 
   const [
     pendingVerifications,

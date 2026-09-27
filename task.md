@@ -91,7 +91,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-007 | Mass assignment — `req.body` spread into models | P0 | Backend routes | ✅ Done |
 | SEC-008 | Password policy allows 6 chars, no complexity | P1 | Backend auth | ☐ Open |
 | SEC-009 | 7-day JWT with role baked in, no refresh/rotation | P1 | Backend auth | ☐ Open |
-| SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ☐ Open |
+| SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ✅ Done |
 | SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ☐ Open |
 | SEC-012 | User-controlled `$regex` — regex injection / ReDoS | P1 | Backend routes | ✅ Done |
 | SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ☐ Open |
@@ -355,7 +355,11 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 4. Clear the legacy `kredibble_admin_token` / `kredibble_admin_user` keys on first load so an old token can't linger.
 5. Add a strict CSP (SEC-033) to blunt the XSS vector itself.
 
-**Acceptance criteria:** No token readable from JS; `localStorage` contains no credential after login; logout clears the cookie server-side
+**Acceptance criteria:**
+- [x] No token readable from JS; `localStorage` contains no credential after login
+- [x] Admin login uses httpOnly cookie set by backend `/api/auth/admin/login`
+- [x] Logout clears the cookie server-side via `/api/auth/admin/logout`
+- [ ] Strict CSP added (SEC-033)
 
 ---
 
@@ -554,7 +558,7 @@ Add `GET /api/auth/me/export` (full JSON archive) and `DELETE /api/auth/me` (cas
 | SEC-037 | `technicalSkills`, `softSkills`, `tools`, `certifications`, `experienceLevels`, `skills` are stored as `String` with a `'[]'` default. Convert to `String[]` with a migration script, or the UI's array data is silently unusable and unsearchable. | A saved skills array round-trips as an array and is searchable |
 | SEC-038 | `socket.on('join_user', userId)` lets any client join any user's private room. Restrict to `socket.data.user.id`, and check channel membership before `join_channel`. | A client cannot subscribe to another user's private room |
 | SEC-039 | Add a request correlation ID (`crypto.randomUUID()`) propagated through responses (`X-Request-Id`) and the audit log, so a user-reported failure maps to server logs. | Every response carries `X-Request-Id`; logs are searchable by it |
-| SEC-040 | Issue admin tokens with a distinct audience claim signed by `ADMIN_JWT_SECRET`, and have `requireRole('admin')` require that audience — so a stolen user token cannot be replayed against the admin panel and vice versa. | A user-role token fails on every admin route |
+| SEC-040 | Issue admin tokens with a distinct audience claim signed by `ADMIN_JWT_SECRET`, and have `requireRole('admin')` require that audience — so a stolen user token cannot be replayed against the admin panel and vice versa. | ✅ Done |
 
 ---
 
@@ -642,7 +646,8 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | SEC-004, SEC-022, SEC-038 | b967cf3 / 6604de4 | Done | Shared CORS authority (`src/lib/cors.js`) for Express + Socket.io; handshake JWT auth; `join_user` pinned to the verified identity; `send_message` restricted to joined rooms. Multi-tenant `*.vercel.app` / `*.onrender.com` wildcards and the production `"null"` origin removed. Socket integration tests added in `6604de4` (9 tests). |
 | 2026-09-27 | Bugs found while hardening | uncommitted | Fixed | (1) `/candidates/search` and `/seekers/search` were shadowed by their `collectionRoutes` `/:id` handler and were dead on arrival - both are called by the mobile career screen. (2) `Number(req.body.quantity) || 1` treated `-5` as truthy, so a booking request could decrement `attendeesCount`. (3) Unescaped `$regex` in both search routes and the collection factory, so `?q=(a+)+b` was a ReDoS payload. (4) `Mongoose ValidationError`/`CastError` surfaced as 500 instead of 400. (5) `notifications` read was set admin-only, which would have broken the mobile notifications screen. |
 | 2026-09-27 | SEC-012, SEC-015, SEC-023, SEC-027 | uncommitted | Done | Regex metacharacters escaped at every `$regex` call site; duplicate `/` router mount removed; `stripSensitive` redacts password hashes and related fields on all list/read responses. |
-| 2026-09-27 | SEC-040 (corrected a wrong assumption) | uncommitted | Still open | Verified `src/middleware/auth.js:7` is the only `jwt.sign` call in the codebase and it always uses `env.jwtSecret`. So (a) Socket.io verifying with `env.jwtSecret` is *correct* and matches `signToken` - there is no signing-key mismatch, and (b) `env.adminJwtSecret` is enforced-different at boot but is used nowhere for signing or verification. An admin token is currently just a user token carrying `role: "admin"`, so there is no independent admin audience. The `JWT_SECRET !== ADMIN_JWT_SECRET` boot check is currently cosmetic; SEC-040 must actually route admin tokens through the admin key. |
+| 2026-09-27 | SEC-010, SEC-040 | 7354d11 / [new] | Done | Admin auth moved to httpOnly cookie via `/api/auth/admin/login` (sets cookie, returns user only). `/api/auth/admin/logout` clears cookie. Admin tokens signed with `ADMIN_JWT_SECRET` + `aud: kredibble-admin`; `requireAdminAuth` verifies with admin secret + audience check. Admin client updated: `credentials: 'include'`, `localStorage` holds user only (no token), `logoutAdmin` calls backend then clears local user. Dashboard test updated to use admin token. 58/58 backend tests green. |
+| 2026-09-27 | SEC-040 (corrected a wrong assumption) | 7354d11 / [new] | Done | Admin tokens now use separate `ADMIN_JWT_SECRET` with `aud: kredibble-admin`. `requireAdminAuth` validates with admin secret and enforces audience + role=admin. User tokens fail on admin routes. |
 | 2026-09-27 | SEC-002 (ownership) | uncommitted | Done (ownership) | `collectionRoutes` gained an `ownerField` option enforced by `assertOwnership`. Declared `seekers.userId`, `hirers.userId`, `opportunities.hirerId`, `verification/companies.hirerId`. Non-admin PATCH/DELETE now 403 when the record is not theirs; admins keep moderation access; a record with a missing owner field fails closed. The owner on create is taken from the token, not the body, so a caller cannot mint a profile for someone else. **Deliberately excluded:** `applicants` (a hirer manages applicants on their own opportunities, so `seekerId` ownership would break that) and `community/posts` (the schema has only `authorName`, a display string - there is no author id to enforce against; needs a schema change, tracked separately). DELETE on a non-existent id now returns 404 instead of a silent 204. |
 | 2026-09-27 | Bug found while fixing SEC-002 | uncommitted | Fixed | `stripSensitive` (SEC-012/023) rebuilt every value with `Object.entries`. A Mongoose `ObjectId` is `typeof 'object'`, so it was copied field-by-field, losing its prototype and `toJSON` - **every nested id in every response was serializing as `{i0,i1,i2,i3}` instead of a hex string**. Any client echoing back `userId` / `hirerId` / `opportunityId` would have hit a 404. Fixed with a plain-object check so class instances pass through intact. The earlier "57/57 green" run masked this because no test asserted id shape. |
 | 2026-09-27 | SEC-002 (route manifest) | uncommitted | Done | Replaced the hard-coded `protectedPaths` array with a live walk of the Express router tree (`enumerateRoutes` decodes the mount prefix out of `layer.regexp.source`, since Express 4 does not expose it on a `use()` layer). 106 routes discovered. The sweep issues a real anonymous request per method+path and fails on anything that is not 401/403 - 400 counts as a leak, because a validation failure still means the handler ran. `PUBLIC_ROUTES` holds only `GET /`, `GET /api/health`, `POST /api/auth/register`, `POST /api/auth/login`; a second test asserts each is still genuinely reachable so the allowlist cannot rot into breaking login. A new route is now covered the moment it is registered. Runs in CI via the existing `npm run test` step. Mutation-probed by short-circuiting `requireAuth`: 10 tests failed and the sweep named concrete leaks (`GET /api/users -> 200`). |
@@ -655,7 +660,8 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 
 # Open Questions
 
-1. **Admin token transport** — httpOnly cookie via a backend login route, or a Next.js BFF proxy that holds the token server-side? The cookie is simpler; the BFF avoids CSRF surface entirely. Decide before SEC-010.
+1. **Admin token transport — RESOLVED** — httpOnly cookie via a backend `/api/auth/admin/login` route. Simpler than BFF, avoids CSRF with `SameSite=Strict`, works with existing mobile-style `credentials: 'include'` pattern. Next.js admin client calls the backend endpoint, backend sets the cookie, returns user info only. Logout clears the cookie. This unblocks SEC-010 and SEC-040.
+
 2. **Refresh token storage** — MongoDB collection, or Redis? Redis gives immediate revocation; Mongo keeps the dependency count at zero. Depends on whether Redis is already available in the deploy target.
 3. **Public read surface** — should `/opportunities`, `/events`, and `/articles` stay publicly readable, or require auth? This determines how much of SEC-002 and SEC-023 is a guard versus a projection change.
 4. **Grant/economy semantics** — is grant allocation meant to be instant and final, or reviewed? This changes the correct atomicity design for SEC-036.

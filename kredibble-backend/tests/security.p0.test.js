@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import request from 'supertest';
 import mongoose from 'mongoose';
 import { app } from '../src/app.js';
-import { signToken } from '../src/middleware/auth.js';
+import { signToken, signAdminToken } from '../src/middleware/auth.js';
 import { User } from '../src/models/User.js';
 import { Opportunity, Event, EventAttendee } from '../src/models/Platform.js';
 import { Candidate, SeekerProfile } from '../src/models/Profiles.js';
@@ -79,15 +79,16 @@ describe('SEC-002: collection routes must require authentication', () => {
 });
 
 describe('SEC-003: dashboard summary is admin-only', () => {
-  it('is 403 for an authenticated non-admin', async () => {
+  it('is 401 for an authenticated non-admin (user token rejected by admin verifier)', async () => {
     const { token } = await makeUser({ email: 'seeker@example.com' });
     const res = await request(app).get('/api/dashboard/summary').set(...AUTH_BEARER(token));
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(401);
   });
 
   it('is 200 for an admin', async () => {
-    const { token } = await makeUser({ role: 'admin', email: 'admin@example.com' });
-    const res = await request(app).get('/api/dashboard/summary').set(...AUTH_BEARER(token));
+    const { user } = await makeUser({ role: 'admin', email: 'admin@example.com' });
+    const adminToken = signAdminToken(user);
+    const res = await request(app).get('/api/dashboard/summary').set(...AUTH_BEARER(adminToken));
     expect(res.statusCode).toBe(200);
   });
 });
@@ -591,12 +592,16 @@ const concretize = (path) =>
  *
  * `GET /` and `GET /api/health` are liveness/banner endpoints. Register and
  * login are the only public writes, and are rate limited separately.
+ * Admin login/logout are cookie-based and intentionally accessible without
+ * a pre-existing token (login validates credentials, logout is idempotent).
  */
 const PUBLIC_ROUTES = new Set([
   'GET /',
   'GET /api/health',
   'POST /api/auth/register',
   'POST /api/auth/login',
+  'POST /api/auth/admin/login',
+  'POST /api/auth/admin/logout',
 ]);
 
 describe('SEC-002: live route manifest — no unguarded routes', () => {
