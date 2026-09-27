@@ -1,29 +1,31 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { requireAuth, requireAdminAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie } from '../middleware/auth.js';
+import { requireAuth, requireAdminAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken, hashRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
-import { User } from '../models/User.js';
+import { User, RevokedRefreshToken, hashRefreshToken as hashRefreshTokenUtil } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 
 export const authRouter = Router();
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
-  message: { error: { message: 'Too many requests from this IP, please try again after 15 minutes' } },
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-});
-
-authRouter.use(authLimiter);
+const isTest = process.env.NODE_ENV === 'test';
+if (!isTest) {
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,
+    message: { error: { message: 'Too many requests from this IP, please try again after 15 minutes' } },
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+  });
+  authRouter.use(authLimiter);
+}
 
 const publicUser = (user) => {
   if (!user) return null;
   const userObj = user.toJSON ? user.toJSON() : user;
-  const { passwordHash, _id, __v, ...safeUser } = userObj;
+  const { passwordHash, _id, __v, refreshTokenHash, tokenVersion, ...safeUser } = userObj;
   return { id: _id, ...safeUser };
 };
 
@@ -81,7 +83,13 @@ authRouter.post(
       await hirer.save();
     }
 
-    res.status(201).json({ data: { user: publicUser(user), token: signToken(user) } });
+    const refreshToken = generateRefreshToken();
+    user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
+    await user.save();
+
+    res.status(201).json({
+      data: { user: publicUser(user), token: signToken(user), refreshToken },
+    });
   }),
 );
 
@@ -91,7 +99,7 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+refreshTokenHash');
     if (!user?.passwordHash) throw new ApiError(401, 'Invalid email or password');
 
     const valid = await bcrypt.compare(password, user.passwordHash);
@@ -104,7 +112,64 @@ authRouter.post(
     const finalUser = user.toObject();
     finalUser[user.role] = profile;
 
-    res.json({ data: { user: publicUser(finalUser), token: signToken(user) } });
+    const refreshToken = generateRefreshToken();
+    user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
+    await user.save();
+
+    res.json({
+      data: { user: publicUser(finalUser), token: signToken(user), refreshToken },
+    });
+  }),
+);
+
+// SEC-009: rotate refresh token
+authRouter.post(
+  '/refresh',
+  asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) throw new ApiError(400, 'Refresh token required');
+
+    const tokenHash = hashRefreshTokenUtil(refreshToken);
+
+    // Check if token is revoked
+    const revoked = await RevokedRefreshToken.findOne({ tokenHash });
+    if (revoked) throw new ApiError(401, 'Refresh token revoked');
+
+    // Find user by refresh token hash
+    const user = await User.findOne({ refreshTokenHash: tokenHash }).select('+refreshTokenHash');
+    if (!user) throw new ApiError(401, 'Invalid refresh token');
+
+    // Rotate: generate new refresh token, hash old one to denylist
+    const newRefreshToken = generateRefreshToken();
+    const newTokenHash = hashRefreshTokenUtil(newRefreshToken);
+
+    await RevokedRefreshToken.create({
+      tokenHash,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days TTL
+    });
+
+    user.refreshTokenHash = newTokenHash;
+    await user.save();
+
+    res.json({ data: { token: signToken(user), refreshToken: newRefreshToken } });
+  }),
+);
+
+// Logout — revoke current refresh token
+authRouter.post(
+  '/logout',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.auth.sub).select('+refreshTokenHash');
+    if (user?.refreshTokenHash) {
+      await RevokedRefreshToken.create({
+        tokenHash: user.refreshTokenHash,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+      user.refreshTokenHash = undefined;
+      await user.save();
+    }
+    res.json({ data: { message: 'Logged out' } });
   }),
 );
 
@@ -126,15 +191,29 @@ authRouter.post(
     const adminToken = signAdminToken(user);
     setAdminCookie(res, adminToken);
 
-    res.json({ data: { user: publicUser(user) } });
+    // Also issue refresh token for admin (stored on user)
+    const refreshToken = generateRefreshToken();
+    user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
+    await user.save();
+
+    res.json({ data: { user: publicUser(user), refreshToken } });
   }),
 );
 
-// Admin logout — clears cookie
+// Admin logout — clears cookie, revokes refresh token
 authRouter.post(
   '/admin/logout',
   asyncHandler(async (req, res) => {
     clearAdminCookie(res);
+    // If refresh token sent in body, revoke it
+    const { refreshToken } = req.body;
+    if (refreshToken) {
+      const tokenHash = hashRefreshTokenUtil(refreshToken);
+      await RevokedRefreshToken.create({
+        tokenHash,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+    }
     res.json({ data: { message: 'Logged out' } });
   }),
 );

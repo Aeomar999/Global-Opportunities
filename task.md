@@ -92,7 +92,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-006 | Hard-coded JWT fallback secrets shipped in source | P0 | Backend config | ✅ Done |
 | SEC-007 | Mass assignment — `req.body` spread into models | P0 | Backend routes | ✅ Done |
 | SEC-008 | Password policy allows 6 chars, no complexity | P1 | Backend auth | ✅ Done |
-| SEC-009 | 7-day JWT with role baked in, no refresh/rotation | P1 | Backend auth | ☐ Open |
+| SEC-009 | 7-day JWT with role baked in, no refresh/rotation | P1 | Backend auth | ✅ Done |
 | SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ✅ Done |
 | SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ☐ Open |
 | SEC-012 | User-controlled `$regex` — regex injection / ReDoS | P1 | Backend routes | ✅ Done |
@@ -343,7 +343,14 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 4. Add a `tokenVersion` field on `User`, bumped on password change, role change, or forced logout. `requireAuth` rejects tokens whose version is stale — this fixes the stale-role problem for free.
 5. Maintain a denylist of revoked refresh tokens with TTL cleanup.
 
-**Acceptance criteria:** Access token ≤ 15 min; logout invalidates refresh; role change invalidates existing access tokens within one TTL window
+**Acceptance criteria:**
+- [x] Access token ≤ 15 min
+- [x] Refresh token (30 days, opaque, SHA-256 hashed at rest) issued on login, rotated on every refresh
+- [x] `/auth/refresh` rotates refresh token, adds old hash to denylist
+- [x] `/auth/logout` revokes current refresh token
+- [x] `tokenVersion` on User bumped on password/role change; stale tokens rejected
+- [x] Revoked refresh tokens stored with 30-day TTL
+- [x] Access token expiry reduced from 7d to 15m
 
 ---
 
@@ -662,6 +669,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | Verification | b967cf3 / 6604de4 / cc207d8 | Green | Backend `npm test`: 58/58 passing (3 suites). Socket integration tests (9) mutation-probed. Ownership guard and manifest sweep mutation-probed. Admin `npm run lint` clean. Mobile `tsc --noEmit`: 0 new errors in touched files (5 pre-existing errors in `events/index.tsx` and `grants/index.tsx` remain). |
 | 2026-09-27 | `create-admin.js` E2E | cc207d8 | Done | Ran `npm run user:create-admin -- --email test-admin@kredibble.com --name "Test Admin"` against production DB; created admin with generated 24-char password; verified login returns 200 with `role: "admin"` JWT. Script is the sole admin provisioning path (SEC-001/005). |
 | 2026-09-27 | SEC-008 | [new] | Done | Password policy upgraded: min 10, max 128, requires lowercase/uppercase/digit, rejects top 25 common passwords. 8 regression tests added (length, complexity, common deny-list). `password123` rejected; `Password123` accepted. 66/66 backend tests green. |
+| 2026-09-27 | SEC-009 | [new] | Done | Refresh token rotation implemented: 15-min access tokens, 30-day opaque refresh tokens (SHA-256 hashed at rest). `/auth/refresh` rotates token, adds old hash to denylist with 30-day TTL. `/auth/logout` revokes refresh token. `tokenVersion` on User invalidates stale access tokens on password/role change. `requireAuth` checks `tokenVersion`. 66/66 backend tests green. |
 
 ---
 

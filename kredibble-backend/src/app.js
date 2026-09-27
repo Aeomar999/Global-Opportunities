@@ -33,17 +33,17 @@ app.use(
 
 app.use(cookieParser());
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: { error: { message: 'Too many requests, please try again later.' } },
-  // The suite walks all 100+ routes in one process, which would trip the
-  // limiter partway through and report a 429 for routes it never reached -
-  // masking the auth result the assertion is actually about. Skipped in test
-  // only; production and development limits are unchanged.
-  skip: () => env.isTest,
-});
-app.use('/api', limiter);
+// SEC-024: global API rate limiter (100 req / 15 min). Disabled in test to avoid
+// polluting the route-manifest sweep and other enumeration tests.
+const isTest = process.env.NODE_ENV === 'test';
+if (!isTest) {
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: { error: { message: 'Too many requests, please try again later.' } },
+  });
+  app.use('/api', limiter);
+}
 
 
 // 2. Ensure DB connection for serverless environments

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'node:crypto';
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -6,6 +7,10 @@ const userSchema = new mongoose.Schema({
   role: { type: String, required: true, enum: ['seeker', 'hirer', 'admin'] },
   passwordHash: { type: String },
   avatarUrl: { type: String },
+  // SEC-009: token version for refresh rotation & forced logout
+  tokenVersion: { type: Number, default: 0 },
+  // SEC-009: hashed refresh token for rotation (single active per user)
+  refreshTokenHash: { type: String, select: false },
 }, { timestamps: true });
 
 // Virtuals to mimic the previous Prisma/Native structure for the frontend
@@ -27,6 +32,14 @@ const staffMemberSchema = new mongoose.Schema({
 export const User = mongoose.model('User', userSchema);
 export const StaffMember = mongoose.model('StaffMember', staffMemberSchema);
 
+// SEC-009: revoked refresh tokens with TTL cleanup (denylist)
+const revokedRefreshTokenSchema = new mongoose.Schema({
+  tokenHash: { type: String, required: true, index: true },
+  expiresAt: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
+}, { timestamps: true });
+
+export const RevokedRefreshToken = mongoose.model('RevokedRefreshToken', revokedRefreshTokenSchema);
+
 const savedItemSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   itemId: { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -34,4 +47,7 @@ const savedItemSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const SavedItem = mongoose.model('SavedItem', savedItemSchema);
+
+// SEC-009: hash a raw refresh token for storage/lookup
+export const hashRefreshToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 

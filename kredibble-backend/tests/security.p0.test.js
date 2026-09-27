@@ -657,21 +657,25 @@ const concretize = (path) =>
     .replace(/\/+$/, '') || '/';
 
 /**
- * Routes that are public **by design**. Every other route in the tree must
- * reject an anonymous request with 401/403. This is the machine-checked form
- * of the "no unguarded routes" guardrail in AGENTS.md: a new route is covered
- * the moment it is registered, without anyone updating a list.
+ * Routes that are public **by design** — accessible without a pre-existing
+ * authentication token. Every other route in the tree must reject an anonymous
+ * request with 401/403. This is the machine-checked form of the "no unguarded
+ * routes" guardrail in AGENTS.md: a new route is covered the moment it is
+ * registered, without anyone updating a list.
  *
  * `GET /` and `GET /api/health` are liveness/banner endpoints. Register and
  * login are the only public writes, and are rate limited separately.
- * Admin login/logout are cookie-based and intentionally accessible without
- * a pre-existing token (login validates credentials, logout is idempotent).
+ * Refresh requires a refresh token in the body (not an access token), so it is
+ * public in the sense of not needing a pre-existing access token. Admin
+ * login/logout are cookie-based and intentionally accessible without a
+ * pre-existing token (login validates credentials, logout is idempotent).
  */
 const PUBLIC_ROUTES = new Set([
   'GET /',
   'GET /api/health',
   'POST /api/auth/register',
   'POST /api/auth/login',
+  'POST /api/auth/refresh',
   'POST /api/auth/admin/login',
   'POST /api/auth/admin/logout',
 ]);

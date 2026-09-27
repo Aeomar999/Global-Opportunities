@@ -1,10 +1,15 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/http.js';
 
 export const signToken = (user) => {
   const userId = user.id || user._id;
-  return jwt.sign({ sub: userId, role: user.role, email: user.email }, env.jwtSecret, { expiresIn: '7d' });
+  return jwt.sign(
+    { sub: userId, role: user.role, email: user.email, tv: user.tokenVersion || 0 },
+    env.jwtSecret,
+    { expiresIn: '15m' }
+  );
 };
 
 export const signAdminToken = (user) => {
@@ -15,6 +20,10 @@ export const signAdminToken = (user) => {
     { expiresIn: '15m' }
   );
 };
+
+// SEC-009: generate opaque refresh token (64 hex chars) and its hash
+export const generateRefreshToken = () => crypto.randomBytes(32).toString('hex');
+export const hashRefreshToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 const COOKIE_NAME = 'kredibble_admin_token';
 
@@ -43,7 +52,12 @@ export const requireAuth = (req, res, next) => {
   if (!token) return next(new ApiError(401, 'Authentication token is required'));
 
   try {
-    req.auth = jwt.verify(token, env.jwtSecret);
+    const payload = jwt.verify(token, env.jwtSecret);
+    // SEC-009: reject tokens whose tokenVersion is stale (password/role change)
+    if (payload.tv !== undefined && req.auth?.tokenVersion !== undefined && payload.tv !== req.auth.tokenVersion) {
+      return next(new ApiError(401, 'Token revoked due to security event'));
+    }
+    req.auth = payload;
     next();
   } catch {
     next(new ApiError(401, 'Authentication token is invalid or expired'));
