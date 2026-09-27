@@ -22,7 +22,7 @@ describe('SEC-001: public registration must not mint admins', () => {
   it('rejects role: admin at the schema boundary', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Mallory', email: 'mallory@example.com', password: 'password123', role: 'admin' });
+      .send({ name: 'Mallory', email: 'mallory@example.com', password: 'Password123', role: 'admin' });
 
     expect(res.statusCode).toBeGreaterThanOrEqual(400);
     expect(await User.exists({ email: 'mallory@example.com' })).toBeNull();
@@ -31,7 +31,7 @@ describe('SEC-001: public registration must not mint admins', () => {
   it('never persists an admin even if role is smuggled past validation', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Mallory', email: 'mallory2@example.com', password: 'password123', role: 'admin' });
+      .send({ name: 'Mallory', email: 'mallory2@example.com', password: 'Password123', role: 'admin' });
 
     if (res.statusCode === 201) {
       const created = await User.findOne({ email: 'mallory2@example.com' });
@@ -43,11 +43,83 @@ describe('SEC-001: public registration must not mint admins', () => {
     for (const role of ['seeker', 'hirer']) {
       const res = await request(app)
         .post('/api/auth/register')
-        .send({ name: 'Valid User', email: `ok-${role}@example.com`, password: 'password123', role });
+        .send({ name: 'Valid User', email: `ok-${role}@example.com`, password: 'Password123', role });
 
       expect(res.statusCode).toBe(201);
       expect(res.body.data.user.role).toBe(role);
       expect(res.body.data.user.passwordHash).toBeUndefined();
+    }
+  });
+});
+describe('SEC-008: password policy enforces strength', () => {
+  const strongPassword = 'Password123';
+  const basePayload = { name: 'Test User', role: 'seeker' };
+
+  it('rejects password shorter than 10 characters', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...basePayload, email: 'short@example.com', password: 'Pass1' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/at least 10/i);
+  });
+
+  it('rejects password longer than 128 characters', async () => {
+    const longPassword = 'Aa1' + 'x'.repeat(126);
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...basePayload, email: 'long@example.com', password: longPassword });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/at most 128/i);
+  });
+
+  it('rejects password with no lowercase letter', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...basePayload, email: 'nolower@example.com', password: 'PASSWORD123' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/lowercase/i);
+  });
+
+  it('rejects password with no uppercase letter', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...basePayload, email: 'noupper@example.com', password: 'password123' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/uppercase/i);
+  });
+
+  it('rejects password with no digit', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...basePayload, email: 'nodigit@example.com', password: 'Password' });
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/digit/i);
+  });
+
+  it('rejects common passwords', async () => {
+    for (const pwd of ['password', '123456', 'qwerty', 'admin', 'welcome']) {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({ ...basePayload, email: `common-${pwd}@example.com`, password: pwd });
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error.message).toMatch(/too common/i);
+    }
+  });
+
+  it('accepts a strong password', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({ ...basePayload, email: 'strong@example.com', password: strongPassword });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('accepts valid passwords for both seeker and hirer roles', async () => {
+    for (const role of ['seeker', 'hirer']) {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({ ...basePayload, email: `ok-${role}@example.com`, password: strongPassword, role });
+      expect(res.statusCode).toBe(201);
+      expect(res.body.data.user.role).toBe(role);
     }
   });
 });

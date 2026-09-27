@@ -89,7 +89,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-005 | `signupAdmin` in admin client creates admin accounts | P0 | Admin app | ✅ Done |
 | SEC-006 | Hard-coded JWT fallback secrets shipped in source | P0 | Backend config | ✅ Done |
 | SEC-007 | Mass assignment — `req.body` spread into models | P0 | Backend routes | ✅ Done |
-| SEC-008 | Password policy allows 6 chars, no complexity | P1 | Backend auth | ☐ Open |
+| SEC-008 | Password policy allows 6 chars, no complexity | P1 | Backend auth | ✅ Done |
 | SEC-009 | 7-day JWT with role baked in, no refresh/rotation | P1 | Backend auth | ☐ Open |
 | SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ✅ Done |
 | SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ☐ Open |
@@ -319,7 +319,11 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 4. Mirror the rule in the client forms so users get inline feedback instead of a server round-trip.
 5. Log a metric (not the password) on rejection for abuse detection.
 
-**Acceptance criteria:** `password123` rejected, `Password123` accepted, no rule enforced only client-side
+**Acceptance criteria:**
+- [x] `password123` rejected (no uppercase, too short, too common)
+- [x] `Password123` accepted (meets all criteria)
+- [x] No rule enforced only client-side
+- [x] 8 regression tests added covering length, complexity, common-password deny-list
 
 ---
 
@@ -655,6 +659,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | SEC-004 (Socket.io auth + rooms) | uncommitted | Done | Added `tests/socket.integration.test.js` with 9 tests covering: handshake auth (valid/invalid/expired/missing token), `join_user` pinning (own room allowed, other user denied), `join_channel` + `send_message` (join allowed, emit to unjoined channel denied, broadcast to members works). Server handlers now call acknowledgment callbacks. Socket.io connection accepted with `auth.token` from handshake; CORS enforced via shared `isAllowedOrigin`. 58/58 backend tests green. |
 | 2026-09-27 | Verification | b967cf3 / 6604de4 / cc207d8 | Green | Backend `npm test`: 58/58 passing (3 suites). Socket integration tests (9) mutation-probed. Ownership guard and manifest sweep mutation-probed. Admin `npm run lint` clean. Mobile `tsc --noEmit`: 0 new errors in touched files (5 pre-existing errors in `events/index.tsx` and `grants/index.tsx` remain). |
 | 2026-09-27 | `create-admin.js` E2E | cc207d8 | Done | Ran `npm run user:create-admin -- --email test-admin@kredibble.com --name "Test Admin"` against production DB; created admin with generated 24-char password; verified login returns 200 with `role: "admin"` JWT. Script is the sole admin provisioning path (SEC-001/005). |
+| 2026-09-27 | SEC-008 | [new] | Done | Password policy upgraded: min 10, max 128, requires lowercase/uppercase/digit, rejects top 25 common passwords. 8 regression tests added (length, complexity, common deny-list). `password123` rejected; `Password123` accepted. 66/66 backend tests green. |
 
 ---
 

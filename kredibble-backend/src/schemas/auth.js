@@ -1,11 +1,25 @@
 import { z } from 'zod';
 
+// Top 25 most common passwords (abridged for brevity; extend as needed)
+const COMMON_PASSWORDS = new Set([
+  'password', '123456', '123456789', '12345678', '12345',
+  '1234567', '1234567890', 'qwerty', 'abc123', 'password1',
+  'admin', 'welcome', 'login', 'qwerty123', '1q2w3e4r',
+  '1234', '123456789012', 'iloveyou', 'monkey', 'dragon',
+  'sunshine', 'princess', 'football', 'baseball', 'superman',
+]);
+
+const isCommonPassword = (pwd) => COMMON_PASSWORDS.has(pwd.toLowerCase());
+
 const passwordSchema = z.string()
-  .min(6, 'Password must be at least 6 characters long');
-  // Loosened for development/easier onboarding
-  // .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-  // .regex(/[0-9]/, 'Password must contain at least one number')
-  // .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+  .min(10, 'Password must be at least 10 characters long')
+  .max(128, 'Password must be at most 128 characters long')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one digit')
+  .refine((pwd) => !isCommonPassword(pwd), {
+    message: 'Password is too common; choose a stronger one',
+  });
 
 // Public registration may only mint these two roles. 'admin' is intentionally
 // absent: it must never be reachable from an anonymous request body.
