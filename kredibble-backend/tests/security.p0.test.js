@@ -821,6 +821,87 @@ describe('SEC-011: pagination on list endpoints', () => {
   });
 });
 
+describe('SEC-013: upload validation', () => {
+  it('rejects upload without file', async () => {
+    const { token } = await makeUser({ email: 'upload@example.com' });
+    const res = await request(app)
+      .post('/api/upload')
+      .set(...AUTH_BEARER(token));
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects disallowed MIME type (executable)', async () => {
+    const { token } = await makeUser({ email: 'upload2@example.com' });
+    const fakeExe = Buffer.from('MZ'); // PE header
+    const res = await request(app)
+      .post('/api/upload')
+      .set(...AUTH_BEARER(token))
+      .attach('file', fakeExe, 'test.exe');
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/not allowed/i);
+  });
+
+  it('rejects SVG (XSS risk)', async () => {
+    const { token } = await makeUser({ email: 'upload3@example.com' });
+    const svg = Buffer.from('<svg onload="alert(1)"></svg>');
+    const res = await request(app)
+      .post('/api/upload')
+      .set(...AUTH_BEARER(token))
+      .attach('file', svg, 'test.svg');
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/not allowed/i);
+  });
+
+  it('rejects HTML', async () => {
+    const { token } = await makeUser({ email: 'upload4@example.com' });
+    const html = Buffer.from('<script>alert(1)</script>');
+    const res = await request(app)
+      .post('/api/upload')
+      .set(...AUTH_BEARER(token))
+      .attach('file', html, 'test.html');
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/not allowed/i);
+  });
+
+  it('rejects file with mismatched magic bytes', async () => {
+    const { token } = await makeUser({ email: 'upload5@example.com' });
+    // PNG header but declared as JPEG
+    const fakeJpeg = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // PNG magic bytes
+    const res = await request(app)
+      .post('/api/upload')
+      .set(...AUTH_BEARER(token))
+      .attach('file', fakeJpeg, 'test.jpg');
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.message).toMatch(/does not match declared type/i);
+  });
+
+  it('uses server-derived folder from user ID and purpose', async () => {
+    const { token, user } = await makeUser({ email: 'upload6@example.com' });
+    // Create a valid PNG buffer (1x1 transparent)
+    const png = Buffer.from([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+      0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+      0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
+      0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
+      0x00, 0x05, 0xFE, 0x02, 0xFE, 0x3C, 0xF2, 0xD5,
+      0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,
+      0xAE, 0x42, 0x60, 0x82
+    ]);
+
+    const res = await request(app)
+      .post('/api/upload')
+      .query({ purpose: 'avatars' })
+      .set(...AUTH_BEARER(token))
+      .attach('file', png, 'avatar.png');
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.folder).toContain(`kredibble/${user.id}/avatars`);
+    expect(res.body.data.url).toMatch(/cloudinary/);
+  });
+});
+
 afterAll(async () => {
   if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
 });

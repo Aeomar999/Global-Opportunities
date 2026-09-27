@@ -96,7 +96,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ✅ Done |
 | SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ✅ Done |
 | SEC-012 | User-controlled `$regex` — regex injection / ReDoS | P1 | Backend routes | ✅ Done |
-| SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ☐ Open |
+| SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ✅ Done |
 | SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ☐ Open |
 | SEC-015 | `apiRouter` mounted twice (`/` and `/api`), limiter double-counts | P1 | Backend app | ✅ Done |
 | SEC-016 | Clients fall back to plaintext HTTP, no HTTPS enforcement | P1 | App + Admin | ☐ Open |
@@ -430,7 +430,12 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 5. Enforce a per-user storage quota and a per-user upload rate limit (SEC-024).
 6. Add `randomFilename: true` on the Cloudinary uploader so stored names never collide or leak user input.
 
-**Acceptance criteria:** `.svg`, `.html`, `.exe` all rejected; `?folder=../other-user` is ignored; uploads land under a path derived from `req.user.id`
+**Acceptance criteria:**
+- [x] `.svg`, `.html`, `.exe` all rejected (MIME allowlist + magic bytes)
+- [x] `?folder=../other-user` ignored — server derives path from user ID + purpose enum
+- [x] Uploads land under `kredibble/${userId}/${purpose}` (e.g., `cvs`, `avatars`, `company-logos`, `verification-docs`)
+- [x] Per-user rate limit: 20 uploads/hour
+- [x] 6 regression tests added (no file, disallowed MIME, SVG, HTML, magic bytes mismatch, server-derived folder)
 
 ---
 
@@ -675,6 +680,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | SEC-008 | [new] | Done | Password policy upgraded: min 10, max 128, requires lowercase/uppercase/digit, rejects top 25 common passwords. 8 regression tests added (length, complexity, common deny-list). `password123` rejected; `Password123` accepted. 66/66 backend tests green. |
 | 2026-09-27 | SEC-009 | [new] | Done | Refresh token rotation implemented: 15-min access tokens, 30-day opaque refresh tokens (SHA-256 hashed at rest). `/auth/refresh` rotates token, adds old hash to denylist with 30-day TTL. `/auth/logout` revokes refresh token. `tokenVersion` on User invalidates stale access tokens on password/role change. `requireAuth` checks `tokenVersion`. 66/66 backend tests green. |
 | 2026-09-27 | SEC-011 | [new] | Done | Pagination added to all list endpoints via `parsePagination` helper in `src/utils/http.js`. Defaults: page=1, limit=20, max limit=100. All `collectionRoutes` GET / endpoints now return `{ data, meta: { page, limit, total, pages } }`. `listResponse` updated to support paginated response. 5 regression tests added (defaults, page/limit params, limit clamping, page clamping, multiple endpoints). 71/71 backend tests green. |
+| 2026-09-27 | SEC-013 | [new] | Done | Upload hardened: MIME allowlist (PDF/PNG/JPEG/WebP) + magic bytes validation. Server derives folder from user ID + purpose enum (`cvs`, `avatars`, `company-logos`, `verification-docs`). Per-user rate limit 20/hr. Free-form `folder` query param removed. 6 regression tests added. Mocked Cloudinary in test env. 77/77 backend tests green. |
 
 ---
 
