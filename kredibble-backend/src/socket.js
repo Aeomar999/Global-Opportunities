@@ -48,33 +48,38 @@ export const initSocket = (server) => {
     // Personal room. Joining is pinned to the authenticated identity: a caller
     // must not be able to subscribe to someone else's direct messages by
     // supplying their user id.
-    socket.on('join_user', (userId) => {
+    socket.on('join_user', (userId, ack) => {
       if (String(userId) !== auth.sub) {
         console.warn(`Socket ${socket.id} denied join_user for ${userId}`);
+        if (typeof ack === 'function') ack(false);
         return;
       }
       socket.join(`user_${auth.sub}`);
       console.log(`Socket ${socket.id} joined room user_${auth.sub}`);
+      if (typeof ack === 'function') ack(true);
     });
 
     // Chat channels. Membership is not modelled in the database yet, so any
     // authenticated user may join, matching the authenticated read policy on
     // GET /api/community/channels/:channelId/posts.
-    socket.on('join_channel', (channelId) => {
+    socket.on('join_channel', (channelId, ack) => {
       socket.join(`channel_${channelId}`);
       console.log(`Socket ${socket.id} joined channel_${channelId}`);
+      if (typeof ack === 'function') ack(true);
     });
 
-    socket.on('send_message', (data) => {
+    socket.on('send_message', (data, ack) => {
       const { channelId, message } = data || {};
       const room = `channel_${channelId}`;
       // Only broadcast into a room this socket actually joined. Without this a
       // client could emit into any channel id without ever subscribing to it.
       if (!socket.rooms.has(room)) {
         console.warn(`Socket ${socket.id} denied send_message to ${room}`);
+        if (typeof ack === 'function') ack(false);
         return;
       }
       io.to(room).emit('receive_message', message);
+      if (typeof ack === 'function') ack(true);
     });
 
     socket.on('disconnect', () => {
