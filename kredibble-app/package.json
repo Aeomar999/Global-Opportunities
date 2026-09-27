@@ -54,7 +54,8 @@
     "ios": "expo run:ios",
     "web": "set EXPO_NO_METRO_WORKSPACE_ROOT=1&& set EXPO_NO_DEPENDENCY_VALIDATION=1&& expo start --web --clear",
     "web:windows": "set EXPO_NO_METRO_WORKSPACE_ROOT=1&& set EXPO_NO_DEPENDENCY_VALIDATION=1&& expo start --web --clear",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "check:https": "node ../../scripts/check-https.js"
   },
   "private": true
 }

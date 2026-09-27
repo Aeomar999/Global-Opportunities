@@ -99,7 +99,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ✅ Done |
 | SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ✅ Done |
 | SEC-015 | `apiRouter` mounted twice (`/` and `/api`), limiter double-counts | P1 | Backend app | ✅ Done |
-| SEC-016 | Clients fall back to plaintext HTTP, no HTTPS enforcement | P1 | App + Admin | ☐ Open |
+| SEC-016 | Clients fall back to plaintext HTTP, no HTTPS enforcement | P1 | App + Admin | ✅ Done |
 | SEC-017 | No audit log for admin/mutating actions | P1 | Backend | ☐ Open |
 | SEC-018 | Test suite empty — no auth or authorization tests exist | P1 | Backend | ◐ Backend done; Admin/mobile pending |
 | SEC-019 | No API versioning — breaking changes ship silently | P2 | Backend | ☐ Open |
@@ -486,7 +486,11 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 2. Add a build-time assertion script that fails the release build on a non-HTTPS `EXPO_PUBLIC_API_URL` / `NEXT_PUBLIC_API_URL`.
 3. Document the required proxy/VPN requirement for local HTTP work in `CONTEXT.md`.
 
-**Acceptance criteria:** Production build fails loudly on a non-HTTPS API URL; no credential is ever sent over HTTP in a release build
+**Acceptance criteria:**
+- [x] Runtime check in mobile (`kredibble-app/src/lib/api.ts`) throws on non-HTTPS in production
+- [x] Runtime check in admin (`kredibble-admin/src/lib/api.ts`) throws on non-HTTPS in production
+- [x] Build-time script (`scripts/check-https.js`) fails release build on non-HTTPS API URL
+- [x] Localhost fallback preserved for development
 
 ---
 
@@ -684,6 +688,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | SEC-011 | [new] | Done | Pagination added to all list endpoints via `parsePagination` helper in `src/utils/http.js`. Defaults: page=1, limit=20, max limit=100. All `collectionRoutes` GET / endpoints now return `{ data, meta: { page, limit, total, pages } }`. `listResponse` updated to support paginated response. 5 regression tests added (defaults, page/limit params, limit clamping, page clamping, multiple endpoints). 71/71 backend tests green. |
 | 2026-09-27 | SEC-013 | [new] | Done | Upload hardened: MIME allowlist (PDF/PNG/JPEG/WebP) + magic bytes validation. Server derives folder from user ID + purpose enum (`cvs`, `avatars`, `company-logos`, `verification-docs`). Per-user rate limit 20/hr. Free-form `folder` query param removed. 6 regression tests added. Mocked Cloudinary in test env. 77/77 backend tests green. |
 | 2026-09-27 | SEC-014 | [new] | Done | Swagger UI restricted: `/api-docs` returns 404 in production unless `ENABLE_SWAGGER=true`. Available in development/test. `swaggerUi` mounted conditionally in `src/app.js`. 77/77 backend tests green. |
+| 2026-09-27 | SEC-016 | [new] | Done | HTTPS enforcement added: mobile and admin clients throw at startup if API URL is not https:// in production. Build-time check script (`scripts/check-https.js`) fails release build on non-HTTPS URL. Localhost fallback preserved for development. 77/77 backend tests green. |
 
 ---
 

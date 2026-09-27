@@ -16,6 +16,12 @@ const getApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (!envUrl) return "http://localhost:4000/api";
 
+  // SEC-016: In production, reject non-HTTPS URLs
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (isProduction && !envUrl.startsWith('https://')) {
+    throw new Error('SEC-016: NEXT_PUBLIC_API_URL must use https:// in production');
+  }
+
   if (envUrl.includes(".") && !envUrl.startsWith("http")) {
     return `https://${envUrl.replace(/\/$/, "")}`;
   }
