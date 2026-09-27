@@ -2,7 +2,7 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { authRouter } from './auth.js';
 import { uploadRouter } from './upload.js';
-import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError } from '../utils/http.js';
+import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination, paginatedResponse } from '../utils/http.js';
 import { requireAuth, requireAdminAuth, requireRole } from '../middleware/auth.js';
 import {
   RESOURCE_POLICIES,
@@ -170,6 +170,7 @@ const collectionRoutes = ({
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'read', req, resourceName);
       const { status, type, q } = req.query;
+      const { page, limit, skip } = parsePagination(req.query);
       const filter = {};
 
       if (status) {
@@ -188,8 +189,11 @@ const collectionRoutes = ({
         }
       }
 
-      const data = await Model.find(filter).sort({ createdAt: -1 });
-      listResponse(res, normalizeOut ? data.map(normalizeOut) : data.map(toClientObject));
+      const [data, total] = await Promise.all([
+        Model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+        Model.countDocuments(filter),
+      ]);
+      listResponse(res, normalizeOut ? data.map(normalizeOut) : data.map(toClientObject), total, page, limit);
     }),
   );
 

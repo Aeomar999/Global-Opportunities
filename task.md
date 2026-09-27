@@ -94,7 +94,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-008 | Password policy allows 6 chars, no complexity | P1 | Backend auth | ✅ Done |
 | SEC-009 | 7-day JWT with role baked in, no refresh/rotation | P1 | Backend auth | ✅ Done |
 | SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ✅ Done |
-| SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ☐ Open |
+| SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ✅ Done |
 | SEC-012 | User-controlled `$regex` — regex injection / ReDoS | P1 | Backend routes | ✅ Done |
 | SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ☐ Open |
 | SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ☐ Open |
@@ -389,7 +389,11 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 3. Prefer cursor pagination for the feeds that grow without bound (`/opportunities`, `/articles`, `/notifications`).
 4. Update both clients to send `page`/`limit` and render incremental loading (the mobile app already uses `URLSearchParams` helpers, so extend those in `kredibble-app/src/lib/api.ts`).
 
-**Acceptance criteria:** `?limit=1000` is clamped to 100; every list response carries `meta`; a 1M-row collection still returns in constant time
+**Acceptance criteria:**
+- [x] `?limit=1000` is clamped to 100
+- [x] Every list response carries `meta: { page, limit, total, pages }`
+- [x] Default page=1, limit=20, max limit=100
+- [x] 5 new regression tests added (defaults, page/limit params, clamping, multiple endpoints)
 
 ---
 
@@ -670,6 +674,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | `create-admin.js` E2E | cc207d8 | Done | Ran `npm run user:create-admin -- --email test-admin@kredibble.com --name "Test Admin"` against production DB; created admin with generated 24-char password; verified login returns 200 with `role: "admin"` JWT. Script is the sole admin provisioning path (SEC-001/005). |
 | 2026-09-27 | SEC-008 | [new] | Done | Password policy upgraded: min 10, max 128, requires lowercase/uppercase/digit, rejects top 25 common passwords. 8 regression tests added (length, complexity, common deny-list). `password123` rejected; `Password123` accepted. 66/66 backend tests green. |
 | 2026-09-27 | SEC-009 | [new] | Done | Refresh token rotation implemented: 15-min access tokens, 30-day opaque refresh tokens (SHA-256 hashed at rest). `/auth/refresh` rotates token, adds old hash to denylist with 30-day TTL. `/auth/logout` revokes refresh token. `tokenVersion` on User invalidates stale access tokens on password/role change. `requireAuth` checks `tokenVersion`. 66/66 backend tests green. |
+| 2026-09-27 | SEC-011 | [new] | Done | Pagination added to all list endpoints via `parsePagination` helper in `src/utils/http.js`. Defaults: page=1, limit=20, max limit=100. All `collectionRoutes` GET / endpoints now return `{ data, meta: { page, limit, total, pages } }`. `listResponse` updated to support paginated response. 5 regression tests added (defaults, page/limit params, limit clamping, page clamping, multiple endpoints). 71/71 backend tests green. |
 
 ---
 

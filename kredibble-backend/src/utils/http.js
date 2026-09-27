@@ -11,7 +11,43 @@ export const asyncHandler = (handler) => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
 };
 
-export const listResponse = (res, data) => res.json({ data, count: data.length });
+/**
+ * Pagination helper — clamps and normalizes query parameters.
+ * @param {Object} query - Express req.query
+ * @returns {{ page: number, limit: number, skip: number }}
+ */
+export const parsePagination = (query) => {
+  const page = Math.max(1, parseInt(query.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 20));
+  const skip = (page - 1) * limit;
+  return { page, limit, skip };
+};
+
+/**
+ * Builds a paginated response payload.
+ * @param {Array} data - Items for the current page
+ * @param {number} total - Total items matching the filter (unpaginated)
+ * @param {number} page - Current page number (1-indexed)
+ * @param {number} limit - Items per page
+ * @returns {Object} Paginated response object
+ */
+export const paginatedResponse = (data, total, page, limit) => ({
+  data,
+  meta: {
+    page,
+    limit,
+    total,
+    pages: Math.ceil(total / limit) || 1,
+  },
+});
+
+export const listResponse = (res, data, total, page, limit) => {
+  if (total !== undefined && page !== undefined && limit !== undefined) {
+    return res.json(paginatedResponse(data, total, page, limit));
+  }
+  // Backward compatibility: non-paginated response
+  return res.json(paginatedResponse(data, data.length, 1, data.length));
+};
 
 export const itemResponse = (res, data) => res.json({ data });
 

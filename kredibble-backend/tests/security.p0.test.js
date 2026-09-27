@@ -726,6 +726,101 @@ describe('SEC-002: live route manifest — no unguarded routes', () => {
   });
 });
 
+describe('SEC-011: pagination on list endpoints', () => {
+  it('defaults to page=1, limit=20', async () => {
+    const { token } = await makeUser({ email: 'pagination@example.com' });
+    // Create 25 seekers
+    const seekers = Array.from({ length: 25 }, (_, i) => ({
+      userId: `64b7f1c2a1b2c3d4e5f607${i.toString().padStart(2, '0')}`,
+      profession: `Test ${i}`,
+    }));
+    await SeekerProfile.insertMany(seekers);
+
+    const res = await request(app)
+      .get('/api/seekers')
+      .set(...AUTH_BEARER(token));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(20);
+    expect(res.body.meta).toEqual({
+      page: 1,
+      limit: 20,
+      total: 25,
+      pages: 2,
+    });
+  });
+
+  it('respects page and limit parameters', async () => {
+    const { token } = await makeUser({ email: 'pagination2@example.com' });
+    await SeekerProfile.insertMany(
+      Array.from({ length: 15 }, (_, i) => ({
+        userId: `64b7f1c2a1b2c3d4e5f608${i.toString().padStart(2, '0')}`,
+        profession: `Test ${i}`,
+      })),
+    );
+
+    const res = await request(app)
+      .get('/api/seekers')
+      .query({ page: 2, limit: 5 })
+      .set(...AUTH_BEARER(token));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(5);
+    expect(res.body.meta).toEqual({
+      page: 2,
+      limit: 5,
+      total: 15,
+      pages: 3,
+    });
+  });
+
+  it('clamps limit to max 100', async () => {
+    const { token } = await makeUser({ email: 'pagination3@example.com' });
+    const res = await request(app)
+      .get('/api/seekers')
+      .query({ limit: 1000 })
+      .set(...AUTH_BEARER(token));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.meta.limit).toBe(100);
+  });
+
+  it('clamps page to minimum 1', async () => {
+    const { token } = await makeUser({ email: 'pagination4@example.com' });
+    const res = await request(app)
+      .get('/api/seekers')
+      .query({ page: 0, limit: 10 })
+      .set(...AUTH_BEARER(token));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.meta.page).toBe(1);
+  });
+
+  it('works on seekers endpoint', async () => {
+    const { token } = await makeUser({ email: 'seeker-pagination@example.com' });
+    for (let i = 0; i < 5; i++) {
+      await SeekerProfile.create({
+        userId: new mongoose.Types.ObjectId(),
+        profession: `Test ${i}`,
+      });
+    }
+
+    const res = await request(app)
+      .get('/api/seekers')
+      .query({ page: 1, limit: 2 })
+      .set(...AUTH_BEARER(token));
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.meta).toEqual({
+      page: 1,
+      limit: 2,
+      total: 5,
+      pages: 3,
+    });
+  });
+});
+
 afterAll(async () => {
   if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
 });
