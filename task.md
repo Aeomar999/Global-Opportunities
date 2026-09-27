@@ -97,7 +97,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ✅ Done |
 | SEC-012 | User-controlled `$regex` — regex injection / ReDoS | P1 | Backend routes | ✅ Done |
 | SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ✅ Done |
-| SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ☐ Open |
+| SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ✅ Done |
 | SEC-015 | `apiRouter` mounted twice (`/` and `/api`), limiter double-counts | P1 | Backend app | ✅ Done |
 | SEC-016 | Clients fall back to plaintext HTTP, no HTTPS enforcement | P1 | App + Admin | ☐ Open |
 | SEC-017 | No audit log for admin/mutating actions | P1 | Backend | ☐ Open |
@@ -451,7 +451,9 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 2. In production, serve only a minimal `/api/health` and return 404 for docs routes.
 3. Strip any server-internal fields from `swagger.json` before use.
 
-**Acceptance criteria:** `/api-docs` returns 404 in production; still available in development
+**Acceptance criteria:**
+- [x] `/api-docs` returns 404 in production
+- [x] Still available in development (and when `ENABLE_SWAGGER=true`)
 
 ---
 
@@ -681,6 +683,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | SEC-009 | [new] | Done | Refresh token rotation implemented: 15-min access tokens, 30-day opaque refresh tokens (SHA-256 hashed at rest). `/auth/refresh` rotates token, adds old hash to denylist with 30-day TTL. `/auth/logout` revokes refresh token. `tokenVersion` on User invalidates stale access tokens on password/role change. `requireAuth` checks `tokenVersion`. 66/66 backend tests green. |
 | 2026-09-27 | SEC-011 | [new] | Done | Pagination added to all list endpoints via `parsePagination` helper in `src/utils/http.js`. Defaults: page=1, limit=20, max limit=100. All `collectionRoutes` GET / endpoints now return `{ data, meta: { page, limit, total, pages } }`. `listResponse` updated to support paginated response. 5 regression tests added (defaults, page/limit params, limit clamping, page clamping, multiple endpoints). 71/71 backend tests green. |
 | 2026-09-27 | SEC-013 | [new] | Done | Upload hardened: MIME allowlist (PDF/PNG/JPEG/WebP) + magic bytes validation. Server derives folder from user ID + purpose enum (`cvs`, `avatars`, `company-logos`, `verification-docs`). Per-user rate limit 20/hr. Free-form `folder` query param removed. 6 regression tests added. Mocked Cloudinary in test env. 77/77 backend tests green. |
+| 2026-09-27 | SEC-014 | [new] | Done | Swagger UI restricted: `/api-docs` returns 404 in production unless `ENABLE_SWAGGER=true`. Available in development/test. `swaggerUi` mounted conditionally in `src/app.js`. 77/77 backend tests green. |
 
 ---
 

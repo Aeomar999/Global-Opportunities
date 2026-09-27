@@ -72,7 +72,13 @@ app.get('/', (req, res) => {
   res.json({ message: 'Kredibble API is running', env: env.nodeEnv });
 });
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// SEC-014: Swagger only in non-production unless explicitly enabled
+if (!env.isProduction || process.env.ENABLE_SWAGGER === 'true') {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+} else {
+  // In production without ENABLE_SWAGGER, return 404 for docs routes
+  app.use('/api-docs', (req, res) => res.status(404).json({ error: { message: 'Not found' } }));
+}
 
 // SEC-015: the router is mounted exactly once, under /api. It used to be mounted a
 // second time at "/" as a "fallback for calls missing the /api prefix", but that
