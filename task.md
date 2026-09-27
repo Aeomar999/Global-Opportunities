@@ -15,6 +15,7 @@
 3. Tick the checkbox, append evidence to **Progress Log**, then move on.
 4. One branch per task: `security/<task-id>-<slug>`.
 5. If a task reveals a bigger problem, create a new task with the next `SEC-0xx` id and link it. Never silently expand scope.
+6. **Always push to GitHub after committing** — `git push` immediately after each `git commit` so the remote reflects the latest state.
 
 **Branch naming:** `security/SEC-001-block-admin-registration`
 
