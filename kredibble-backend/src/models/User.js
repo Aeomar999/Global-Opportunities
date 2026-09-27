@@ -11,6 +11,8 @@ const userSchema = new mongoose.Schema({
   tokenVersion: { type: Number, default: 0 },
   // SEC-009: hashed refresh token for rotation (single active per user)
   refreshTokenHash: { type: String, select: false },
+  // From main: email verification status
+  emailVerified: { type: Boolean, default: false },
 }, { timestamps: true });
 
 // Virtuals to mimic the previous Prisma/Native structure for the frontend
@@ -40,6 +42,15 @@ const revokedRefreshTokenSchema = new mongoose.Schema({
 
 export const RevokedRefreshToken = mongoose.model('RevokedRefreshToken', revokedRefreshTokenSchema);
 
+// From main: email verification codes with TTL
+const emailVerificationCodeSchema = new mongoose.Schema({
+  email: { type: String, required: true, lowercase: true, trim: true, index: true },
+  codeHash: { type: String, required: true },
+  expiresAt: { type: Date, required: true, index: { expires: 0 } },
+}, { timestamps: true });
+
+export const EmailVerificationCode = mongoose.model('EmailVerificationCode', emailVerificationCodeSchema);
+
 const savedItemSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   itemId: { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -50,4 +61,3 @@ export const SavedItem = mongoose.model('SavedItem', savedItemSchema);
 
 // SEC-009: hash a raw refresh token for storage/lookup
 export const hashRefreshToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
-
