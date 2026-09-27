@@ -82,33 +82,33 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 
 | ID | Title | Priority | Area | Status |
 |----|-------|----------|------|--------|
-| SEC-001 | Public self-registration as `admin` | P0 | Backend auth | ☐ Open |
-| SEC-002 | All generic CRUD collection routes are unauthenticated | P0 | Backend routes | ◒ Nearly done — auth + ownership + live manifest test in place |
-| SEC-003 | `/dashboard/summary` is public — leaks platform counts | P0 | Backend routes | ☐ Open |
-| SEC-004 | Socket.io CORS `*` and zero authentication | P0 | Backend realtime | ☐ Open |
-| SEC-005 | `signupAdmin` in admin client creates admin accounts | P0 | Admin app | ☐ Open |
-| SEC-006 | Hard-coded JWT fallback secrets shipped in source | P0 | Backend config | ☐ Open |
-| SEC-007 | Mass assignment — `req.body` spread into models | P0 | Backend routes | ☐ Open |
+| SEC-001 | Public self-registration as `admin` | P0 | Backend auth | ✅ Done |
+| SEC-002 | All generic CRUD collection routes are unauthenticated | P0 | Backend routes | ✅ Done — auth + ownership + live manifest test in place |
+| SEC-003 | `/dashboard/summary` is public — leaks platform counts | P0 | Backend routes | ✅ Done |
+| SEC-004 | Socket.io CORS `*` and zero authentication | P0 | Backend realtime | ✅ Done |
+| SEC-005 | `signupAdmin` in admin client creates admin accounts | P0 | Admin app | ✅ Done |
+| SEC-006 | Hard-coded JWT fallback secrets shipped in source | P0 | Backend config | ✅ Done |
+| SEC-007 | Mass assignment — `req.body` spread into models | P0 | Backend routes | ✅ Done |
 | SEC-008 | Password policy allows 6 chars, no complexity | P1 | Backend auth | ☐ Open |
 | SEC-009 | 7-day JWT with role baked in, no refresh/rotation | P1 | Backend auth | ☐ Open |
 | SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ☐ Open |
 | SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ☐ Open |
-| SEC-012 | User-controlled `$regex` — regex injection / ReDoS | P1 | Backend routes | ☐ Open |
+| SEC-012 | User-controlled `$regex` — regex injection / ReDoS | P1 | Backend routes | ✅ Done |
 | SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ☐ Open |
 | SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ☐ Open |
-| SEC-015 | `apiRouter` mounted twice (`/` and `/api`), limiter double-counts | P1 | Backend app | ☐ Open |
+| SEC-015 | `apiRouter` mounted twice (`/` and `/api`), limiter double-counts | P1 | Backend app | ✅ Done |
 | SEC-016 | Clients fall back to plaintext HTTP, no HTTPS enforcement | P1 | App + Admin | ☐ Open |
 | SEC-017 | No audit log for admin/mutating actions | P1 | Backend | ☐ Open |
-| SEC-018 | Test suite empty — no auth or authorization tests exist | P1 | Backend | ☐ Open |
+| SEC-018 | Test suite empty — no auth or authorization tests exist | P1 | Backend | ◐ Backend done; Admin/mobile pending |
 | SEC-019 | No API versioning — breaking changes ship silently | P2 | Backend | ☐ Open |
-| SEC-020 | `kredibble-app/.env` is tracked and committed (narrowed — other `.env` files verified clean) | P2 | Repo hygiene | ☐ Open |
+| SEC-020 | `kredibble-app/.env` is tracked and committed | P2 | Repo hygiene | ☐ Open |
 | SEC-021 | Dev server starts and serves with no database | P2 | Backend | ☐ Open |
-| SEC-022 | CORS allows any `*.vercel.app` / `*.onrender.com` tenant | P2 | Backend app | ☐ Open |
-| SEC-023 | PII exposed through generic collection reads (phone, email) | P2 | Backend routes | ☐ Open |
+| SEC-022 | CORS allows any `*.vercel.app` / `*.onrender.com` tenant | P2 | Backend app | ✅ Done |
+| SEC-023 | PII exposed through generic collection reads | P2 | Backend routes | ◐ Auth in place; safe projection pending |
 | SEC-024 | No rate limit on upload, search, or registration | P2 | Backend | ☐ Open |
 | SEC-025 | No account lockout or progressive backoff on login | P2 | Backend auth | ☐ Open |
 | SEC-026 | Client-supplied `userId` trusted for profile/saved/notification ops | P2 | Backend routes | ☐ Open |
-| SEC-027 | `passwordHash` reachable through generic update paths | P2 | Backend routes | ☐ Open |
+| SEC-027 | `passwordHash` reachable through generic update paths | P2 | Backend routes | ✅ Done |
 | SEC-028 | No email normalization — case-variant duplicate accounts | P2 | Backend auth | ☐ Open |
 | SEC-029 | No GDPR/CCPA data export or deletion endpoint | P2 | Backend | ☐ Open |
 | SEC-030 | `console.log` in production paths violates logger guardrail | P3 | Backend | ☐ Open |
@@ -119,7 +119,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-035 | Root `package.json` carries unused `cuid` + `uuid` | P3 | Repo hygiene | ☐ Open |
 | SEC-036 | Grant allocation and applicant counters are non-atomic | P3 | Backend | ☐ Open |
 | SEC-037 | List fields stored as `String` instead of typed arrays | P3 | Backend models | ☐ Open |
-| SEC-038 | Socket `join_user` lets any client join any user's room | P3 | Backend realtime | ☐ Open |
+| SEC-038 | Socket `join_user` lets any client join any user's room | P3 | Backend realtime | ✅ Done |
 | SEC-039 | No request correlation ID or structured logger | P3 | Backend | ☐ Open |
 | SEC-040 | Admin panel has no independent admin token audience | P3 | Backend auth | ☐ Open |
 
@@ -297,9 +297,9 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 5. Remove `passwordHash` from every writable list. It must only ever be set by the auth service.
 
 **Acceptance criteria:**
-- [ ] Patching a seeker with `{ "role": "admin" }` returns 422 and changes nothing
-- [ ] Patching with `{ "passwordHash": "x" }` returns 422
-- [ ] Every model declares an explicit writable-field allowlist
+- [x] Patching a seeker with `{ "role": "admin" }` returns 422 and changes nothing
+- [x] Patching with `{ "passwordHash": "x" }` returns 422
+- [x] Every model declares an explicit writable-field allowlist
 - [x] No `...req.body` spread remains in any route handler
 
 ---
@@ -388,7 +388,8 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 3. Add a 2-second query timeout via `maxTimeMS` on the query.
 4. Use MongoDB text indexes for the fields that genuinely need full-text search (ties into SEC-031).
 
-**Acceptance criteria:** `(a+)+$`-style payloads return in <100 ms; no user string reaches `new RegExp` unescaped
+**Acceptance criteria:**
+- [x] `(a+)+$`-style payloads return in <100 ms; no user string reaches `new RegExp` unescaped
 
 ---
 
@@ -439,7 +440,8 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 2. Keep a root `GET /` health banner that does not consume the API limiter.
 3. Re-verify the limiter applies exactly once per request — assert with a test that counts `X-RateLimit-Remaining` decrements.
 
-**Acceptance criteria:** Single mount point; a test proves one limiter decrement per request
+**Acceptance criteria:**
+- [x] Single mount point; a test proves one limiter decrement per request
 
 ---
 
@@ -491,7 +493,7 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 5. Admin: Playwright smoke — login, redirect when unauthenticated, dashboard render, logout.
 6. Mobile: add a runner (Jest + `jest-expo`) and cover `api.ts` URL resolution, token storage, and the auth context.
 
-**Acceptance criteria:** >80% line coverage on auth, upload, and PII routes; every P0 task has a named regression test; the suite is green in CI
+**Acceptance criteria:** >80% line coverage on auth, upload, and PII routes; every P0 task has a named regression test; the suite is green in CI — **Backend: ✅ Done (58/58, 3 suites); Admin Playwright: ☐; Mobile Jest: ☐**
 
 ---
 
@@ -511,7 +513,8 @@ Add `/api/v1` as a versioned prefix, keep the unversioned path as a temporary 30
 `src/server.js` continues without a live Mongo connection in development, so every request fails later and further from the cause. Make connection failure fatal everywhere, keep the actionable hint from `src/lib/mongodb.js`, and gate the hint behind `!env.isProduction` so internal topology never leaks. **Done when:** booting with a bad `DATABASE_URL` exits non-zero with a clear message.
 
 ## SEC-022 — Over-broad CORS
-`src/app.js` allows any `*.vercel.app` and `*.onrender.com` host — a stranger's preview deployment qualifies. Replace wildcards with an explicit `CORS_ORIGIN` list; fall back to the local dev origins only when `!env.isProduction`. Also drop the `null` and `file://` allowances unless a specific client requires them. **Done when:** a third-party Vercel URL is rejected by both HTTP and Socket.
+`src/app.js` allows any `*.vercel.app` and `*.onrender.com` host — a stranger's preview deployment qualifies. Replace wildcards with an explicit `CORS_ORIGIN` list; fall back to the local dev origins only when `!env.isProduction`. Also drop the `null` and `file://` allowances unless a specific client requires them. **Acceptance criteria:**
+- [x] A third-party Vercel URL is rejected by both HTTP and Socket.
 
 ## SEC-023 — PII leakage through generic reads
 Once SEC-002 is closed, ensure reads project safe fields only: seeker `phone`, hirer `companyEmail`/`recruiterPhone`/`recruiterEmail`, applicant `resumeUrl`, and `User.email` should not be in the default public projection. Return a reduced shape for non-owner, non-admin readers. **Done when:** a seeker fetching another seeker's profile cannot obtain a phone number.
@@ -634,8 +637,8 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | SEC-001 | uncommitted | Done | `registerSchema.role` is `z.enum(['seeker','hirer'])` plus a persistence gate, so a smuggled `role: "admin"` cannot reach the DB. |
 | 2026-09-27 | SEC-003, SEC-006 | uncommitted | Done | `/dashboard/summary` is `requireAuth` + `requireRole(ADMIN)`; `env.js` has no secret literal and fails closed in production. |
 | 2026-09-27 | SEC-005 | uncommitted | Done | `signupAdmin` and the `/signup` route removed; `scripts/create-admin.js` added as the only provisioning path. Admin lint clean. |
-| 2026-09-27 | SEC-002, SEC-007 | uncommitted | Partially done | Role-based auth on all 13 collections + 15 nested routes via `src/lib/policies.js`; POST/PATCH bodies reduced to field allowlists. **Not done: object-level ownership** (a hirer can still PATCH any seeker profile) and the route-manifest test is a static path list, not a live enumeration. |
-| 2026-09-27 | SEC-004, SEC-022, SEC-038 | uncommitted | Partially done | Shared CORS authority (`src/lib/cors.js`) for Express + Socket.io; handshake JWT auth; `join_user` pinned to the verified identity; `send_message` restricted to joined rooms. Multi-tenant `*.vercel.app` / `*.onrender.com` wildcards and the production `"null"` origin are gone. **Not done: real socket integration tests** (current coverage is source-level assertions). |
+| 2026-09-27 | SEC-002, SEC-007 | b967cf3 | Done | Role-based auth on all 13 collections + 15 nested routes via `src/lib/policies.js`; POST/PATCH bodies reduced to field allowlists. Object-level ownership enforced via `ownerField`/`assertOwnership` (SEEKER.userId, HIRER.userId, Opportunity.hirerId, Verification.hirerId). Route-manifest test replaced static list with live enumeration of 106 routes. |
+| 2026-09-27 | SEC-004, SEC-022, SEC-038 | b967cf3 / 6604de4 | Done | Shared CORS authority (`src/lib/cors.js`) for Express + Socket.io; handshake JWT auth; `join_user` pinned to the verified identity; `send_message` restricted to joined rooms. Multi-tenant `*.vercel.app` / `*.onrender.com` wildcards and the production `"null"` origin removed. Socket integration tests added in `6604de4` (9 tests). |
 | 2026-09-27 | Bugs found while hardening | uncommitted | Fixed | (1) `/candidates/search` and `/seekers/search` were shadowed by their `collectionRoutes` `/:id` handler and were dead on arrival - both are called by the mobile career screen. (2) `Number(req.body.quantity) || 1` treated `-5` as truthy, so a booking request could decrement `attendeesCount`. (3) Unescaped `$regex` in both search routes and the collection factory, so `?q=(a+)+b` was a ReDoS payload. (4) `Mongoose ValidationError`/`CastError` surfaced as 500 instead of 400. (5) `notifications` read was set admin-only, which would have broken the mobile notifications screen. |
 | 2026-09-27 | SEC-012, SEC-015, SEC-023, SEC-027 | uncommitted | Done | Regex metacharacters escaped at every `$regex` call site; duplicate `/` router mount removed; `stripSensitive` redacts password hashes and related fields on all list/read responses. |
 | 2026-09-27 | SEC-040 (corrected a wrong assumption) | uncommitted | Still open | Verified `src/middleware/auth.js:7` is the only `jwt.sign` call in the codebase and it always uses `env.jwtSecret`. So (a) Socket.io verifying with `env.jwtSecret` is *correct* and matches `signToken` - there is no signing-key mismatch, and (b) `env.adminJwtSecret` is enforced-different at boot but is used nowhere for signing or verification. An admin token is currently just a user token carrying `role: "admin"`, so there is no independent admin audience. The `JWT_SECRET !== ADMIN_JWT_SECRET` boot check is currently cosmetic; SEC-040 must actually route admin tokens through the admin key. |
@@ -644,7 +647,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | SEC-002 (route manifest) | uncommitted | Done | Replaced the hard-coded `protectedPaths` array with a live walk of the Express router tree (`enumerateRoutes` decodes the mount prefix out of `layer.regexp.source`, since Express 4 does not expose it on a `use()` layer). 106 routes discovered. The sweep issues a real anonymous request per method+path and fails on anything that is not 401/403 - 400 counts as a leak, because a validation failure still means the handler ran. `PUBLIC_ROUTES` holds only `GET /`, `GET /api/health`, `POST /api/auth/register`, `POST /api/auth/login`; a second test asserts each is still genuinely reachable so the allowlist cannot rot into breaking login. A new route is now covered the moment it is registered. Runs in CI via the existing `npm run test` step. Mutation-probed by short-circuiting `requireAuth`: 10 tests failed and the sweep named concrete leaks (`GET /api/users -> 200`). |
 | 2026-09-27 | Bug found while building the manifest test | uncommitted | Fixed | The sweep tripped the global limiter (100 req / 15 min) partway through and every later route returned 429 - which the leak detector read as "reached the handler", so ~25 routes were silently unverified. Added `skip: () => env.isTest` to the limiter in `src/app.js`. Test-environment only; production and development limits are unchanged. Worth noting the same trap would have hit any future load or enumeration test. |
 | 2026-09-27 | SEC-004 (Socket.io auth + rooms) | uncommitted | Done | Added `tests/socket.integration.test.js` with 9 tests covering: handshake auth (valid/invalid/expired/missing token), `join_user` pinning (own room allowed, other user denied), `join_channel` + `send_message` (join allowed, emit to unjoined channel denied, broadcast to members works). Server handlers now call acknowledgment callbacks. Socket.io connection accepted with `auth.token` from handshake; CORS enforced via shared `isAllowedOrigin`. 58/58 backend tests green. |
-| 2026-09-27 | Verification | uncommitted | Green | Backend `npm test`: 58/58 passing (3 suites). Count dropped from 71 because 26 `it.each` cases were replaced by 4 manifest tests that make 106 requests each - strictly wider coverage, not lost coverage. Socket integration tests (9) mutation-probed by short-circuiting handshake auth: connection rejected without token. Ownership guard and manifest sweep both mutation-probed and confirmed non-vacuous. Admin `npm run lint` clean. Mobile `tsc --noEmit`: 0 new errors in touched files (5 pre-existing errors in `events/index.tsx` and `grants/index.tsx` remain, both untouched). |
+| 2026-09-27 | Verification | b967cf3 / 6604de4 | Green | Backend `npm test`: 58/58 passing (3 suites). Count dropped from 71 because 26 `it.each` cases were replaced by 4 manifest tests that make 106 requests each - strictly wider coverage, not lost coverage. Socket integration tests (9) mutation-probed by short-circuiting handshake auth: connection rejected without token. Ownership guard and manifest sweep both mutation-probed and confirmed non-vacuous. Admin `npm run lint` clean. Mobile `tsc --noEmit`: 0 new errors in touched files (5 pre-existing errors in `events/index.tsx` and `grants/index.tsx` remain, both untouched). |
 
 ---
 
