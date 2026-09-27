@@ -5,8 +5,10 @@ import { requireAuth, requireAdminAuth, signToken, signAdminToken, setAdminCooki
 import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
-import { User, RevokedRefreshToken, hashRefreshToken as hashRefreshTokenUtil } from '../models/User.js';
+import { User, RevokedRefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
+import { createVerificationCode, hashVerificationCode, sendVerificationEmail } from '../lib/email.js';
+import { env } from '../config/env.js';
 
 export const authRouter = Router();
 
@@ -215,6 +217,39 @@ authRouter.post(
       });
     }
     res.json({ data: { message: 'Logged out' } });
+  }),
+);
+
+// Email verification — send code
+authRouter.post(
+  '/verification-code/send',
+  asyncHandler(async (req, res) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new ApiError(400, 'A valid email is required');
+
+    const code = createVerificationCode();
+    await EmailVerificationCode.deleteMany({ email });
+    await EmailVerificationCode.create({
+      email,
+      codeHash: hashVerificationCode(code),
+      expiresAt: new Date(Date.now() + env.emailVerificationCodeTtlMinutes * 60 * 1000),
+    });
+    await sendVerificationEmail(email, code);
+    res.status(202).json({ data: { email, expiresInMinutes: env.emailVerificationCodeTtlMinutes } });
+  }),
+);
+
+// Email verification — verify code
+authRouter.post(
+  '/verification-code/verify',
+  asyncHandler(async (req, res) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const code = String(req.body.code || '');
+    const record = await EmailVerificationCode.findOne({ email, expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 });
+    if (!record || record.codeHash !== hashVerificationCode(code)) throw new ApiError(400, 'Invalid or expired verification code');
+    await User.updateOne({ email }, { emailVerified: true });
+    await EmailVerificationCode.deleteMany({ email });
+    itemResponse(res, { email, verified: true });
   }),
 );
 

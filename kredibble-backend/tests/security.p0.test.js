@@ -676,6 +676,8 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/auth/register',
   'POST /api/auth/login',
   'POST /api/auth/refresh',
+  'POST /api/auth/verification-code/send',
+  'POST /api/auth/verification-code/verify',
   'POST /api/auth/admin/login',
   'POST /api/auth/admin/logout',
 ]);
