@@ -118,7 +118,8 @@ Run these skills in sequence for each phase. Each skill produces artifacts that 
 3. **Write artifacts to repo root** — `Global-Opportunities/*.md` for cross-project docs
 4. **Commit after each phase** — use descriptive messages: `phase-3: revival-engine fix plan`
 5. **Run lint/typecheck after each code change** — `npm run lint && npm run typecheck` in each app
-6. **Always push to GitHub after committing** — `git push` immediately after each `git commit` so the remote reflects the latest state
+6. **Always update `task.md` after every implementation** — tick checkboxes, update status table, add Progress Log entry
+7. **Always push to GitHub after committing** — `git push` immediately after each `git commit` so the remote reflects the latest state
 
 ---
 
