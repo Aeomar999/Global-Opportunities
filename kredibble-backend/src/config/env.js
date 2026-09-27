@@ -53,6 +53,20 @@ const env = {
   get adminJwtSecret() {
     return this._adminJwtSecret ??= resolveSecret('ADMIN_JWT_SECRET');
   },
+  // AI Provider config (from main branch)
+  aiProvider: process.env.AI_PROVIDER || 'openai',
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  openaiModel: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+  // WordPress integration (from main branch)
+  insightGhanaWordpressUrl: process.env.INSIGHT_GHANA_WORDPRESS_URL,
+  africanJournalWordpressUrl: process.env.AFRICAN_JOURNAL_WORDPRESS_URL,
+  // Email service (from main branch)
+  resendApiKey: process.env.RESEND_API_KEY,
+  resendFromEmail: process.env.RESEND_FROM_EMAIL,
+  emailVerificationCodeTtlMinutes: Number(process.env.EMAIL_VERIFICATION_CODE_TTL_MINUTES || 10),
+  // Internal secret storage (secure getter pattern)
   _jwtSecret: undefined,
   _adminJwtSecret: undefined,
 };
