@@ -27,6 +27,10 @@ const userSchema = new mongoose.Schema({
   refreshTokenHash: { type: String, select: false },
   // From main: email verification status
   emailVerified: { type: Boolean, default: false },
+  // SEC-025: account lockout with progressive backoff
+  failedLoginAttempts: { type: Number, default: 0 },
+  lockUntil: { type: Date },
+  lastFailedLogin: { type: Date },
 }, { timestamps: true });
 
 // Virtuals to mimic the previous Prisma/Native structure for the frontend
