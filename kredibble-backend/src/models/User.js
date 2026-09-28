@@ -61,3 +61,22 @@ export const SavedItem = mongoose.model('SavedItem', savedItemSchema);
 
 // SEC-009: hash a raw refresh token for storage/lookup
 export const hashRefreshToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
+// SEC-017: Audit log for security-relevant events
+const auditLogSchema = new mongoose.Schema({
+  actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+  actorRole: { type: String, enum: ['seeker', 'hirer', 'admin', 'anonymous'], index: true },
+  action: { type: String, required: true, index: true },
+  resourceType: { type: String, index: true },
+  resourceId: { type: mongoose.Schema.Types.ObjectId, index: true },
+  ip: { type: String },
+  userAgent: { type: String },
+  requestId: { type: String, index: true },
+  outcome: { type: String, enum: ['success', 'failure'], required: true },
+  metadata: { type: mongoose.Schema.Types.Mixed },
+}, { timestamps: true });
+
+// TTL index for retention (e.g., 1 year)
+auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 365 * 24 * 60 * 60 });
+
+export const AuditLog = mongoose.model('AuditLog', auditLogSchema);

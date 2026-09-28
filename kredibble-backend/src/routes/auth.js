@@ -9,6 +9,7 @@ import { User, RevokedRefreshToken, hashRefreshToken as hashRefreshTokenUtil, Em
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 import { createVerificationCode, hashVerificationCode, sendVerificationEmail } from '../lib/email.js';
 import { env } from '../config/env.js';
+import { auditLog, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
 
 export const authRouter = Router();
 
@@ -41,7 +42,15 @@ authRouter.post(
     const role = PUBLIC_ROLES.includes(req.body.role) ? req.body.role : 'seeker';
 
     const existing = await User.findOne({ email });
-    if (existing) throw new ApiError(409, 'User already exists');
+    if (existing) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.REGISTER,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        outcome: 'failure',
+        metadata: { reason: 'email_exists', email },
+      });
+      throw new ApiError(409, 'User already exists');
+    }
 
     const passwordHash = await bcrypt.hash(password, 12);
 
@@ -89,6 +98,14 @@ authRouter.post(
     user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
     await user.save();
 
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.REGISTER,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+      metadata: { role },
+    });
+
     res.status(201).json({
       data: { user: publicUser(user), token: signToken(user), refreshToken },
     });
@@ -102,10 +119,27 @@ authRouter.post(
     const { email, password } = req.body;
 
     const user = await User.findOne({ email }).select('+refreshTokenHash');
-    if (!user?.passwordHash) throw new ApiError(401, 'Invalid email or password');
+    if (!user?.passwordHash) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.LOGIN_FAILURE,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        outcome: 'failure',
+        metadata: { reason: 'user_not_found', email },
+      });
+      throw new ApiError(401, 'Invalid email or password');
+    }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) throw new ApiError(401, 'Invalid email or password');
+    if (!valid) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.LOGIN_FAILURE,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        resourceId: user._id,
+        outcome: 'failure',
+        metadata: { reason: 'invalid_password', email },
+      });
+      throw new ApiError(401, 'Invalid email or password');
+    }
 
     let profile = null;
     if (user.role === 'seeker') profile = await SeekerProfile.findOne({ userId: user._id });
@@ -117,6 +151,14 @@ authRouter.post(
     const refreshToken = generateRefreshToken();
     user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
     await user.save();
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.LOGIN_SUCCESS,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+      metadata: { role: user.role },
+    });
 
     res.json({
       data: { user: publicUser(finalUser), token: signToken(user), refreshToken },
@@ -135,11 +177,27 @@ authRouter.post(
 
     // Check if token is revoked
     const revoked = await RevokedRefreshToken.findOne({ tokenHash });
-    if (revoked) throw new ApiError(401, 'Refresh token revoked');
+    if (revoked) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.REFRESH_TOKEN,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        outcome: 'failure',
+        metadata: { reason: 'token_revoked' },
+      });
+      throw new ApiError(401, 'Refresh token revoked');
+    }
 
     // Find user by refresh token hash
     const user = await User.findOne({ refreshTokenHash: tokenHash }).select('+refreshTokenHash');
-    if (!user) throw new ApiError(401, 'Invalid refresh token');
+    if (!user) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.REFRESH_TOKEN,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        outcome: 'failure',
+        metadata: { reason: 'invalid_token' },
+      });
+      throw new ApiError(401, 'Invalid refresh token');
+    }
 
     // Rotate: generate new refresh token, hash old one to denylist
     const newRefreshToken = generateRefreshToken();
@@ -152,6 +210,14 @@ authRouter.post(
 
     user.refreshTokenHash = newTokenHash;
     await user.save();
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.REFRESH_TOKEN,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+      metadata: { role: user.role },
+    });
 
     res.json({ data: { token: signToken(user), refreshToken: newRefreshToken } });
   }),
@@ -171,6 +237,14 @@ authRouter.post(
       user.refreshTokenHash = undefined;
       await user.save();
     }
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.LOGOUT,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: req.auth.sub,
+      outcome: 'success',
+    });
+
     res.json({ data: { message: 'Logged out' } });
   }),
 );
@@ -184,11 +258,26 @@ authRouter.post(
 
     const user = await User.findOne({ email });
     if (!user?.passwordHash || user.role !== 'admin') {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.LOGIN_FAILURE,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        outcome: 'failure',
+        metadata: { reason: 'not_admin_or_not_found', email },
+      });
       throw new ApiError(401, 'Invalid admin credentials');
     }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) throw new ApiError(401, 'Invalid admin credentials');
+    if (!valid) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.LOGIN_FAILURE,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        resourceId: user._id,
+        outcome: 'failure',
+        metadata: { reason: 'invalid_password', email },
+      });
+      throw new ApiError(401, 'Invalid admin credentials');
+    }
 
     const adminToken = signAdminToken(user);
     setAdminCookie(res, adminToken);
@@ -197,6 +286,14 @@ authRouter.post(
     const refreshToken = generateRefreshToken();
     user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
     await user.save();
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.LOGIN_SUCCESS,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+      metadata: { role: 'admin', isAdminLogin: true },
+    });
 
     res.json({ data: { user: publicUser(user), refreshToken } });
   }),
@@ -216,6 +313,14 @@ authRouter.post(
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
     }
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.LOGOUT,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      outcome: 'success',
+      metadata: { isAdminLogout: true },
+    });
+
     res.json({ data: { message: 'Logged out' } });
   }),
 );
@@ -235,6 +340,14 @@ authRouter.post(
       expiresAt: new Date(Date.now() + env.emailVerificationCodeTtlMinutes * 60 * 1000),
     });
     await sendVerificationEmail(email, code);
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.EMAIL_VERIFY,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      outcome: 'success',
+      metadata: { step: 'send_code', email },
+    });
+
     res.status(202).json({ data: { email, expiresInMinutes: env.emailVerificationCodeTtlMinutes } });
   }),
 );
@@ -246,9 +359,25 @@ authRouter.post(
     const email = String(req.body.email || '').trim().toLowerCase();
     const code = String(req.body.code || '');
     const record = await EmailVerificationCode.findOne({ email, expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 });
-    if (!record || record.codeHash !== hashVerificationCode(code)) throw new ApiError(400, 'Invalid or expired verification code');
+    if (!record || record.codeHash !== hashVerificationCode(code)) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.EMAIL_VERIFY,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        outcome: 'failure',
+        metadata: { step: 'verify_code', reason: 'invalid_or_expired', email },
+      });
+      throw new ApiError(400, 'Invalid or expired verification code');
+    }
     await User.updateOne({ email }, { emailVerified: true });
     await EmailVerificationCode.deleteMany({ email });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.EMAIL_VERIFY,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      outcome: 'success',
+      metadata: { step: 'verify_code', email },
+    });
+
     itemResponse(res, { email, verified: true });
   }),
 );
