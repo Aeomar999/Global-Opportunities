@@ -107,7 +107,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-021 | Dev server starts and serves with no database | P2 | Backend | ☐ Open |
 | SEC-022 | CORS allows any `*.vercel.app` / `*.onrender.com` tenant | P2 | Backend app | ✅ Done |
 | SEC-023 | PII exposed through generic collection reads | P2 | Backend routes | ✅ Done |
-| SEC-024 | No rate limit on upload, search, or registration | P2 | Backend | ☐ Open |
+| SEC-024 | No rate limit on upload, search, or registration | P2 | Backend | ✅ Done |
 | SEC-025 | No account lockout or progressive backoff on login | P2 | Backend auth | ☐ Open |
 | SEC-026 | Client-supplied `userId` trusted for profile/saved/notification ops | P2 | Backend routes | ☐ Open |
 | SEC-027 | `passwordHash` reachable through generic update paths | P2 | Backend routes | ✅ Done |
@@ -719,6 +719,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-28 | SEC-017 | 1a92927 | Done | Audit log implemented: `AuditLog` model with 1-year TTL, `src/lib/audit.js` service, `auditContext` middleware for request ID (SEC-039). Auth routes (register, login, refresh, logout, admin login/logout, email verification), `collectionRoutes` (create/update/delete with admin field detection), and nested routes (applications, grants, events, posts, verification docs, saved items) all emit audit records. Never logs secrets. 77/77 backend tests green. Admin lint clean. |
 | 2026-09-28 | SEC-018 | 4f87f41 | Done | Admin Playwright + Mobile Jest tests added. Admin: 12 tests (login, session protection, logout, dashboard, API integration). Mobile: 20 tests (API config, token storage, auth functions). Backend: 77/77 tests pass. Mobile TypeScript: only pre-existing errors. Admin lint clean. |
 | 2026-09-28 | SEC-023 | 4c42aa3 | Done | PII safe projection implemented: `PII_FIELDS` map in policies.js defines sensitive fields per resource (seekers: phone, hirers: companyEmail/recruiterPhone/recruiterEmail, applicants: resumeUrl, users: email, verification/companies: companyEmail/recruiterPhone/recruiterEmail). `stripPiiIfNeeded()` strips fields for non-owners/non-admins. Admins and owners see full data. 77/77 backend tests pass. Admin lint clean. |
+| 2026-09-28 | SEC-024 | ed5ccfc | Done | Rate limits implemented: registrationLimiter (5/hr per IP), searchLimiter (60/15min per IP), passwordResetLimiter (3/hr per IP), aiLimiter (20/15min per user). Applied to register, verification-code/send, candidates/search, seekers/search, assistant/chat. All 77 backend tests pass. Admin lint clean. |
 
 ---
 
