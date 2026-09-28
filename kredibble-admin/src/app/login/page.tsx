@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { loginAdmin } from "@/lib/api";
 
@@ -81,10 +80,12 @@ export default function LoginPage() {
           </button>
 
           <p className="mt-4 text-center text-sm text-kb-text-muted">
-            Need an admin account?{" "}
-            <Link href="/signup" className="font-semibold text-kb-primary">
-              Create one
-            </Link>
+            Need an admin account? Ask an existing administrator to provision one
+            server-side with{" "}
+            <code className="rounded bg-kb-bg-muted px-1 py-0.5 text-xs">
+              npm run user:create-admin
+            </code>
+            .
           </p>
         </form>
       </div>

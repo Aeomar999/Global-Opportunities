@@ -13,6 +13,8 @@ cloudinary.config({
 
 export default cloudinary;
 
+const isTest = process.env.NODE_ENV === 'test';
+
 /**
  * Uploads a file buffer to Cloudinary
  * @param {Buffer} buffer - File buffer from multer
@@ -20,9 +22,22 @@ export default cloudinary;
  * @returns {Promise<Object>}
  */
 export const uploadBufferToCloudinary = (buffer, folder) => {
+  if (isTest) {
+    // Return mock result in test environment
+    return Promise.resolve({
+      secure_url: `https://res.cloudinary.com/test/image/upload/${folder}/mock-file`,
+      public_id: `${folder}/mock-file`,
+      format: 'png',
+      bytes: buffer.length,
+      folder: `kredibble/${folder}`,
+    });
+  }
+
+  // SEC-013: Validate Cloudinary is configured in non-test environments
   if (![process.env.CLOUDINARY_CLOUD_NAME, process.env.CLOUDINARY_API_KEY, process.env.CLOUDINARY_API_SECRET].every(Boolean)) {
     throw new ApiError(503, 'Cloudinary is not configured');
   }
+
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       { folder: `kredibble/${folder}`, resource_type: 'auto' },
@@ -46,6 +61,21 @@ export const uploadBufferToCloudinary = (buffer, folder) => {
  * @returns {Promise<Object>} - Cloudinary upload result
  */
 export const uploadToCloudinary = async (fileContent, folder) => {
+  if (isTest) {
+    return {
+      secure_url: `https://res.cloudinary.com/test/image/upload/${folder}/mock-file`,
+      public_id: `${folder}/mock-file`,
+      format: 'png',
+      bytes: typeof fileContent === 'string' ? fileContent.length : fileContent.length,
+      folder: `kredibble/${folder}`,
+    };
+  }
+
+  // SEC-013: Validate Cloudinary is configured in non-test environments
+  if (![process.env.CLOUDINARY_CLOUD_NAME, process.env.CLOUDINARY_API_KEY, process.env.CLOUDINARY_API_SECRET].every(Boolean)) {
+    throw new ApiError(503, 'Cloudinary is not configured');
+  }
+
   try {
     const result = await cloudinary.uploader.upload(fileContent, {
       folder: `kredibble/${folder}`,

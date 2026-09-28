@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav";
-import { clearAdminSession } from "@/lib/api";
+import { logoutAdmin } from "@/lib/api";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -67,8 +67,8 @@ export function Sidebar() {
 
       <div className="px-3 py-4 border-t border-kb-border">
         <button
-          onClick={() => {
-            clearAdminSession();
+          onClick={async () => {
+            await logoutAdmin();
             router.push("/login");
           }}
           className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"

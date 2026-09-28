@@ -1,28 +1,42 @@
 import { io, Socket } from 'socket.io-client';
+import { getMobileToken } from './api';
 
-// Configure with correct backend URL
-// Depending on environment, default back to localhost
-const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL 
-  ? process.env.EXPO_PUBLIC_API_URL.replace('/api', '')
-  : 'http://localhost:5000';
+// The socket server is the same origin as the API, minus the /api path.
+const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL
+  ? process.env.EXPO_PUBLIC_API_URL.replace(/\/api\/?$/, '')
+  : 'http://localhost:4000';
 
 class SocketService {
   public socket: Socket | null = null;
 
-  connect() {
-    if (!this.socket) {
-      this.socket = io(SOCKET_URL, {
-        transports: ['websocket'],
-      });
+  // SEC-004: the server rejects unauthenticated handshakes, so the session token
+  // has to be supplied here. connect() is now async because reading it means
+  // awaiting expo-secure-store.
+  async connect() {
+    if (this.socket) return;
 
-      this.socket.on('connect', () => {
-        console.log('Connected to socket server:', this.socket?.id);
-      });
-
-      this.socket.on('disconnect', () => {
-        console.log('Disconnected from socket server');
-      });
+    const token = await getMobileToken();
+    if (!token) {
+      console.warn('Socket connect skipped: no session token');
+      return;
     }
+
+    this.socket = io(SOCKET_URL, {
+      transports: ['websocket'],
+      auth: { token },
+    });
+
+    this.socket.on('connect', () => {
+      console.log('Connected to socket server:', this.socket?.id);
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.warn('Socket connect failed:', error.message);
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('Disconnected from socket server');
+    });
   }
 
   disconnect() {

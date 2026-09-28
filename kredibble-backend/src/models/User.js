@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'node:crypto';
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -6,6 +7,11 @@ const userSchema = new mongoose.Schema({
   role: { type: String, required: true, enum: ['seeker', 'hirer', 'admin'] },
   passwordHash: { type: String },
   avatarUrl: { type: String },
+  // SEC-009: token version for refresh rotation & forced logout
+  tokenVersion: { type: Number, default: 0 },
+  // SEC-009: hashed refresh token for rotation (single active per user)
+  refreshTokenHash: { type: String, select: false },
+  // From main: email verification status
   emailVerified: { type: Boolean, default: false },
 }, { timestamps: true });
 
@@ -28,6 +34,15 @@ const staffMemberSchema = new mongoose.Schema({
 export const User = mongoose.model('User', userSchema);
 export const StaffMember = mongoose.model('StaffMember', staffMemberSchema);
 
+// SEC-009: revoked refresh tokens with TTL cleanup (denylist)
+const revokedRefreshTokenSchema = new mongoose.Schema({
+  tokenHash: { type: String, required: true, index: true },
+  expiresAt: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
+}, { timestamps: true });
+
+export const RevokedRefreshToken = mongoose.model('RevokedRefreshToken', revokedRefreshTokenSchema);
+
+// From main: email verification codes with TTL
 const emailVerificationCodeSchema = new mongoose.Schema({
   email: { type: String, required: true, lowercase: true, trim: true, index: true },
   codeHash: { type: String, required: true },
@@ -44,3 +59,5 @@ const savedItemSchema = new mongoose.Schema({
 
 export const SavedItem = mongoose.model('SavedItem', savedItemSchema);
 
+// SEC-009: hash a raw refresh token for storage/lookup
+export const hashRefreshToken = (token) => crypto.createHash('sha256').update(token).digest('hex');

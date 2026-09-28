@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -7,34 +8,79 @@ const parseOrigins = (value) =>
     ? value.split(',').map((origin) => origin.trim()).filter(Boolean)
     : ['http://localhost:3000', 'http://localhost:8081', 'http://localhost:19006'];
 
-export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
-  isDevelopment: (process.env.NODE_ENV || 'development') !== 'production',
+const nodeEnv = process.env.NODE_ENV || 'development';
+const isProduction = nodeEnv === 'production';
+
+const assertStrongEnough = (name, value) => {
+  if (value.length < 32) {
+    throw new Error(`CRITICAL SECURITY ERROR: ${name} must be at least 32 characters (got ${value.length}). Generate one with: openssl rand -base64 48`);
+  }
+  if (value.includes('replace-with') || value.includes('placeholder')) {
+    throw new Error(`CRITICAL SECURITY ERROR: ${name} is still a placeholder value.`);
+  }
+  return value;
+};
+
+const ephemeralWarned = new Set();
+
+// Production must supply both secrets explicitly. Everywhere else we mint an
+// ephemeral per-process secret: random, never shared, and useless to an attacker,
+// so local dev and test boot without a checked-in credential. There is
+// intentionally no hardcoded fallback literal for any environment.
+const resolveSecret = (name) => {
+  const provided = process.env[name];
+  if (provided) return assertStrongEnough(name, provided);
+  if (isProduction) {
+    throw new Error(`CRITICAL SECURITY ERROR: ${name} is not set. Generate one with: openssl rand -base64 48`);
+  }
+  if (!ephemeralWarned.has(name)) {
+    ephemeralWarned.add(name);
+    console.warn(`[config] ${name} is unset - using a random ephemeral secret. Tokens will not survive a restart. Set ${name} in .env to persist sessions.`);
+  }
+  return crypto.randomBytes(48).toString('hex');
+};
+
+const env = {
+  nodeEnv,
+  isDevelopment: !isProduction,
+  isTest: nodeEnv === 'test',
   port: Number(process.env.PORT || 4000),
   corsOrigins: parseOrigins(process.env.CORS_ORIGIN),
   databaseUrl: process.env.DATABASE_URL || process.env.MONGODB_URI || process.env.MONGO_URI,
-  jwtSecret: process.env.JWT_SECRET || '4f7b8d9c2e1a3b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c',
-  adminJwtSecret: process.env.ADMIN_JWT_SECRET || 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2',
+  get jwtSecret() {
+    return this._jwtSecret ??= resolveSecret('JWT_SECRET');
+  },
+  get adminJwtSecret() {
+    return this._adminJwtSecret ??= resolveSecret('ADMIN_JWT_SECRET');
+  },
+  // AI Provider config
   aiProvider: process.env.AI_PROVIDER || 'openai',
   openaiApiKey: process.env.OPENAI_API_KEY,
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+  // WordPress integration
   insightGhanaWordpressUrl: process.env.INSIGHT_GHANA_WORDPRESS_URL,
   africanJournalWordpressUrl: process.env.AFRICAN_JOURNAL_WORDPRESS_URL,
+  // Email service
   resendApiKey: process.env.RESEND_API_KEY,
   resendFromEmail: process.env.RESEND_FROM_EMAIL,
   emailVerificationCodeTtlMinutes: Number(process.env.EMAIL_VERIFICATION_CODE_TTL_MINUTES || 10),
+  // Internal secret storage (secure getter pattern)
+  _jwtSecret: undefined,
+  _adminJwtSecret: undefined,
 };
 
-if (!env.isDevelopment) {
-  const secrets = ['jwtSecret', 'adminJwtSecret'];
-  for (const key of secrets) {
-    if (env[key].includes('replace-with') || env[key].includes('placeholder') || env[key] === '4f7b8d9c2e1a3b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c' || env[key] === 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2') {
-      throw new Error(`CRITICAL SECURITY ERROR: ${key} is using a fallback or placeholder value in production! You must set proper environment variables.`);
-    }
+if (isProduction) {
+  // Touch both so a missing/weak secret fails at boot, not on first request.
+  assertStrongEnough('JWT_SECRET', env.jwtSecret);
+  assertStrongEnough('ADMIN_JWT_SECRET', env.adminJwtSecret);
+  if (env.jwtSecret === env.adminJwtSecret) {
+    throw new Error('CRITICAL SECURITY ERROR: ADMIN_JWT_SECRET must differ from JWT_SECRET. Admin tokens must not be verifiable with the user signing key.');
   }
   if (!env.databaseUrl) {
-    throw new Error(`CRITICAL ERROR: databaseUrl is missing in production!`);
+    throw new Error('CRITICAL ERROR: databaseUrl is missing in production!');
   }
 }
+
+export { env };

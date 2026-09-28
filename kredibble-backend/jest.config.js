@@ -4,4 +4,5 @@ export default {
   setupFilesAfterEnv: ['./tests/setup.js'],
   testMatch: ['**/tests/**/*.test.js'],
   clearMocks: true,
+  moduleFileExtensions: ['js', 'json'],
 };
