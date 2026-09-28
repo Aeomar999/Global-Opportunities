@@ -104,7 +104,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-018 | Test suite empty — no auth or authorization tests exist | P1 | Backend | ✅ Done |
 | SEC-019 | No API versioning — breaking changes ship silently | P2 | Backend | ✅ Done |
 | SEC-020 | `kredibble-app/.env` is tracked and committed | P2 | Repo hygiene | ✅ Done |
-| SEC-021 | Dev server starts and serves with no database | P2 | Backend | ☐ Open |
+| SEC-021 | Dev server starts and serves with no database | P2 | Backend | ✅ Done |
 | SEC-022 | CORS allows any `*.vercel.app` / `*.onrender.com` tenant | P2 | Backend app | ✅ Done |
 | SEC-023 | PII exposed through generic collection reads | P2 | Backend routes | ✅ Done |
 | SEC-024 | No rate limit on upload, search, or registration | P2 | Backend | ✅ Done |
@@ -725,6 +725,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-28 | SEC-029 | cd2bdde | Done | GDPR/CCPA endpoints implemented: GET /api/auth/me/export returns full JSON archive (user, profiles, applications, events, grants, verifications, saved items, notifications, posts, reports). DELETE /api/auth/me requires password + 'DELETE MY ACCOUNT' confirmation, creates 7-year tombstone, anonymizes user data, cascades deletion to all related data, preserves thread integrity by anonymizing community posts/reports. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-019 | f36f7e4 | Done | API versioning implemented: /api/v1 as primary path, /api as backward-compatible alias with deprecation headers (Deprecation: true, Link: successor-version, Sunset: 1 year). Route manifest test updated for v1 public routes. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-020 | 9127551 | Done | Removed tracked kredibble-app/.env (was tracked across 4 commits), added .env.example with placeholders. Cleaned up .gitignore duplicates. .gitignore .env* pattern prevents re-tracking. Value is non-secret (EXPO_PUBLIC_* inlined into client bundle). 77/77 backend tests pass. Admin lint clean. |
+| 2026-09-28 | SEC-021 | c5b4bba | Done | Dev server now fails fast on database connection failure. Removed try/catch that allowed dev server to start without DB. connectToDatabase() throws in ALL environments. Server exits with actionable error message. 77/77 backend tests pass. Admin lint clean. |
 
 ---
 
