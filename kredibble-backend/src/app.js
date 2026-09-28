@@ -12,6 +12,7 @@ import { apiRouter } from './routes/index.js';
 import { isAllowedOrigin } from './lib/cors.js';
 import { ApiError } from './utils/http.js';
 import { auditContext } from './lib/audit.js';
+import logger from './lib/logger.js';
 
 const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
 
@@ -66,7 +67,7 @@ app.use(auditContext);
 // Add simple URL logging for debugging production 404s
 app.use((req, res, next) => {
   if (!env.isDevelopment) {
-    console.log(`[Vercel] ${req.method} ${req.url}`);
+    logger.info({ method: req.method, url: req.url }, 'Request received');
   }
   next();
 });
@@ -94,19 +95,19 @@ if (!env.isProduction || process.env.ENABLE_SWAGGER === 'true') {
 app.use('/api/v1', apiRouter);
 
 // SEC-019: legacy /api mount with deprecation headers (not a redirect, so tests work)
-// Logs deprecation usage so clients can be migrated
-app.use('/api', (req, res, next) => {
-  // Add deprecation headers
-  res.set('Deprecation', 'true');
-  res.set('Link', '</api/v1>; rel="successor-version"');
-  res.set('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()); // 1 year
-  
-  // Log deprecation usage (non-blocking)
-  console.warn(`DEPRECATED: ${req.method} ${req.originalUrl} - use /api/v1 instead`);
-  
-  // Continue to the v1 router
-  next();
-});
+  // Logs deprecation usage so clients can be migrated
+  app.use('/api', (req, res, next) => {
+    // Add deprecation headers
+    res.set('Deprecation', 'true');
+    res.set('Link', '</api/v1>; rel="successor-version"');
+    res.set('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()); // 1 year
+    
+    // Log deprecation usage (non-blocking)
+    logger.warn({ method: req.method, url: req.originalUrl }, 'Deprecated API endpoint accessed');
+    
+    // Continue to the v1 router
+    next();
+  });
 
 // Mount the same router at /api for backward compatibility (with deprecation headers)
 app.use('/api', apiRouter);

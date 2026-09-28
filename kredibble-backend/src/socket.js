@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from './config/env.js';
 import { socketCorsOptions } from './lib/cors.js';
+import logger from './lib/logger.js';
 
 let io;
 
@@ -43,19 +44,19 @@ export const initSocket = (server) => {
 
   io.on('connection', (socket) => {
     const auth = socket.data.auth;
-    console.log('Socket connected:', socket.id, auth.role);
+    logger.info({ socketId: socket.id, role: auth.role }, 'Socket connected');
 
     // Personal room. Joining is pinned to the authenticated identity: a caller
     // must not be able to subscribe to someone else's direct messages by
     // supplying their user id.
     socket.on('join_user', (userId, ack) => {
       if (String(userId) !== auth.sub) {
-        console.warn(`Socket ${socket.id} denied join_user for ${userId}`);
+        logger.warn({ socketId: socket.id, requestedUserId: userId, authSub: auth.sub }, 'Socket denied join_user');
         if (typeof ack === 'function') ack(false);
         return;
       }
       socket.join(`user_${auth.sub}`);
-      console.log(`Socket ${socket.id} joined room user_${auth.sub}`);
+      logger.info({ socketId: socket.id, userId: auth.sub }, 'Socket joined user room');
       if (typeof ack === 'function') ack(true);
     });
 
@@ -64,7 +65,7 @@ export const initSocket = (server) => {
     // GET /api/community/channels/:channelId/posts.
     socket.on('join_channel', (channelId, ack) => {
       socket.join(`channel_${channelId}`);
-      console.log(`Socket ${socket.id} joined channel_${channelId}`);
+      logger.info({ socketId: socket.id, channelId }, 'Socket joined channel');
       if (typeof ack === 'function') ack(true);
     });
 
@@ -74,7 +75,7 @@ export const initSocket = (server) => {
       // Only broadcast into a room this socket actually joined. Without this a
       // client could emit into any channel id without ever subscribing to it.
       if (!socket.rooms.has(room)) {
-        console.warn(`Socket ${socket.id} denied send_message to ${room}`);
+        logger.warn({ socketId: socket.id, room }, 'Socket denied send_message');
         if (typeof ack === 'function') ack(false);
         return;
       }
@@ -83,7 +84,7 @@ export const initSocket = (server) => {
     });
 
     socket.on('disconnect', () => {
-      console.log('Socket disconnected:', socket.id);
+      logger.info({ socketId: socket.id }, 'Socket disconnected');
     });
   });
 

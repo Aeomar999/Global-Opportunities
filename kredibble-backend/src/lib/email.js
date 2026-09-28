@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/http.js';
 import { Resend } from 'resend';
+import logger from './logger.js';
 
 const resend = env.resendApiKey ? new Resend(env.resendApiKey) : null;
 
@@ -17,7 +18,7 @@ export const hashVerificationCode = (code) => {
 
 export const sendVerificationEmail = async (email, code) => {
   if (!resend) {
-    console.warn('[email] Resend not configured, skipping email send');
+    logger.warn('Resend not configured, skipping email send');
     return;
   }
 
@@ -40,7 +41,7 @@ export const sendVerificationEmail = async (email, code) => {
     });
     return { success: true };
   } catch (error) {
-    console.error('Failed to send verification email:', error);
+    logger.error({ error: error.message, email }, 'Failed to send verification email');
     // Don't throw - email is best effort
     throw new ApiError(502, 'Failed to send verification email');
   }
