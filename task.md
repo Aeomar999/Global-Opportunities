@@ -113,7 +113,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-027 | `passwordHash` reachable through generic update paths | P2 | Backend routes | ✅ Done |
 | SEC-028 | No email normalization — case-variant duplicate accounts | P2 | Backend auth | ✅ Done |
 | SEC-029 | No GDPR/CCPA data export or deletion endpoint | P2 | Backend | ✅ Done |
-| SEC-030 | `console.log` in production paths violates logger guardrail | P3 | Backend | ☐ Open |
+| SEC-030 | `console.log` in production paths violates logger guardrail | P3 | Backend | ✅ Done |
 | SEC-031 | Search fields have no indexes | P3 | Backend models | ☐ Open |
 | SEC-032 | N+1 reads in populated relation queries | P3 | Backend routes | ☐ Open |
 | SEC-033 | Next.js admin has no CSP / security headers | P3 | Admin app | ☐ Open |
@@ -727,6 +727,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-28 | SEC-020 | 9127551 | Done | Removed tracked kredibble-app/.env (was tracked across 4 commits), added .env.example with placeholders. Cleaned up .gitignore duplicates. .gitignore .env* pattern prevents re-tracking. Value is non-secret (EXPO_PUBLIC_* inlined into client bundle). 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-021 | c5b4bba | Done | Dev server now fails fast on database connection failure. Removed try/catch that allowed dev server to start without DB. connectToDatabase() throws in ALL environments. Server exits with actionable error message. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-025 | 0248406 | Done | Account lockout with progressive backoff implemented: 5 failed attempts triggers lockout (15min, 30min, 60min, 120min, 240min...). Shows remaining attempts on failed login. Resets on successful login. Added failedLoginAttempts, lockUntil, lastFailedLogin fields to User model. Audit logs for lockout events. 77/77 backend tests pass. Admin lint clean. |
+| 2026-09-28 | SEC-030 | 1d8e3c9 | Done | Replaced console.log/warn/error with Pino structured logger. Added src/lib/logger.js with lazy init. Replaced in app.js, server.js, socket.js, routes/index.js, config/env.js, lib/audit.js, lib/email.js, lib/mongodb.js, lib/cloudinary.js. 77/77 backend tests pass. Admin lint clean. |
 
 ---
 
