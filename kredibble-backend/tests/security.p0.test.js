@@ -673,6 +673,7 @@ const concretize = (path) =>
 const PUBLIC_ROUTES = new Set([
   'GET /',
   'GET /api/health',
+  'GET /api/v1/health',
   'POST /api/auth/register',
   'POST /api/auth/login',
   'POST /api/auth/refresh',
@@ -680,6 +681,13 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/auth/verification-code/verify',
   'POST /api/auth/admin/login',
   'POST /api/auth/admin/logout',
+  'POST /api/v1/auth/register',
+  'POST /api/v1/auth/login',
+  'POST /api/v1/auth/refresh',
+  'POST /api/v1/auth/verification-code/send',
+  'POST /api/v1/auth/verification-code/verify',
+  'POST /api/v1/auth/admin/login',
+  'POST /api/v1/auth/admin/logout',
 ]);
 
 describe('SEC-002: live route manifest — no unguarded routes', () => {
