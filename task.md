@@ -108,7 +108,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-022 | CORS allows any `*.vercel.app` / `*.onrender.com` tenant | P2 | Backend app | ✅ Done |
 | SEC-023 | PII exposed through generic collection reads | P2 | Backend routes | ✅ Done |
 | SEC-024 | No rate limit on upload, search, or registration | P2 | Backend | ✅ Done |
-| SEC-025 | No account lockout or progressive backoff on login | P2 | Backend auth | ☐ Open |
+| SEC-025 | No account lockout or progressive backoff on login | P2 | Backend auth | ✅ Done |
 | SEC-026 | Client-supplied `userId` trusted for profile/saved/notification ops | P2 | Backend routes | ✅ Done |
 | SEC-027 | `passwordHash` reachable through generic update paths | P2 | Backend routes | ✅ Done |
 | SEC-028 | No email normalization — case-variant duplicate accounts | P2 | Backend auth | ✅ Done |
@@ -726,6 +726,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-28 | SEC-019 | f36f7e4 | Done | API versioning implemented: /api/v1 as primary path, /api as backward-compatible alias with deprecation headers (Deprecation: true, Link: successor-version, Sunset: 1 year). Route manifest test updated for v1 public routes. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-020 | 9127551 | Done | Removed tracked kredibble-app/.env (was tracked across 4 commits), added .env.example with placeholders. Cleaned up .gitignore duplicates. .gitignore .env* pattern prevents re-tracking. Value is non-secret (EXPO_PUBLIC_* inlined into client bundle). 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-021 | c5b4bba | Done | Dev server now fails fast on database connection failure. Removed try/catch that allowed dev server to start without DB. connectToDatabase() throws in ALL environments. Server exits with actionable error message. 77/77 backend tests pass. Admin lint clean. |
+| 2026-09-28 | SEC-025 | 0248406 | Done | Account lockout with progressive backoff implemented: 5 failed attempts triggers lockout (15min, 30min, 60min, 120min, 240min...). Shows remaining attempts on failed login. Resets on successful login. Added failedLoginAttempts, lockUntil, lastFailedLogin fields to User model. Audit logs for lockout events. 77/77 backend tests pass. Admin lint clean. |
 
 ---
 
