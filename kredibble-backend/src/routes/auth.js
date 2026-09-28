@@ -10,6 +10,7 @@ import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 import { createVerificationCode, hashVerificationCode, sendVerificationEmail } from '../lib/email.js';
 import { env } from '../config/env.js';
 import { auditLog, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
+import { registrationLimiter, passwordResetLimiter } from '../lib/rate-limiters.js';
 
 export const authRouter = Router();
 
@@ -36,6 +37,7 @@ const PUBLIC_ROLES = ['seeker', 'hirer'];
 
 authRouter.post(
   '/register',
+  registrationLimiter,
   validate(registerSchema),
   asyncHandler(async (req, res) => {
     const { name, email, password } = req.body;
@@ -328,6 +330,7 @@ authRouter.post(
 // Email verification — send code
 authRouter.post(
   '/verification-code/send',
+  passwordResetLimiter,
   asyncHandler(async (req, res) => {
     const email = String(req.body.email || '').trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new ApiError(400, 'A valid email is required');

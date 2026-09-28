@@ -23,6 +23,7 @@ import {
 import { Channel, ChannelPost, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
+import { searchLimiter } from '../lib/rate-limiters.js';
 
 
 export const apiRouter = Router();
@@ -378,7 +379,7 @@ apiRouter.use('/upload', uploadRouter);
 // single path segment, so mounting the collection first would swallow
 // /candidates/search and /seekers/search and turn them into a findById('search')
 // CastError. Both are called by the mobile career screen.
-apiRouter.get('/candidates/search', ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
+apiRouter.get('/candidates/search', searchLimiter, ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
     const { skills, university, country, q } = req.query;
     const filter = {};
 
@@ -395,7 +396,7 @@ apiRouter.get('/candidates/search', ...guard('candidates', 'read', 'candidate'),
     listResponse(res, data.map(withParsedCandidate));
 }));
 
-apiRouter.get('/seekers/search', ...guard('seekers', 'read', 'seeker'), asyncHandler(async (req, res) => {
+apiRouter.get('/seekers/search', searchLimiter, ...guard('seekers', 'read', 'seeker'), asyncHandler(async (req, res) => {
     const { skills, university, country, q } = req.query;
     const filter = {};
 
