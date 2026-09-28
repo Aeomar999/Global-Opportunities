@@ -12,10 +12,10 @@ export const opportunityTypes = [
 
 const opportunitySchema = new mongoose.Schema({
   hirerId: { type: mongoose.Schema.Types.ObjectId, ref: 'HirerAccount', index: true },
-  title: { type: String, required: true },
+  title: { type: String, required: true, index: true },
   type: { type: String, required: true, enum: opportunityTypes, index: true },
-  company: { type: String, required: true },
-  location: { type: String, required: true },
+  company: { type: String, required: true, index: true },
+  location: { type: String, required: true, index: true },
   description: { type: String, required: true },
   applicantsCount: { type: Number, default: 0 },
   date: String,
@@ -52,6 +52,9 @@ const opportunitySchema = new mongoose.Schema({
   grantSector: String,
 }, { timestamps: true });
 
+// SEC-031: Text index for search on title, company, location
+opportunitySchema.index({ title: 'text', company: 'text', location: 'text' });
+
 const applicantSchema = new mongoose.Schema({
   opportunityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity', required: true, index: true },
   seekerId: { type: mongoose.Schema.Types.ObjectId, ref: 'SeekerProfile', index: true },
@@ -62,23 +65,29 @@ const applicantSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const eventSchema = new mongoose.Schema({
-  title: { type: String, required: true },
+  title: { type: String, required: true, index: true },
   hirer: { type: String, required: true },
-  location: { type: String, required: true },
+  location: { type: String, required: true, index: true },
   dateTime: { type: String, required: true },
   capacity: { type: Number, required: true },
   attendeesCount: { type: Number, default: 0 },
   status: { type: String, default: 'upcoming' },
 }, { timestamps: true });
 
+// SEC-031: Text index for search on title, location
+eventSchema.index({ title: 'text', location: 'text' });
+
 const grantSchema = new mongoose.Schema({
-  title: { type: String, required: true },
+  title: { type: String, required: true, index: true },
   hirer: { type: String, required: true },
-  sector: { type: String, required: true },
+  sector: { type: String, required: true, index: true },
   fundingPool: { type: Number, required: true },
   allocated: { type: Number, default: 0 },
-  status: { type: String, default: 'open' },
+  status: { type: String, default: 'open', index: true },
 }, { timestamps: true });
+
+// SEC-031: Text index for search on title, sector
+grantSchema.index({ title: 'text', sector: 'text' });
 
 const grantApplicationSchema = new mongoose.Schema({
   grantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Grant', required: true, index: true },
