@@ -23,7 +23,7 @@ const fallbackApiUrl = Platform.select({
   default: 'http://localhost:4000/api',
 });
 
-const getApiUrl = () => {
+export const getApiUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (!envUrl) return fallbackApiUrl || 'http://localhost:4000/api';
 
@@ -45,7 +45,7 @@ export const API_BASE_URL = getApiUrl();
 const TOKEN_KEY = 'kredibble_app_token';
 const USER_KEY = 'kredibble_app_user';
 
-const saveMobileSession = async ({ token, user }: AuthResponse) => {
+export const saveMobileSession = async ({ token, user }: AuthResponse) => {
   try {
     await SecureStore.setItemAsync(TOKEN_KEY, token);
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
@@ -325,15 +325,15 @@ export const updateHirerProfile = async (id: string, data: any) => {
 };
 
 
-export const toggleSavedItem = async (userId: string, data: { itemId: string, itemType: string }) => {
-  return request<any>(`/users/${userId}/saved`, {
+export const toggleSavedItem = async (data: { itemId: string, itemType: string }) => {
+  return request<any>(`/users/me/saved`, {
     method: 'POST',
     body: JSON.stringify(data),
   });
 };
 
-export const getSavedItems = async (userId: string) => {
-  return request<any[]>(`/users/${userId}/saved`);
+export const getSavedItems = async () => {
+  return request<any[]>(`/users/me/saved`);
 };
 
 
@@ -342,8 +342,8 @@ export const getArticles = async (params: any = {}) => {
   return request<any[]>(`/articles?${qs}`);
 };
 
-export const getNotifications = async (userId: string) => {
-  return request<any[]>(`/notifications?userId=${userId}`);
+export const getNotifications = async () => {
+  return request<any[]>(`/notifications`);
 };
 
 export const createReport = async (data: any) => {

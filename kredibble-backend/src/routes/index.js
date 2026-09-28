@@ -194,6 +194,11 @@ const collectionRoutes = ({
         }
       }
 
+      // SEC-026: for notifications, filter by authenticated user unless admin
+      if (policyKey === 'notifications' && req.auth?.role !== ADMIN) {
+        filter.userId = req.auth.sub;
+      }
+
       const [data, total] = await Promise.all([
         Model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
         Model.countDocuments(filter),
@@ -585,36 +590,26 @@ apiRouter.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourc
 
 
 /**
- * Saved items are private to their owner. `userId` is a path param, so an IDOR
- * check is required on top of authentication: a caller may only touch their own
- * list unless they are an admin.
+ * Saved items are private to their owner. Use `/users/me/saved` so the server
+ * derives the user ID from the JWT. This prevents IDOR where a user could
+ * pass another user's ID in the path.
  */
-const assertSelfOrAdmin = (req) => {
-  if (req.auth?.role === ADMIN) return;
-  if (String(req.auth?.sub) !== String(req.params.userId)) {
-    throw new ApiError(403, 'You can only access your own saved items');
-  }
-};
-
 const savedItemsGuard = [
   requireAuth,
   (req, res, next) => {
-    try {
-      assertSelfOrAdmin(req);
-      next();
-    } catch (error) {
-      next(error);
-    }
+    // No need for assertSelfOrAdmin since we use the authenticated user's ID
+    next();
   },
 ];
 
-apiRouter.post('/users/:userId/saved', savedItemsGuard, asyncHandler(async (req, res) => {
+apiRouter.post('/users/me/saved', savedItemsGuard, asyncHandler(async (req, res) => {
   const { SavedItem } = await import('../models/User.js');
   const { itemId, itemType } = req.body;
   if (!itemId || !['opportunities', 'events', 'grants', 'internships'].includes(itemType)) {
     throw new ApiError(400, 'A valid itemId and itemType are required');
   }
-  const existing = await SavedItem.findOne({ userId: req.params.userId, itemId, itemType });
+  const userId = req.auth.sub;
+  const existing = await SavedItem.findOne({ userId, itemId, itemType });
   if (existing) {
     await SavedItem.findByIdAndDelete(existing._id);
 
@@ -628,7 +623,7 @@ apiRouter.post('/users/:userId/saved', savedItemsGuard, asyncHandler(async (req,
 
     res.json({ action: 'removed' });
   } else {
-    const newItem = new SavedItem({ userId: req.params.userId, itemId, itemType });
+    const newItem = new SavedItem({ userId, itemId, itemType });
     await newItem.save();
 
     await auditReq(req, {
@@ -643,9 +638,9 @@ apiRouter.post('/users/:userId/saved', savedItemsGuard, asyncHandler(async (req,
   }
 }));
 
-apiRouter.get('/users/:userId/saved', savedItemsGuard, asyncHandler(async (req, res) => {
+apiRouter.get('/users/me/saved', savedItemsGuard, asyncHandler(async (req, res) => {
   const { SavedItem } = await import('../models/User.js');
-  const savedItems = await SavedItem.find({ userId: req.params.userId }).sort({ createdAt: -1 });
+  const savedItems = await SavedItem.find({ userId: req.auth.sub }).sort({ createdAt: -1 });
   listResponse(res, savedItems.map(toClientObject));
 }));
 
