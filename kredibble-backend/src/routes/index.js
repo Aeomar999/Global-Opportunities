@@ -11,7 +11,7 @@ import {
   buildCreatePayload,
   buildUpdatePayload,
 } from '../lib/policies.js';
-import { User, StaffMember } from '../models/User.js';
+import { User, StaffMember, AuditLog } from '../models/User.js';
 import { SeekerProfile, HirerAccount, Candidate } from '../models/Profiles.js';
 import {
   Opportunity, Applicant, Event, Grant,
@@ -19,6 +19,7 @@ import {
 } from '../models/Platform.js';
 import { Channel, ChannelPost, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
+import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 
 
 export const apiRouter = Router();
@@ -222,6 +223,16 @@ const collectionRoutes = ({
       const data = normalizeIn ? normalizeIn(allowed) : allowed;
       const item = new Model(data);
       await item.save();
+
+      // SEC-017: audit log for create
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
+        resourceType: AUDIT_RESOURCE_TYPES[resourceName.toUpperCase().replace(/ /g, '_')] || resourceName.toLowerCase().replace(/ /g, '_'),
+        resourceId: item._id,
+        outcome: 'success',
+        metadata: { role: req.auth?.role },
+      });
+
       res.status(201).json({ data: normalizeOut ? normalizeOut(item) : toClientObject(item) });
     }),
   );
@@ -244,6 +255,19 @@ const collectionRoutes = ({
         { new: true, runValidators: true },
       );
       if (!item) throw notFound(resourceName);
+
+      // SEC-017: audit log for admin mutations
+      const isAdminMutation = req.auth?.role === ADMIN && policy.adminUpdateFields && Object.keys(data).some(k => policy.adminUpdateFields.includes(k));
+      if (isAdminMutation) {
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
+          resourceType: AUDIT_RESOURCE_TYPES[resourceName.toUpperCase().replace(/ /g, '_')] || resourceName.toLowerCase().replace(/ /g, '_'),
+          resourceId: item._id,
+          outcome: 'success',
+          metadata: { updatedFields: Object.keys(data), adminFields: Object.keys(data).filter(k => policy.adminUpdateFields?.includes(k)) },
+        });
+      }
+
       itemResponse(res, normalizeOut ? normalizeOut(item) : toClientObject(item));
     }),
   );
@@ -256,6 +280,16 @@ const collectionRoutes = ({
       if (!existing) throw notFound(resourceName);
       assertOwnership(existing, ownerField, req, resourceName);
       await Model.findByIdAndDelete(req.params.id);
+
+      // SEC-017: audit log for delete
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.ADMIN_DELETE,
+        resourceType: AUDIT_RESOURCE_TYPES[resourceName.toUpperCase().replace(/ /g, '_')] || resourceName.toLowerCase().replace(/ /g, '_'),
+        resourceId: req.params.id,
+        outcome: 'success',
+        metadata: { role: req.auth?.role },
+      });
+
       res.status(204).send();
     }),
   );
@@ -409,6 +443,15 @@ apiRouter.post('/opportunities/:opportunityId/applicants', ...guard('applicants'
     applicant.set('opportunityId', req.params.opportunityId);
     await applicant.save();
     await Opportunity.findByIdAndUpdate(req.params.opportunityId, { $inc: { applicantsCount: 1 } });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.APPLICATION_SUBMIT,
+      resourceType: AUDIT_RESOURCE_TYPES.APPLICANT,
+      resourceId: applicant._id,
+      outcome: 'success',
+      metadata: { opportunityId: req.params.opportunityId },
+    });
+
     res.status(201).json({ data: toClientObject(applicant) });
 }));
 
@@ -430,6 +473,14 @@ apiRouter.post('/community/channels/:channelId/posts', ...guard('community/posts
     } catch (err) {
       console.warn('Socket not initialized or failed to broadcast:', err.message);
     }
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.ADMIN_USER_UPDATE, // Using generic admin action for now
+      resourceType: AUDIT_RESOURCE_TYPES.COMMUNITY_POST,
+      resourceId: post._id,
+      outcome: 'success',
+      metadata: { channelId: req.params.channelId },
+    });
     
     res.status(201).json({ data: toClientObject(post) });
 }));
@@ -443,6 +494,15 @@ apiRouter.post('/grants/:grantId/applications', ...guard('grant-applications', '
     const application = new GrantApplication(writableBody('grant-applications', req));
     application.set('grantId', req.params.grantId);
     await application.save();
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.GRANT_APPLY,
+      resourceType: AUDIT_RESOURCE_TYPES.GRANT_APPLICATION,
+      resourceId: application._id,
+      outcome: 'success',
+      metadata: { grantId: req.params.grantId },
+    });
+
     res.status(201).json({ data: toClientObject(application) });
 }));
 
@@ -457,6 +517,15 @@ apiRouter.post('/events/:eventId/attendees', ...guard('event-attendees', 'create
     attendee.set('eventId', req.params.eventId);
     await attendee.save();
     await Event.findByIdAndUpdate(req.params.eventId, { $inc: { attendeesCount: quantity } });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.EVENT_BOOK,
+      resourceType: AUDIT_RESOURCE_TYPES.EVENT_ATTENDEE,
+      resourceId: attendee._id,
+      outcome: 'success',
+      metadata: { eventId: req.params.eventId, quantity },
+    });
+
     res.status(201).json({ data: toClientObject(attendee) });
 }));
 
@@ -474,6 +543,15 @@ apiRouter.post('/verification/companies/:id/documents', ...guard('verification/d
     const doc = new VerificationDoc(writableBody('verification/documents', req));
     doc.set('companyId', req.params.id);
     await doc.save();
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.UPLOAD,
+      resourceType: AUDIT_RESOURCE_TYPES.VERIFICATION_DOC,
+      resourceId: doc._id,
+      outcome: 'success',
+      metadata: { companyId: req.params.id },
+    });
+
     res.status(201).json({ data: toClientObject(doc) });
 }));
 
@@ -523,10 +601,28 @@ apiRouter.post('/users/:userId/saved', savedItemsGuard, asyncHandler(async (req,
   const existing = await SavedItem.findOne({ userId: req.params.userId, itemId, itemType });
   if (existing) {
     await SavedItem.findByIdAndDelete(existing._id);
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.SAVED_ITEM_TOGGLE,
+      resourceType: AUDIT_RESOURCE_TYPES.SAVED_ITEM,
+      resourceId: existing._id,
+      outcome: 'success',
+      metadata: { action: 'removed', itemId, itemType },
+    });
+
     res.json({ action: 'removed' });
   } else {
     const newItem = new SavedItem({ userId: req.params.userId, itemId, itemType });
     await newItem.save();
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.SAVED_ITEM_TOGGLE,
+      resourceType: AUDIT_RESOURCE_TYPES.SAVED_ITEM,
+      resourceId: newItem._id,
+      outcome: 'success',
+      metadata: { action: 'added', itemId, itemType },
+    });
+
     res.status(201).json({ action: 'added', data: toClientObject(newItem) });
   }
 }));

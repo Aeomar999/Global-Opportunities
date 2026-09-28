@@ -11,6 +11,7 @@ import { connectToDatabase } from './lib/mongodb.js';
 import { apiRouter } from './routes/index.js';
 import { isAllowedOrigin } from './lib/cors.js';
 import { ApiError } from './utils/http.js';
+import { auditContext } from './lib/audit.js';
 
 const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
 
@@ -58,6 +59,9 @@ app.use(async (req, res, next) => {
 
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+
+// SEC-017 + SEC-039: audit context with request ID propagation
+app.use(auditContext);
 
 // Add simple URL logging for debugging production 404s
 app.use((req, res, next) => {
