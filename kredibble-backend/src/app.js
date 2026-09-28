@@ -90,6 +90,25 @@ if (!env.isProduction || process.env.ENABLE_SWAGGER === 'true') {
 // reachable unthrottled via /<resource>. Both clients already call /api
 // (kredibble-app/.env and the NEXT_PUBLIC_API_URL default), so the fallback only
 // widened the attack surface. It is gone rather than rate-limited twice.
+// SEC-019: mount at /api/v1 as primary versioned path
+app.use('/api/v1', apiRouter);
+
+// SEC-019: legacy /api mount with deprecation headers (not a redirect, so tests work)
+// Logs deprecation usage so clients can be migrated
+app.use('/api', (req, res, next) => {
+  // Add deprecation headers
+  res.set('Deprecation', 'true');
+  res.set('Link', '</api/v1>; rel="successor-version"');
+  res.set('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()); // 1 year
+  
+  // Log deprecation usage (non-blocking)
+  console.warn(`DEPRECATED: ${req.method} ${req.originalUrl} - use /api/v1 instead`);
+  
+  // Continue to the v1 router
+  next();
+});
+
+// Mount the same router at /api for backward compatibility (with deprecation headers)
 app.use('/api', apiRouter);
 
 app.use((req, res) => {
