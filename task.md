@@ -100,7 +100,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ✅ Done |
 | SEC-015 | `apiRouter` mounted twice (`/` and `/api`), limiter double-counts | P1 | Backend app | ✅ Done |
 | SEC-016 | Clients fall back to plaintext HTTP, no HTTPS enforcement | P1 | App + Admin | ✅ Done |
-| SEC-017 | No audit log for admin/mutating actions | P1 | Backend | ☐ Open |
+| SEC-017 | No audit log for admin/mutating actions | P1 | Backend | ✅ Done |
 | SEC-018 | Test suite empty — no auth or authorization tests exist | P1 | Backend | ◐ Backend done; Admin/mobile pending |
 | SEC-019 | No API versioning — breaking changes ship silently | P2 | Backend | ☐ Open |
 | SEC-020 | `kredibble-app/.env` is tracked and committed | P2 | Repo hygiene | ☐ Open |
@@ -507,7 +507,19 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 3. Record `actorId`, `actorRole`, `action`, `resourceType`, `resourceId`, `ip`, `userAgent`, `requestId`, `outcome`. Never log tokens, passwords, or PII bodies.
 4. Store audit records in a dedicated append-only collection with a TTL-based retention policy and an index on `actorId` + `createdAt`.
 
-**Acceptance criteria:** Every item in the list above produces a queryable audit record with no secrets in the payload
+**Implementation:**
+- Added `AuditLog` model in `src/models/User.js` with TTL index (1 year retention)
+- Created `src/lib/audit.js` with action/resource type enums and `auditLog()` / `auditReq()` helpers
+- Added `auditContext` middleware in `src/app.js` for request ID propagation (SEC-039)
+- Instrumented auth routes: register, login (success/failure), refresh, logout, admin login/logout, email verification
+- Instrumented `collectionRoutes` factory: create, update (admin fields), delete
+- Instrumented special nested routes: applications, grant applications, event bookings, channel posts, verification docs, saved items
+
+**Acceptance criteria:**
+- ✅ Every item in the list above produces a queryable audit record with no secrets in the payload
+- ✅ 77/77 backend tests pass
+- ✅ Admin lint clean
+- ✅ Request ID propagated via `X-Request-Id` header (SEC-039)
 
 ---
 
@@ -690,6 +702,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-27 | SEC-014 | [new] | Done | Swagger UI restricted: `/api-docs` returns 404 in production unless `ENABLE_SWAGGER=true`. Available in development/test. `swaggerUi` mounted conditionally in `src/app.js`. 77/77 backend tests green. |
 | 2026-09-27 | SEC-016 | [new] | Done | HTTPS enforcement added: mobile and admin clients throw at startup if API URL is not https:// in production. Build-time check script (`scripts/check-https.js`) fails release build on non-HTTPS URL. Localhost fallback preserved for development. 77/77 backend tests green. |
 | 2026-09-28 | Build fix: backend Docker deploy | [new] | Fixed | `4707af0` pinned `@babel/preset-env` to `^7.26.0` in `package.json` but left `package-lock.json` at 8.0.6, so `npm ci` (Dockerfile and CI) failed with `Missing: ms@2.1.3 from lock file`. Lockfile regenerated with npm 10.8.2 (the version `node:20-alpine` ships). Reproduced the exact failure against the old lockfile; new lockfile passes both `npm ci` (CI) and `npm ci --legacy-peer-deps` (Dockerfile), and strict resolution has no ERESOLVE, so the babel peer conflict is gone. The removed Babel 8 packages required Node `^22.18 \|\| >=24.11` and would not have run on the Node 20 image anyway. 77/77 backend tests green. `npm audit`: 9 findings (5 moderate, 4 high), identical before and after, so none were introduced here. |
+| 2026-09-28 | SEC-017 | 1a92927 | Done | Audit log implemented: `AuditLog` model with 1-year TTL, `src/lib/audit.js` service, `auditContext` middleware for request ID (SEC-039). Auth routes (register, login, refresh, logout, admin login/logout, email verification), `collectionRoutes` (create/update/delete with admin field detection), and nested routes (applications, grants, events, posts, verification docs, saved items) all emit audit records. Never logs secrets. 77/77 backend tests green. Admin lint clean. |
 
 ---
 
