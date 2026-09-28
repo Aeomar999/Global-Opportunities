@@ -6,22 +6,11 @@ import http from 'http';
 import { initSocket } from './socket.js';
 
 async function startServer() {
-  try {
-    console.log('Connecting to database...');
-    await connectToDatabase();
-    console.log('✅ Database connected successfully.');
-  } catch (error) {
-    console.warn('❌ Database connection failed:', error.message);
-
-    // Only exit in production. In development, let the server run so the user can debug.
-    const isProduction = process.env.NODE_ENV === 'production' || env.nodeEnv === 'production';
-    if (isProduction) {
-      console.error('CRITICAL: Database failure in production. Exiting...');
-      process.exit(1);
-    } else {
-      console.warn('⚠️ Development mode: Continuing without database connection.');
-    }
-  }
+  // SEC-021: Database connection is required in all environments.
+  // Failure to connect is fatal - the server will not start without a valid DB.
+  // This prevents silent failures where requests fail later with confusing errors.
+  await connectToDatabase();
+  console.log('✅ Database connected successfully.');
 
   const server = http.createServer(app);
   initSocket(server);
