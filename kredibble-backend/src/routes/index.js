@@ -10,6 +10,9 @@ import {
   isAllowed,
   buildCreatePayload,
   buildUpdatePayload,
+  PII_FIELDS,
+  isOwner,
+  stripPiiIfNeeded,
 } from '../lib/policies.js';
 import { User, StaffMember, AuditLog } from '../models/User.js';
 import { SeekerProfile, HirerAccount, Candidate } from '../models/Profiles.js';
@@ -194,7 +197,14 @@ const collectionRoutes = ({
         Model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
         Model.countDocuments(filter),
       ]);
-      listResponse(res, normalizeOut ? data.map(normalizeOut) : data.map(toClientObject), total, page, limit);
+
+      // SEC-023: strip PII fields for non-owners/non-admins
+      const processItem = (item) => {
+        const base = normalizeOut ? normalizeOut(item) : toClientObject(item);
+        return stripPiiIfNeeded(base, policyKey, req.auth, ownerField);
+      };
+
+      listResponse(res, data.map(processItem), total, page, limit);
     }),
   );
 
@@ -204,7 +214,12 @@ const collectionRoutes = ({
       assertPolicy(policy, 'read', req, resourceName);
       const item = await Model.findById(req.params.id);
       if (!item) throw notFound(resourceName);
-      itemResponse(res, normalizeOut ? normalizeOut(item) : toClientObject(item));
+
+      // SEC-023: strip PII fields for non-owners/non-admins
+      const base = normalizeOut ? normalizeOut(item) : toClientObject(item);
+      const processed = stripPiiIfNeeded(base, policyKey, req.auth, ownerField);
+
+      itemResponse(res, processed);
     }),
   );
 
