@@ -111,7 +111,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-025 | No account lockout or progressive backoff on login | P2 | Backend auth | ☐ Open |
 | SEC-026 | Client-supplied `userId` trusted for profile/saved/notification ops | P2 | Backend routes | ✅ Done |
 | SEC-027 | `passwordHash` reachable through generic update paths | P2 | Backend routes | ✅ Done |
-| SEC-028 | No email normalization — case-variant duplicate accounts | P2 | Backend auth | ☐ Open |
+| SEC-028 | No email normalization — case-variant duplicate accounts | P2 | Backend auth | ✅ Done |
 | SEC-029 | No GDPR/CCPA data export or deletion endpoint | P2 | Backend | ☐ Open |
 | SEC-030 | `console.log` in production paths violates logger guardrail | P3 | Backend | ☐ Open |
 | SEC-031 | Search fields have no indexes | P3 | Backend models | ☐ Open |
@@ -721,6 +721,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-28 | SEC-023 | 4c42aa3 | Done | PII safe projection implemented: `PII_FIELDS` map in policies.js defines sensitive fields per resource (seekers: phone, hirers: companyEmail/recruiterPhone/recruiterEmail, applicants: resumeUrl, users: email, verification/companies: companyEmail/recruiterPhone/recruiterEmail). `stripPiiIfNeeded()` strips fields for non-owners/non-admins. Admins and owners see full data. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-024 | ed5ccfc | Done | Rate limits implemented: registrationLimiter (5/hr per IP), searchLimiter (60/15min per IP), passwordResetLimiter (3/hr per IP), aiLimiter (20/15min per user). Applied to register, verification-code/send, candidates/search, seekers/search, assistant/chat. All 77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-026 | 17928ef | Done | Removed client-supplied userId: backend `/users/:userId/saved` → `/users/me/saved` (derives userId from JWT). Notifications now filter by `req.auth.sub` for non-admins. Mobile `toggleSavedItem`/`getSavedItems` use `/users/me/saved`, `getNotifications` no longer passes userId. 77 backend + 20 mobile tests pass. Admin lint clean. |
+| 2026-09-28 | SEC-028 | 68dfe8c | Done | Email normalization implemented: `emailNormalized` field with unique index, auto-generated via default function. Auth routes (register, login, admin login, email verification) all normalize email. Case-variant duplicates (A@x.com vs a@x.com) rejected with 409. 77/77 backend tests pass. Admin lint clean. |
 
 ---
 
