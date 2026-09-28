@@ -20,6 +20,10 @@ export const AUDIT_ACTIONS = {
   ADMIN_USER_UPDATE: 'admin.user.update',
   ADMIN_OPPORTUNITY_MODERATE: 'admin.opportunity.moderate',
 
+  // GDPR/CCPA
+  DATA_EXPORT: 'data.export',
+  ACCOUNT_DELETE: 'account.delete',
+
   // Other sensitive operations
   UPLOAD: 'upload.create',
   SAVED_ITEM_TOGGLE: 'saved_item.toggle',
