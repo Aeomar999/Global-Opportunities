@@ -10,6 +10,9 @@ import {
   isAllowed,
   buildCreatePayload,
   buildUpdatePayload,
+  PII_FIELDS,
+  isOwner,
+  stripPiiIfNeeded,
 } from '../lib/policies.js';
 import { User, StaffMember, AuditLog } from '../models/User.js';
 import { SeekerProfile, HirerAccount, Candidate } from '../models/Profiles.js';
@@ -20,6 +23,7 @@ import {
 import { Channel, ChannelPost, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
+import { searchLimiter } from '../lib/rate-limiters.js';
 
 
 export const apiRouter = Router();
@@ -194,7 +198,14 @@ const collectionRoutes = ({
         Model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
         Model.countDocuments(filter),
       ]);
-      listResponse(res, normalizeOut ? data.map(normalizeOut) : data.map(toClientObject), total, page, limit);
+
+      // SEC-023: strip PII fields for non-owners/non-admins
+      const processItem = (item) => {
+        const base = normalizeOut ? normalizeOut(item) : toClientObject(item);
+        return stripPiiIfNeeded(base, policyKey, req.auth, ownerField);
+      };
+
+      listResponse(res, data.map(processItem), total, page, limit);
     }),
   );
 
@@ -204,7 +215,12 @@ const collectionRoutes = ({
       assertPolicy(policy, 'read', req, resourceName);
       const item = await Model.findById(req.params.id);
       if (!item) throw notFound(resourceName);
-      itemResponse(res, normalizeOut ? normalizeOut(item) : toClientObject(item));
+
+      // SEC-023: strip PII fields for non-owners/non-admins
+      const base = normalizeOut ? normalizeOut(item) : toClientObject(item);
+      const processed = stripPiiIfNeeded(base, policyKey, req.auth, ownerField);
+
+      itemResponse(res, processed);
     }),
   );
 
@@ -363,7 +379,7 @@ apiRouter.use('/upload', uploadRouter);
 // single path segment, so mounting the collection first would swallow
 // /candidates/search and /seekers/search and turn them into a findById('search')
 // CastError. Both are called by the mobile career screen.
-apiRouter.get('/candidates/search', ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
+apiRouter.get('/candidates/search', searchLimiter, ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
     const { skills, university, country, q } = req.query;
     const filter = {};
 
@@ -380,7 +396,7 @@ apiRouter.get('/candidates/search', ...guard('candidates', 'read', 'candidate'),
     listResponse(res, data.map(withParsedCandidate));
 }));
 
-apiRouter.get('/seekers/search', ...guard('seekers', 'read', 'seeker'), asyncHandler(async (req, res) => {
+apiRouter.get('/seekers/search', searchLimiter, ...guard('seekers', 'read', 'seeker'), asyncHandler(async (req, res) => {
     const { skills, university, country, q } = req.query;
     const filter = {};
 

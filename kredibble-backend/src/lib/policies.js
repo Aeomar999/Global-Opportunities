@@ -325,4 +325,58 @@ export const buildUpdatePayload = (policy, body, role) => {
   return pickFields(body, fields);
 };
 
+/**
+ * PII fields that should be hidden from non-owners and non-admins.
+ * These fields are only visible to the resource owner or admins.
+ */
+export const PII_FIELDS = {
+  seekers: ['phone'],
+  hirers: ['companyEmail', 'recruiterPhone', 'recruiterEmail'],
+  applicants: ['resumeUrl'],
+  users: ['email'],
+  'verification/companies': ['companyEmail', 'recruiterPhone', 'recruiterEmail'],
+};
+
+/**
+ * Check if a user is the owner of a resource.
+ * @param {Object} document - The mongoose document
+ * @param {string} ownerField - The field name that holds the owner's userId
+ * @param {Object} auth - The auth object from the request
+ * @returns {boolean} True if the user is the owner or an admin
+ */
+export const isOwner = (document, ownerField, auth) => {
+  if (!ownerField) return false;
+  if (auth?.role === ADMIN) return true;
+  const owner = document?.[ownerField];
+  return owner && String(owner) === String(auth?.sub);
+};
+
+/**
+ * Strip PII fields from a document if the caller is not the owner or admin.
+ * @param {Object} doc - The document to process
+ * @param {string} resourceType - The resource type key (e.g., 'seekers', 'hirers')
+ * @param {Object} auth - The auth object from the request
+ * @param {string} [ownerField] - The owner field name for ownership check
+ * @returns {Object} The document with PII fields stripped if necessary
+ */
+export const stripPiiIfNeeded = (doc, resourceType, auth, ownerField = null) => {
+  // If no PII fields defined for this resource, return as-is
+  const piiFields = PII_FIELDS[resourceType];
+  if (!piiFields || piiFields.length === 0) return doc;
+
+  // If admin or owner, return full document
+  if (auth?.role === ADMIN) return doc;
+  if (ownerField && isOwner(doc, ownerField, auth)) return doc;
+
+  // Strip PII fields
+  const stripped = { ...doc };
+  for (const field of piiFields) {
+    delete stripped[field];
+  }
+  return stripped;
+};
+
+/**
+ * Build the writable payload for a create, using the policy's createFields allowlist.
+ */
 export const buildCreatePayload = (policy, body) => pickFields(body, policy?.createFields || []);
