@@ -40,9 +40,16 @@
     "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
+    "@react-native/jest-preset": "^0.87.1",
+    "@testing-library/jest-native": "^5.4.3",
+    "@testing-library/react-native": "^14.0.1",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.2",
+    "jest": "^30.5.2",
+    "jest-expo": "^57.0.5",
+    "ts-jest": "^29.4.14",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -55,7 +62,8 @@
     "web": "set EXPO_NO_METRO_WORKSPACE_ROOT=1&& set EXPO_NO_DEPENDENCY_VALIDATION=1&& expo start --web --clear",
     "web:windows": "set EXPO_NO_METRO_WORKSPACE_ROOT=1&& set EXPO_NO_DEPENDENCY_VALIDATION=1&& expo start --web --clear",
     "lint": "expo lint",
-    "check:https": "node ../../scripts/check-https.js"
+    "check:https": "node ../../scripts/check-https.js",
+    "test": "jest"
   },
   "private": true
 }
