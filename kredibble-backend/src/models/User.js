@@ -1,9 +1,23 @@
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
 
+const normalizeEmail = (email) => String(email).trim().toLowerCase();
+
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, index: true },
+  emailNormalized: { 
+    type: String, 
+    required: true, 
+    unique: true, 
+    index: true, 
+    lowercase: true, 
+    trim: true,
+    // SEC-028: Auto-generate from email if not provided
+    default: function() {
+      return this.email ? normalizeEmail(this.email) : undefined;
+    }
+  },
   role: { type: String, required: true, enum: ['seeker', 'hirer', 'admin'] },
   passwordHash: { type: String },
   avatarUrl: { type: String },

@@ -29,11 +29,17 @@ if (!isTest) {
 const publicUser = (user) => {
   if (!user) return null;
   const userObj = user.toJSON ? user.toJSON() : user;
-  const { passwordHash, _id, __v, refreshTokenHash, tokenVersion, ...safeUser } = userObj;
+  const { passwordHash, _id, __v, refreshTokenHash, tokenVersion, emailNormalized, ...safeUser } = userObj;
   return { id: _id, ...safeUser };
 };
 
 const PUBLIC_ROLES = ['seeker', 'hirer'];
+
+/**
+ * Normalize email: lowercase and trim
+ * SEC-028: Email normalization to prevent case-variant duplicate accounts
+ */
+const normalizeEmail = (email) => String(email).trim().toLowerCase();
 
 authRouter.post(
   '/register',
@@ -43,7 +49,10 @@ authRouter.post(
     const { name, email, password } = req.body;
     const role = PUBLIC_ROLES.includes(req.body.role) ? req.body.role : 'seeker';
 
-    const existing = await User.findOne({ email });
+    // SEC-028: Normalize email for case-insensitive uniqueness
+    const normalizedEmail = normalizeEmail(email);
+
+    const existing = await User.findOne({ emailNormalized: normalizedEmail });
     if (existing) {
       await auditReq(req, {
         action: AUDIT_ACTIONS.REGISTER,
@@ -59,6 +68,7 @@ authRouter.post(
     const user = new User({
       name,
       email,
+      emailNormalized: normalizedEmail,
       role,
       passwordHash,
     });
@@ -120,7 +130,10 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select('+refreshTokenHash');
+    // SEC-028: Normalize email for case-insensitive lookup
+    const normalizedEmail = normalizeEmail(email);
+
+    const user = await User.findOne({ emailNormalized: normalizedEmail }).select('+refreshTokenHash');
     if (!user?.passwordHash) {
       await auditReq(req, {
         action: AUDIT_ACTIONS.LOGIN_FAILURE,
@@ -258,7 +271,10 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    // SEC-028: Normalize email for case-insensitive lookup
+    const normalizedEmail = normalizeEmail(email);
+
+    const user = await User.findOne({ emailNormalized: normalizedEmail });
     if (!user?.passwordHash || user.role !== 'admin') {
       await auditReq(req, {
         action: AUDIT_ACTIONS.LOGIN_FAILURE,
@@ -335,20 +351,23 @@ authRouter.post(
     const email = String(req.body.email || '').trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new ApiError(400, 'A valid email is required');
 
+    // SEC-028: Use normalized email for consistency
+    const normalizedEmail = normalizeEmail(email);
+
     const code = createVerificationCode();
-    await EmailVerificationCode.deleteMany({ email });
+    await EmailVerificationCode.deleteMany({ email: normalizedEmail });
     await EmailVerificationCode.create({
-      email,
+      email: normalizedEmail,
       codeHash: hashVerificationCode(code),
       expiresAt: new Date(Date.now() + env.emailVerificationCodeTtlMinutes * 60 * 1000),
     });
-    await sendVerificationEmail(email, code);
+    await sendVerificationEmail(normalizedEmail, code);
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.EMAIL_VERIFY,
       resourceType: AUDIT_RESOURCE_TYPES.USER,
       outcome: 'success',
-      metadata: { step: 'send_code', email },
+      metadata: { step: 'send_code', email: normalizedEmail },
     });
 
     res.status(202).json({ data: { email, expiresInMinutes: env.emailVerificationCodeTtlMinutes } });
@@ -361,27 +380,28 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const email = String(req.body.email || '').trim().toLowerCase();
     const code = String(req.body.code || '');
-    const record = await EmailVerificationCode.findOne({ email, expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 });
+    const normalizedEmail = normalizeEmail(email);
+    const record = await EmailVerificationCode.findOne({ email: normalizedEmail, expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 });
     if (!record || record.codeHash !== hashVerificationCode(code)) {
       await auditReq(req, {
         action: AUDIT_ACTIONS.EMAIL_VERIFY,
         resourceType: AUDIT_RESOURCE_TYPES.USER,
         outcome: 'failure',
-        metadata: { step: 'verify_code', reason: 'invalid_or_expired', email },
+        metadata: { step: 'verify_code', reason: 'invalid_or_expired', email: normalizedEmail },
       });
       throw new ApiError(400, 'Invalid or expired verification code');
     }
-    await User.updateOne({ email }, { emailVerified: true });
-    await EmailVerificationCode.deleteMany({ email });
+    await User.updateOne({ emailNormalized: normalizedEmail }, { emailVerified: true });
+    await EmailVerificationCode.deleteMany({ email: normalizedEmail });
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.EMAIL_VERIFY,
       resourceType: AUDIT_RESOURCE_TYPES.USER,
       outcome: 'success',
-      metadata: { step: 'verify_code', email },
+      metadata: { step: 'verify_code', email: normalizedEmail },
     });
 
-    itemResponse(res, { email, verified: true });
+    itemResponse(res, { email: normalizedEmail, verified: true });
   }),
 );
 
