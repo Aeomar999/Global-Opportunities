@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
 import { ApiError } from '../utils/http.js';
+import logger from './logger.js';
 
 dotenv.config();
 
@@ -43,7 +44,7 @@ export const uploadBufferToCloudinary = (buffer, folder) => {
       { folder: `kredibble/${folder}`, resource_type: 'auto' },
       (error, result) => {
         if (error) {
-          console.error('Cloudinary buffer upload error:', error);
+          logger.error({ error: error.message, folder }, 'Cloudinary buffer upload error');
           reject(new Error('Failed to upload file to cloud storage'));
         } else {
           resolve(result);
@@ -83,7 +84,7 @@ export const uploadToCloudinary = async (fileContent, folder) => {
     });
     return result;
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
+    logger.error({ error: error.message }, 'Cloudinary upload error');
     throw new Error('Failed to upload file to cloud storage');
   }
 };

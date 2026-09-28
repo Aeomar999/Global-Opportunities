@@ -492,7 +492,7 @@ apiRouter.post('/community/channels/:channelId/posts', ...guard('community/posts
       const io = getIO();
       io.to(`channel_${req.params.channelId}`).emit('receive_message', toClientObject(post.toObject()));
     } catch (err) {
-      console.warn('Socket not initialized or failed to broadcast:', err.message);
+      logger.warn({ error: err.message }, 'Socket not initialized or failed to broadcast');
     }
 
     await auditReq(req, {

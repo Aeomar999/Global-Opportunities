@@ -83,7 +83,7 @@ export async function auditLog(params) {
     });
   } catch (error) {
     // Audit logging must never break the main flow
-    console.error('Audit log failed:', error.message);
+    logger.error({ error: error.message }, 'Audit log failed');
   }
 }
 

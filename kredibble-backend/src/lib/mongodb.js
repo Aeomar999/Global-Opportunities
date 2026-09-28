@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { env } from '../config/env.js';
+import logger from './logger.js';
 
 const uri = env.databaseUrl;
 
@@ -33,11 +34,11 @@ export async function connectToDatabase() {
       connectTimeoutMS: 10000,
       dbName: 'kredibble',
     });
-    console.log(`Successfully connected to MongoDB via Mongoose: ${maskMongoUri(uri)}`);
+    logger.info({ uri: maskMongoUri(uri) }, 'Successfully connected to MongoDB via Mongoose');
     return mongoose.connection;
   } catch (err) {
     const hint = getConnectionErrorHint(err);
-    console.error('Mongoose connection error:', hint ? `${err.message}. ${hint}` : err.message);
+    logger.error({ error: err.message, hint }, 'Mongoose connection error');
     throw err;
   }
 }

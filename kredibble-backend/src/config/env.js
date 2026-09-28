@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import dotenv from 'dotenv';
+import logger from '../lib/logger.js';
 
 dotenv.config();
 
@@ -35,7 +36,7 @@ const resolveSecret = (name) => {
   }
   if (!ephemeralWarned.has(name)) {
     ephemeralWarned.add(name);
-    console.warn(`[config] ${name} is unset - using a random ephemeral secret. Tokens will not survive a restart. Set ${name} in .env to persist sessions.`);
+    logger.warn({ configKey: name }, 'Config key unset - using ephemeral secret. Set in .env to persist sessions.');
   }
   return crypto.randomBytes(48).toString('hex');
 };
