@@ -106,7 +106,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-020 | `kredibble-app/.env` is tracked and committed | P2 | Repo hygiene | ☐ Open |
 | SEC-021 | Dev server starts and serves with no database | P2 | Backend | ☐ Open |
 | SEC-022 | CORS allows any `*.vercel.app` / `*.onrender.com` tenant | P2 | Backend app | ✅ Done |
-| SEC-023 | PII exposed through generic collection reads | P2 | Backend routes | ◐ Auth in place; safe projection pending |
+| SEC-023 | PII exposed through generic collection reads | P2 | Backend routes | ✅ Done |
 | SEC-024 | No rate limit on upload, search, or registration | P2 | Backend | ☐ Open |
 | SEC-025 | No account lockout or progressive backoff on login | P2 | Backend auth | ☐ Open |
 | SEC-026 | Client-supplied `userId` trusted for profile/saved/notification ops | P2 | Backend routes | ☐ Open |
@@ -718,6 +718,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-28 | Build fix: backend Docker deploy | [new] | Fixed | `4707af0` pinned `@babel/preset-env` to `^7.26.0` in `package.json` but left `package-lock.json` at 8.0.6, so `npm ci` (Dockerfile and CI) failed with `Missing: ms@2.1.3 from lock file`. Lockfile regenerated with npm 10.8.2 (the version `node:20-alpine` ships). Reproduced the exact failure against the old lockfile; new lockfile passes both `npm ci` (CI) and `npm ci --legacy-peer-deps` (Dockerfile), and strict resolution has no ERESOLVE, so the babel peer conflict is gone. The removed Babel 8 packages required Node `^22.18 \|\| >=24.11` and would not have run on the Node 20 image anyway. 77/77 backend tests green. `npm audit`: 9 findings (5 moderate, 4 high), identical before and after, so none were introduced here. |
 | 2026-09-28 | SEC-017 | 1a92927 | Done | Audit log implemented: `AuditLog` model with 1-year TTL, `src/lib/audit.js` service, `auditContext` middleware for request ID (SEC-039). Auth routes (register, login, refresh, logout, admin login/logout, email verification), `collectionRoutes` (create/update/delete with admin field detection), and nested routes (applications, grants, events, posts, verification docs, saved items) all emit audit records. Never logs secrets. 77/77 backend tests green. Admin lint clean. |
 | 2026-09-28 | SEC-018 | 4f87f41 | Done | Admin Playwright + Mobile Jest tests added. Admin: 12 tests (login, session protection, logout, dashboard, API integration). Mobile: 20 tests (API config, token storage, auth functions). Backend: 77/77 tests pass. Mobile TypeScript: only pre-existing errors. Admin lint clean. |
+| 2026-09-28 | SEC-023 | 4c42aa3 | Done | PII safe projection implemented: `PII_FIELDS` map in policies.js defines sensitive fields per resource (seekers: phone, hirers: companyEmail/recruiterPhone/recruiterEmail, applicants: resumeUrl, users: email, verification/companies: companyEmail/recruiterPhone/recruiterEmail). `stripPiiIfNeeded()` strips fields for non-owners/non-admins. Admins and owners see full data. 77/77 backend tests pass. Admin lint clean. |
 
 ---
 
