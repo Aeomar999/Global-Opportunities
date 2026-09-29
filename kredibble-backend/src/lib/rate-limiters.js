@@ -29,6 +29,7 @@ export const searchLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
   skip: () => isTest,
+  skip: () => isTest,
 });
 
 /**

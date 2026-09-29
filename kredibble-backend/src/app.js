@@ -8,7 +8,7 @@ import fs from 'fs';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { connectToDatabase } from './lib/mongodb.js';
-import { apiRouter } from './routes/index.js';
+import { createApiRouter } from './routes/index.js';
 import { isAllowedOrigin } from './lib/cors.js';
 import { ApiError } from './utils/http.js';
 import { auditContext } from './lib/audit.js';
@@ -91,26 +91,26 @@ if (!env.isProduction || process.env.ENABLE_SWAGGER === 'true') {
 // reachable unthrottled via /<resource>. Both clients already call /api
 // (kredibble-app/.env and the NEXT_PUBLIC_API_URL default), so the fallback only
 // widened the attack surface. It is gone rather than rate-limited twice.
-// SEC-019: mount at /api/v1 as primary versioned path
-app.use('/api/v1', apiRouter);
+// SEC-019: mount at /api/v1 as primary versioned path with populate enabled
+const apiV1Router = createApiRouter({ enablePopulate: true });
+app.use('/api/v1', apiV1Router);
 
 // SEC-019: legacy /api mount with deprecation headers (not a redirect, so tests work)
-  // Logs deprecation usage so clients can be migrated
-  app.use('/api', (req, res, next) => {
-    // Add deprecation headers
-    res.set('Deprecation', 'true');
-    res.set('Link', '</api/v1>; rel="successor-version"');
-    res.set('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()); // 1 year
-    
-    // Log deprecation usage (non-blocking)
-    logger.warn({ method: req.method, url: req.originalUrl }, 'Deprecated API endpoint accessed');
-    
-    // Continue to the v1 router
-    next();
-  });
+// Uses separate router WITHOUT populate to preserve backward compatibility
+const apiLegacyRouter = createApiRouter({ enablePopulate: false });
+app.use('/api', (req, res, next) => {
+  // Add deprecation headers
+  res.set('Deprecation', 'true');
+  res.set('Link', '</api/v1>; rel="successor-version"');
+  res.set('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()); // 1 year
+  
+  // Log deprecation usage (non-blocking)
+  logger.warn({ method: req.method, url: req.originalUrl }, 'Deprecated API endpoint accessed');
+  
+  next();
+});
 
-// Mount the same router at /api for backward compatibility (with deprecation headers)
-app.use('/api', apiRouter);
+app.use('/api', apiLegacyRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found' } });

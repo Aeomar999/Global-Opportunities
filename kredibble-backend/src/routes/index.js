@@ -162,6 +162,8 @@ const collectionRoutes = ({
   normalizeOut,
   searchFields = [],
   ownerField = null,
+  populate = null,
+  enablePopulate = false,
 }) => {
   const router = Router();
   const policy = RESOURCE_POLICIES[policyKey] || null;
@@ -218,7 +220,11 @@ const collectionRoutes = ({
     '/:id',
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'read', req, resourceName);
-      const item = await Model.findById(req.params.id);
+      let query = Model.findById(req.params.id);
+      if (enablePopulate && populate) {
+        query = query.populate(populate);
+      }
+      const item = await query;
       if (!item) throw notFound(resourceName);
 
       // SEC-023: strip PII fields for non-owners/non-admins
@@ -428,8 +434,9 @@ apiRouter.use('/seekers', collectionRoutes({
   normalizeOut: withParsedProfile,
   searchFields: ['profession', 'university', 'country'],
   ownerField: 'userId',
+  populate: { path: 'userId', select: 'name email avatarUrl' },
 }));
-apiRouter.use('/hirers', collectionRoutes({ Model: HirerAccount, resourceName: 'Hirer', policyKey: 'hirers', searchFields: ['companyName', 'industry'], ownerField: 'userId' }));
+apiRouter.use('/hirers', collectionRoutes({ Model: HirerAccount, resourceName: 'Hirer', policyKey: 'hirers', searchFields: ['companyName', 'industry'], ownerField: 'userId', populate: { path: 'userId', select: 'name email avatarUrl' } }));
 apiRouter.use('/opportunities', collectionRoutes({
   Model: Opportunity,
   resourceName: 'Opportunity',
@@ -438,6 +445,7 @@ apiRouter.use('/opportunities', collectionRoutes({
   normalizeOut: withParsedOpportunity,
   searchFields: ['title', 'company', 'location'],
   ownerField: 'hirerId',
+  populate: { path: 'hirerId', select: 'companyName tagline logo industry location' },
 }));
 apiRouter.use('/candidates', collectionRoutes({
   Model: Candidate,
@@ -643,5 +651,318 @@ apiRouter.get('/users/me/saved', savedItemsGuard, asyncHandler(async (req, res) 
   const savedItems = await SavedItem.find({ userId: req.auth.sub }).sort({ createdAt: -1 });
   listResponse(res, savedItems.map(toClientObject));
 }));
+
+
+/**
+ * Factory function to create the API router with optional populate support.
+ * @param {Object} options - Configuration options
+ * @param {boolean} options.enablePopulate - Whether to enable populate on single item endpoints (SEC-032)
+ * @returns {Router} Express router with all API routes
+ */
+export const createApiRouter = ({ enablePopulate = false } = {}) => {
+  const router = Router();
+
+  router.use('/auth', authRouter);
+  router.use('/upload', uploadRouter);
+
+  // Search routes (must be registered BEFORE collection routes to avoid /:id swallowing them)
+  router.get('/candidates/search', searchLimiter, ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
+    const { skills, university, country, q } = req.query;
+    const filter = {};
+
+    const query = searchPattern(q);
+    if (query) filter.$or = [{ name: query }, { profession: query }];
+    const location = searchPattern(country);
+    if (location) filter.location = location;
+    const school = searchPattern(university);
+    if (school) filter.university = school;
+    const skillMatch = searchAlternation(skills);
+    if (skillMatch) filter.skills = skillMatch;
+
+    const data = await Candidate.find(filter).sort({ createdAt: -1 });
+    listResponse(res, data.map(withParsedCandidate));
+  }));
+
+  router.get('/seekers/search', searchLimiter, ...guard('seekers', 'read', 'seeker'), asyncHandler(async (req, res) => {
+    const { skills, university, country, q } = req.query;
+    const filter = {};
+
+    const query = searchPattern(q);
+    if (query) filter.profession = query;
+    const origin = searchPattern(country);
+    if (origin) filter.country = origin;
+    const school = searchPattern(university);
+    if (school) filter.university = school;
+    const skillMatch = searchAlternation(skills);
+    if (skillMatch) filter.technicalSkills = skillMatch;
+
+    const data = await SeekerProfile.find(filter).sort({ createdAt: -1 });
+    listResponse(res, data.map(withParsedProfile));
+  }));
+
+  // Collection routes with populate option
+  router.use('/users', collectionRoutes({ Model: User, resourceName: 'User', policyKey: 'users', searchFields: ['name', 'email'], enablePopulate }));
+  router.use('/staff', collectionRoutes({ Model: StaffMember, resourceName: 'Staff', policyKey: 'staff', searchFields: ['name', 'email'], enablePopulate }));
+  router.use('/seekers', collectionRoutes({
+    Model: SeekerProfile,
+    resourceName: 'Seeker',
+    policyKey: 'seekers',
+    normalizeIn: (data) => stringifyArrayFields(data, ['technicalSkills', 'softSkills', 'tools', 'certifications']),
+    normalizeOut: withParsedProfile,
+    searchFields: ['profession', 'university', 'country'],
+    ownerField: 'userId',
+    populate: { path: 'userId', select: 'name email avatarUrl' },
+    enablePopulate,
+  }));
+  router.use('/hirers', collectionRoutes({ Model: HirerAccount, resourceName: 'Hirer', policyKey: 'hirers', searchFields: ['companyName', 'industry'], ownerField: 'userId', populate: { path: 'userId', select: 'name email avatarUrl' }, enablePopulate }));
+  router.use('/opportunities', collectionRoutes({
+    Model: Opportunity,
+    resourceName: 'Opportunity',
+    policyKey: 'opportunities',
+    normalizeIn: (data) => stringifyArrayFields(data, ['experienceLevels']),
+    normalizeOut: withParsedOpportunity,
+    searchFields: ['title', 'company', 'location'],
+    ownerField: 'hirerId',
+    populate: { path: 'hirerId', select: 'companyName tagline logo industry location' },
+    enablePopulate,
+  }));
+  router.use('/candidates', collectionRoutes({
+    Model: Candidate,
+    resourceName: 'Candidate',
+    policyKey: 'candidates',
+    normalizeIn: (data) => stringifyArrayFields(data, ['skills']),
+    normalizeOut: withParsedCandidate,
+    searchFields: ['name', 'profession'],
+    enablePopulate,
+  }));
+  router.use('/community/channels', collectionRoutes({ Model: Channel, resourceName: 'Channel', policyKey: 'community/channels', searchFields: ['name', 'category'], enablePopulate }));
+  router.use('/reports', collectionRoutes({ Model: Report, resourceName: 'Report', policyKey: 'reports', searchFields: ['reason', 'details'], enablePopulate }));
+  router.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'], enablePopulate }));
+  router.use('/grants', collectionRoutes({ Model: Grant, resourceName: 'Grant', policyKey: 'grants', searchFields: ['title', 'sector'], enablePopulate }));
+  router.use('/articles', collectionRoutes({ Model: Article, resourceName: 'Article', policyKey: 'articles', searchFields: ['title', 'category'], enablePopulate }));
+  router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate }));
+  router.use('/verification/companies', collectionRoutes({ Model: CompanyVerification, resourceName: 'Company verification', policyKey: 'verification/companies', searchFields: ['name', 'industry'], ownerField: 'hirerId', enablePopulate }));
+
+  // Search routes (must be registered BEFORE collection routes to avoid /:id swallowing them)
+  router.get('/candidates/search', searchLimiter, ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
+    const { skills, university, country, q } = req.query;
+    const filter = {};
+
+    const query = searchPattern(q);
+    if (query) filter.$or = [{ name: query }, { profession: query }];
+    const location = searchPattern(country);
+    if (location) filter.location = location;
+    const school = searchPattern(university);
+    if (school) filter.university = school;
+    const skillMatch = searchAlternation(skills);
+    if (skillMatch) filter.skills = skillMatch;
+
+    const data = await Candidate.find(filter).sort({ createdAt: -1 });
+    listResponse(res, data.map(withParsedCandidate));
+  }));
+
+  // Special nested routes
+  router.post('/opportunities/:opportunityId/applicants', ...guard('applicants', 'create', 'applicant'), asyncHandler(async (req, res) => {
+    const applicant = new Applicant(
+      stringifyArrayFields(buildCreatePayload(RESOURCE_POLICIES.applicants, req.body), ['skills']),
+    );
+    applicant.set('opportunityId', req.params.opportunityId);
+    await applicant.save();
+    await Opportunity.findByIdAndUpdate(req.params.opportunityId, { $inc: { applicantsCount: 1 } });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.CREATE,
+      resourceType: AUDIT_RESOURCE_TYPES.APPLICANT,
+      resourceId: applicant._id,
+      outcome: 'success',
+    });
+
+    res.status(201).json({ data: toClientObject(applicant) });
+  }));
+
+  router.get('/opportunities/:opportunityId/applicants', ...guard('applicants', 'read', 'applicant'), asyncHandler(async (req, res) => {
+    const { page, limit, skip } = parsePagination(req.query);
+    const filter = { opportunityId: req.params.opportunityId };
+    const [data, total] = await Promise.all([
+      Applicant.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Applicant.countDocuments(filter),
+    ]);
+    listResponse(res, data.map(toClientObject), total, page, limit);
+  }));
+
+  router.post('/grants/:grantId/applications', ...guard('grant-applications', 'create', 'grantApplication'), asyncHandler(async (req, res) => {
+    const application = new GrantApplication(buildCreatePayload(RESOURCE_POLICIES['grant-applications'], req.body));
+    application.set('grantId', req.params.grantId);
+    await application.save();
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.CREATE,
+      resourceType: AUDIT_RESOURCE_TYPES.GRANT_APPLICATION,
+      resourceId: application._id,
+      outcome: 'success',
+    });
+    res.status(201).json({ data: toClientObject(application) });
+  }));
+
+  router.get('/grants/:grantId/applications', ...guard('grant-applications', 'read', 'grantApplication'), asyncHandler(async (req, res) => {
+    const { page, limit, skip } = parsePagination(req.query);
+    const filter = { grantId: req.params.grantId };
+    const [data, total] = await Promise.all([
+      GrantApplication.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      GrantApplication.countDocuments(filter),
+    ]);
+    listResponse(res, data.map(toClientObject), total, page, limit);
+  }));
+
+  router.post('/verification/companies/:companyId/documents', ...guard('verification/documents', 'create', 'document'), asyncHandler(async (req, res) => {
+    const doc = new VerificationDoc(buildCreatePayload(RESOURCE_POLICIES['verification/documents'], req.body));
+    doc.set('companyId', req.params.companyId);
+    await doc.save();
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.CREATE,
+      resourceType: AUDIT_RESOURCE_TYPES.VERIFICATION_DOC,
+      resourceId: doc._id,
+      outcome: 'success',
+    });
+    res.status(201).json({ data: toClientObject(doc) });
+  }));
+
+  router.get('/verification/companies/:companyId/documents', ...guard('verification/documents', 'read', 'document'), asyncHandler(async (req, res) => {
+    const docs = await VerificationDoc.find({ companyId: req.params.companyId }).sort({ createdAt: -1 });
+    listResponse(res, docs.map(toClientObject));
+  }));
+
+  // Provide basic CRUD for these nested resources so they can be read, updated, or deleted directly by ID
+  router.use('/applicants', collectionRoutes({ Model: Applicant, resourceName: 'Applicant', policyKey: 'applicants', enablePopulate }));
+  router.use('/grant-applications', collectionRoutes({ Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications', enablePopulate }));
+  router.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents', enablePopulate }));
+  router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', enablePopulate }));
+
+  // Dashboard summary (admin only)
+  router.get('/dashboard/summary', requireAdminAuth, asyncHandler(async (req, res) => {
+    const [
+      usersCount,
+      seekersCount,
+      hirersCount,
+      opportunitiesCount,
+      applicationsCount,
+      eventsCount,
+      grantsCount,
+      grantApplicationsCount,
+    ] = await Promise.all([
+      User.countDocuments(),
+      SeekerProfile.countDocuments(),
+      HirerAccount.countDocuments(),
+      Opportunity.countDocuments(),
+      Applicant.countDocuments(),
+      Event.countDocuments(),
+      Grant.countDocuments(),
+      GrantApplication.countDocuments(),
+    ]);
+
+    itemResponse(res, {
+      users: usersCount,
+      seekers: seekersCount,
+      hirers: hirersCount,
+      opportunities: opportunitiesCount,
+      applications: applicationsCount,
+      events: eventsCount,
+      grants: grantsCount,
+      grantApplications: grantApplicationsCount,
+    });
+  }));
+
+  // Saved items (private to owner)
+  router.post('/users/me/saved', ...guard('saved-items', 'create', 'savedItem'), asyncHandler(async (req, res) => {
+    const { SavedItem } = await import('../models/User.js');
+    const { itemId, itemType } = req.body;
+    if (!itemId || !['opportunities', 'events', 'grants', 'internships'].includes(itemType)) {
+      throw new ApiError(400, 'A valid itemId and itemType are required');
+    }
+    const userId = req.auth.sub;
+    const existing = await SavedItem.findOne({ userId, itemId, itemType });
+    if (existing) {
+      await existing.deleteOne();
+
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.SAVED_ITEM_TOGGLE,
+        resourceType: AUDIT_RESOURCE_TYPES.SAVED_ITEM,
+        resourceId: existing._id,
+        outcome: 'success',
+        metadata: { action: 'removed', itemId, itemType },
+      });
+
+      res.json({ action: 'removed' });
+    } else {
+      const newItem = new SavedItem({ userId, itemId, itemType });
+      await newItem.save();
+
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.SAVED_ITEM_TOGGLE,
+        resourceType: AUDIT_RESOURCE_TYPES.SAVED_ITEM,
+        resourceId: newItem._id,
+        outcome: 'success',
+        metadata: { action: 'added', itemId, itemType },
+      });
+
+      res.status(201).json({ action: 'added', data: toClientObject(newItem) });
+    }
+  }));
+
+  router.get('/users/me/saved', ...guard('saved-items', 'read', 'savedItem'), asyncHandler(async (req, res) => {
+    const { SavedItem } = await import('../models/User.js');
+    const savedItems = await SavedItem.find({ userId: req.auth.sub }).sort({ createdAt: -1 });
+    listResponse(res, savedItems.map(toClientObject));
+  }));
+
+  // Event attendees
+  router.post('/events/:eventId/attendees', ...guard('event-attendees', 'create', 'booking'), asyncHandler(async (req, res) => {
+    const body = writableBody('event-attendees', req);
+    const quantity = Math.min(Math.max(Number.parseInt(body.quantity, 10) || 1, 1), 10);
+    const attendee = new EventAttendee({ ...body, quantity });
+    attendee.set('eventId', req.params.eventId);
+    await attendee.save();
+    await Event.findByIdAndUpdate(req.params.eventId, { $inc: { attendeesCount: quantity } });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.EVENT_BOOK,
+      resourceType: AUDIT_RESOURCE_TYPES.EVENT_ATTENDEE,
+      resourceId: attendee._id,
+      outcome: 'success',
+      metadata: { eventId: req.params.eventId, quantity },
+    });
+
+    res.status(201).json({ data: toClientObject(attendee) });
+  }));
+
+  router.get('/events/:eventId/attendees', ...guard('event-attendees', 'read', 'attendee'), asyncHandler(async (req, res) => {
+    const attendees = await EventAttendee.find({ eventId: req.params.eventId }).sort({ createdAt: -1 });
+    listResponse(res, attendees.map(toClientObject));
+  }));
+
+  // Health check endpoint
+  router.get('/health', (req, res) => {
+    const dbStatus = mongoose.connection.readyState;
+    const statusMap = {
+      0: 'disconnected',
+      1: 'connected',
+      2: 'connecting',
+      3: 'disconnecting',
+    };
+
+    const isHealthy = dbStatus === 1;
+
+    res.status(isHealthy ? 200 : 503).json({
+      status: isHealthy ? 'ok' : 'error',
+      service: 'kredibble-backend',
+      database: {
+        status: statusMap[dbStatus] || 'unknown',
+        connected: isHealthy,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  return router;
+};
 
 
