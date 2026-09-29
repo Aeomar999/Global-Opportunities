@@ -7,16 +7,19 @@ import logger from './logger.js';
 const isProduction = env.isProduction;
 
 let redisClient = null;
-let redisDegraded = false;
+let hasWarnedAboutMissingRedis = false;
 
 /**
  * In-process fallback counters, used only when Redis is configured but
  * unreachable. Keeps the API serving instead of 500-ing every request while
  * still applying *some* limit, and logs loudly so the outage is visible.
+ *
+ * Keys are the fully-prefixed Redis keys (`rl:<limiter>:<clientKey>`), so a
+ * single shared map stays correctly namespaced per limiter and per client.
  */
 const fallbackCounters = new Map();
 
-function sweepFallbackCounters(windowMs) {
+function sweepFallbackCounters() {
   const now = Date.now();
   for (const [key, entry] of fallbackCounters) {
     if (entry.resetTime <= now) fallbackCounters.delete(key);
@@ -28,45 +31,99 @@ function incrementFallback(key, windowMs) {
   const entry = fallbackCounters.get(key);
   if (!entry || entry.resetTime <= now) {
     fallbackCounters.set(key, { count: 1, resetTime: now + windowMs });
-    return 1;
+    return { count: 1, timeToExpire: windowMs };
   }
   entry.count += 1;
-  return entry.count;
+  return { count: entry.count, timeToExpire: entry.resetTime - now };
 }
 
-function getFallbackStore(windowMs) {
+function decrementFallback(key) {
+  const entry = fallbackCounters.get(key);
+  if (entry) entry.count = Math.max(0, entry.count - 1);
+}
+
+/**
+ * Emulate the Redis verbs rate-limit-redis issues, in process.
+ *
+ * `sendCommand` must reply in the raw Redis shape the library expects, and each
+ * verb has different semantics, so the degraded path has to dispatch on the
+ * verb rather than treating every command as an increment:
+ *
+ *   SCRIPT LOAD  -> the script sha (a string)
+ *   EVALSHA       -> [totalHits, timeToExpire]
+ *   DECR          -> decrement, used to refund a hit
+ *   DEL           -> forget the key, used to reset a limiter
+ *
+ * Routing DECR/DEL through the increment path would make a rate limit reset
+ * *raise* the counter, which locks a legitimate client out of the endpoint.
+ */
+function createFallbackCounter(windowMs) {
   return {
-    async increment(key) {
-      if (fallbackCounters.size > 10_000) sweepFallbackCounters(windowMs);
-      return incrementFallback(key, windowMs);
-    },
-    async decrement() {},
-    async resetKey(key) {
-      fallbackCounters.delete(key);
-    },
-    async resetAll() {
-      fallbackCounters.clear();
+    async run(command, key) {
+      if (command === 'SCRIPT') return 'in-process-fallback';
+      if (command === 'DECR') {
+        decrementFallback(key);
+        return 1;
+      }
+      if (command === 'DEL') {
+        fallbackCounters.delete(key);
+        return 1;
+      }
+      if (fallbackCounters.size > 10_000) sweepFallbackCounters();
+      const { count, timeToExpire } = incrementFallback(key, windowMs);
+      return [count, timeToExpire];
     },
   };
+}
+
+/**
+ * Extract the Redis key a command operates on.
+ *
+ * `rate-limit-redis` spreads its command array into `sendCommand`, so the
+ * arguments depend on the command verb:
+ *
+ *   SCRIPT LOAD <body>                              -> no key
+ *   EVALSHA <sha> <numkeys> <key> [args...]          -> key is args[3]
+ *   DECR <key> / DEL <key>                           -> key is args[1]
+ *
+ * Getting this wrong is not cosmetic: returning the script SHA instead of the
+ * client key would funnel every client in the process into one shared counter
+ * and turn a per-IP limit into a global one.
+ *
+ * Exported for unit testing.
+ */
+export function extractRedisKey(args) {
+  if (!Array.isArray(args) || args.length === 0) return '';
+
+  const command = String(args[0] ?? '').toUpperCase();
+
+  if (command === 'SCRIPT') return '';
+  if (command === 'EVAL' || command === 'EVALSHA' || command === 'EVAL_RO') {
+    const numKeys = Number(args[2]);
+    return Number.isFinite(numKeys) && numKeys > 0 ? String(args[3] ?? '') : '';
+  }
+  return args.length > 1 ? String(args[1] ?? '') : '';
 }
 
 /**
  * Shared Redis connection used by every limiter.
  *
  * Returns null when Redis is not configured, which leaves the limiters on the
- * default in-memory store. In production that is a real weakness (counters are
- * per-instance), so it is logged as a warning rather than silently accepted.
+ * default in-memory store. Redis is used whenever REDIS_URL is set so the path
+ * is exercisable outside production; in production its absence is a real
+ * weakness (counters are per-instance), so it is logged as an error rather
+ * than silently accepted.
  */
 function getRedisClient() {
-  if (!isProduction) return null;
-  if (redisDegraded) return null;
   if (redisClient) return redisClient;
 
   if (!env.redisUrl) {
-    redisDegraded = true;
-    logger.warn(
-      'REDIS_URL is not set. Rate limit counters are per-process and will NOT hold across multiple instances. Set REDIS_URL in production.',
-    );
+    if (isProduction && !hasWarnedAboutMissingRedis) {
+      hasWarnedAboutMissingRedis = true;
+      logger.error(
+        'REDIS_URL is not set. Rate limit counters are per-process and will NOT hold across multiple instances. Set REDIS_URL in production.',
+      );
+    }
     return null;
   }
 
@@ -82,6 +139,47 @@ function getRedisClient() {
 
   redisClient = client;
   return redisClient;
+}
+
+/**
+ * Build a RedisStore whose commands degrade to bounded in-process counters if
+ * the Redis call throws.
+ *
+ * Exported so the sendCommand contract can be unit tested with a stub client.
+ * The previous version validated the reply shape to detect misbehaviour, which
+ * was wrong: a healthy EVALSHA reply *is* an array, so that check permanently
+ * degraded a working limiter after its first request.
+ */
+export function createRedisStoreWithFallback({ client, prefix, windowMs }) {
+  const fallback = createFallbackCounter(windowMs);
+  let degradedForThisLimiter = false;
+
+  return new RedisStore({
+    prefix: `rl:${prefix}:`,
+    windowMs,
+    sendCommand: async (...args) => {
+      const runFallback = () =>
+        fallback.run(String(args[0] ?? '').toUpperCase(), extractRedisKey(args));
+
+      if (degradedForThisLimiter) return runFallback();
+      try {
+        // rate-limit-redis already validates and throws on a malformed reply,
+        // so a throw is the only real failure signal. Inspecting the result
+        // shape here would treat the normal [totalHits, timeToExpire] array as
+        // an error and silently kill the shared store.
+        return await client.call(...args);
+      } catch (error) {
+        if (!degradedForThisLimiter) {
+          degradedForThisLimiter = true;
+          logger.error(
+            { error: error.message },
+            'Redis rate limit command failed; falling back to in-process counters for this limiter. Limits are per-process until this process restarts.',
+          );
+        }
+        return runFallback();
+      }
+    },
+  });
 }
 
 /**
@@ -104,32 +202,7 @@ function createRateLimiter({ prefix, windowMs, limit, message, keyGenerator, ski
   };
 
   if (client) {
-    const fallback = getFallbackStore(windowMs);
-    let degradedForThisLimiter = false;
-
-    options.store = new RedisStore({
-      prefix: `rl:${prefix}:`,
-      sendCommand: async (...args) => {
-        if (degradedForThisLimiter) return fallback.increment(args[1], windowMs);
-        try {
-          const result = await client.call(...args);
-          if (Array.isArray(result) && result[0] !== null) {
-            degradedForThisLimiter = true;
-            logger.error('Redis returned an unexpected rate-limit command result; falling back to in-process counters for this limiter.');
-          }
-          return result;
-        } catch (error) {
-          if (!degradedForThisLimiter) {
-            degradedForThisLimiter = true;
-            logger.error(
-              { error: error.message },
-              'Redis rate limit command failed; falling back to in-process counters for this limiter.',
-            );
-          }
-          return fallback.increment(args[1], windowMs);
-        }
-      },
-    });
+    options.store = createRedisStoreWithFallback({ client, prefix, windowMs });
   }
 
   return rateLimit(options);
