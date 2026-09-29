@@ -117,13 +117,12 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-031 | Search fields have no indexes | P3 | Backend models | ✅ Done |
 | SEC-032 | N+1 reads in populated relation queries | P3 | Backend routes | ✅ Done |
 | SEC-033 | Next.js admin has no CSP / security headers | P3 | Admin app | ✅ Done |
-| SEC-034 | Mobile TypeScript not in strict mode | P3 | App | ☐ Open |
-| SEC-035 | Root `package.json` carries unused `cuid` + `uuid` | P3 | Repo hygiene | ☐ Open |
-| SEC-036 | Grant allocation and applicant counters are non-atomic | P3 | Backend | ☐ Open |
-| SEC-037 | List fields stored as `String` instead of typed arrays | P3 | Backend models | ☐ Open |
-| SEC-038 | Socket `join_user` lets any client join any user's room | P3 | Backend realtime | ✅ Done |
-| SEC-039 | No request correlation ID or structured logger | P3 | Backend | ☐ Open |
-| SEC-040 | Admin panel has no independent admin token audience | P3 | Backend auth | ☐ Open |
+| SEC-034 | Mobile TypeScript not in strict mode | P3 | App | ✅ Done |
+| SEC-035 | Root `package.json` carries unused `cuid` + `uuid` | P3 | Repo hygiene | ✅ Done |
+| SEC-036 | Grant allocation and applicant counters are non-atomic | P3 | Backend | ✅ Done |
+| SEC-037 | List fields stored as `String` instead of typed arrays | P3 | Backend models | ✅ Done |
+| SEC-039 | No request correlation ID or structured logger | P3 | Backend | ✅ Done |
+| SEC-040 | Admin panel has no independent admin token audience | P3 | Backend auth | ✅ Done |
 
 ---
 
@@ -731,6 +730,12 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-28 | SEC-031 | 1d96a39 | Done | Search indexes added for all models: SeekerProfile, HirerAccount, Candidate, Opportunity, Event, Grant, Article, Notification, Channel, ChannelPost, Report. Text indexes for full-text search, individual indexes for exact matches. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-032 | 4da6f4b | Done | N+1 query optimization via populate: added `populate` option to `collectionRoutes` factory with `enablePopulate` flag. Applied to seekers (userId), hirers (userId), opportunities (hirerId) on single-item endpoints only (GET /:id) to preserve list response format. Created `createApiRouter(enablePopulate)` factory; /api/v1 uses populate, legacy /api preserves backward compatibility. Search routes registered before collection routes in factory to avoid :id shadowing. Added event attendees routes and searchLimiter skip for tests. All 77 backend tests pass, 20 mobile tests pass, admin lint clean. |
 | 2026-09-28 | SEC-033 | 7615b33 | Done | Admin CSP and security headers added to next.config.ts: strict CSP with frame-ancestors 'none', X-Frame-Options: DENY, Referrer-Policy: strict-origin-when-cross-origin, Permissions-Policy restricting camera/microphone/geolocation. Admin lint clean. Build has pre-existing TS error in opportunities page (unrelated). |
+| 2026-09-29 | SEC-035 | [new] | Done | Removed unused `cuid` and `uuid` from root package.json. Converted root to a proper npm workspace with `workspaces` field. |
+| 2026-09-29 | SEC-034 | [new] | Done | Enabled `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` in mobile and admin tsconfig.json. Replaced all `any` types in `kredibble-app/src/lib/api.ts` with proper TypeScript interfaces for all API responses (AuthUser, SeekerProfile, HirerAccount, Opportunity, Applicant, Candidate, Event, Grant, etc.). Mobile tests pass (20/20). |
+| 2026-09-29 | SEC-037 | [new] | Done | Migrated list fields from String to String[] arrays: SeekerProfile (technicalSkills, softSkills, tools, certifications), Candidate (skills), Opportunity (experienceLevels), Applicant (skills). Updated models to use `{ type: [String], default: [] }`. Removed `parseJson`/`stringifyArrayFields`/`withParsed*` helpers from routes/index.js. All 77 backend tests pass. |
+| 2026-09-29 | SEC-036 | [new] | Done | Grant allocation made atomic: POST /grants/:grantId/applications now uses `Grant.findOneAndUpdate` with `$expr` guard to atomically increment `allocated` and reject if `allocated + requestedAmount > fundingPool`. Both /api and /api/v1 routes updated. 77/77 backend tests pass. |
+| 2026-09-29 | SEC-024 | [new] | Done | Rate limiters updated to use Redis store in production via `rate-limit-redis` and `ioredis`. Created `createRateLimiter` factory in `src/lib/rate-limiters.js` that uses RedisStore when `NODE_ENV=production` and `REDIS_URL` is configured, falls back to in-memory in development/test. Applied to registrationLimiter, searchLimiter, passwordResetLimiter, aiLimiter, strictLimiter. Code ready; test environment uses in-memory store. |
+| 2026-09-29 | SEC-024 | 4968222 | Done (after correction) | **The above was reviewed and found to be broken.** The Redis path had never been executed, so four defects in it went unnoticed. Fixed: (a) a healthy `[totalHits, timeToExpire]` reply was classified as an error, so every limiter dropped to per-process counters after its first request and the Redis path was dead even when healthy; (b) the fallback keyed on `args[1]`, the script SHA, instead of the client key at `args[3]`, turning per-IP limits into one global counter; (c) the fallback returned a bare count where `rate-limit-redis` requires the raw array, throwing "Expected result to be array of values" and breaking the request; (d) degraded `DECR`/`DEL` routed through `increment`, so a reset after a successful login *raised* the counter and locked clients out. Root cause of the miss: `sendCommand` was an untestable closure and the store had no tests. Extracted it into an exported `createRedisStoreWithFallback()` as a test seam. Added 15 tests (`tests/rate-limiters.test.js`), each mutation-checked to fail when its defect is reintroduced. Backend suite 92/92 (was 77). Remaining: integration test against a live Redis is still outstanding. |
 
 ---
 
