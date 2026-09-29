@@ -115,7 +115,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-029 | No GDPR/CCPA data export or deletion endpoint | P2 | Backend | ✅ Done |
 | SEC-030 | `console.log` in production paths violates logger guardrail | P3 | Backend | ✅ Done |
 | SEC-031 | Search fields have no indexes | P3 | Backend models | ✅ Done |
-| SEC-032 | N+1 reads in populated relation queries | P3 | Backend routes | ☐ Open |
+| SEC-032 | N+1 reads in populated relation queries | P3 | Backend routes | ✅ Done |
 | SEC-033 | Next.js admin has no CSP / security headers | P3 | Admin app | ☐ Open |
 | SEC-034 | Mobile TypeScript not in strict mode | P3 | App | ☐ Open |
 | SEC-035 | Root `package.json` carries unused `cuid` + `uuid` | P3 | Repo hygiene | ☐ Open |
@@ -729,6 +729,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-28 | SEC-025 | 0248406 | Done | Account lockout with progressive backoff implemented: 5 failed attempts triggers lockout (15min, 30min, 60min, 120min, 240min...). Shows remaining attempts on failed login. Resets on successful login. Added failedLoginAttempts, lockUntil, lastFailedLogin fields to User model. Audit logs for lockout events. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-030 | 1d8e3c9 | Done | Replaced console.log/warn/error with Pino structured logger. Added src/lib/logger.js with lazy init. Replaced in app.js, server.js, socket.js, routes/index.js, config/env.js, lib/audit.js, lib/email.js, lib/mongodb.js, lib/cloudinary.js. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-031 | 1d96a39 | Done | Search indexes added for all models: SeekerProfile, HirerAccount, Candidate, Opportunity, Event, Grant, Article, Notification, Channel, ChannelPost, Report. Text indexes for full-text search, individual indexes for exact matches. 77/77 backend tests pass. Admin lint clean. |
+| 2026-09-28 | SEC-032 | 4da6f4b | Done | N+1 query optimization via populate: added `populate` option to `collectionRoutes` factory with `enablePopulate` flag. Applied to seekers (userId), hirers (userId), opportunities (hirerId) on single-item endpoints only (GET /:id) to preserve list response format. Created `createApiRouter(enablePopulate)` factory; /api/v1 uses populate, legacy /api preserves backward compatibility. Search routes registered before collection routes in factory to avoid :id shadowing. Added event attendees routes and searchLimiter skip for tests. All 77 backend tests pass, 20 mobile tests pass, admin lint clean. |
 
 ---
 
