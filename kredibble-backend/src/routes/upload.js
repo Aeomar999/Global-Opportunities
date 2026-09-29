@@ -3,7 +3,7 @@ import multer from 'multer';
 import { fileTypeFromBuffer } from 'file-type';
 import { uploadBufferToCloudinary } from '../lib/cloudinary.js';
 import { requireAuth } from '../middleware/auth.js';
-import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
+import { uploadLimiter as uploadRateLimiter } from '../lib/rate-limiters.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
 
 export const uploadRouter = Router();
@@ -43,16 +43,9 @@ const UPLOAD_PURPOSE = {
 
 const UPLOAD_PURPOSE_VALUES = Object.values(UPLOAD_PURPOSE);
 
-// SEC-013 + SEC-024: Per-user upload rate limit (20/hour)
-const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 20,
-  message: { error: { message: 'Too many uploads, please try again later' } },
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  keyGenerator: (req) => req.auth?.sub || ipKeyGenerator(req, { ipv6Subnet: 56 }),
-  skip: () => process.env.NODE_ENV === 'test',
-});
+// SEC-013 + SEC-024: Per-user upload rate limit (20/hour), shared via the
+// Redis-backed factory in production.
+const uploadLimiter = uploadRateLimiter;
 
 uploadRouter.use(requireAuth);
 uploadRouter.use(uploadLimiter);

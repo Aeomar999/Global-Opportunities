@@ -3,13 +3,13 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { connectToDatabase } from './lib/mongodb.js';
 import { createApiRouter } from './routes/index.js';
 import { isAllowedOrigin } from './lib/cors.js';
+import { globalApiLimiter } from './lib/rate-limiters.js';
 import { ApiError } from './utils/http.js';
 import { auditContext } from './lib/audit.js';
 import logger from './lib/logger.js';
@@ -17,6 +17,7 @@ import logger from './lib/logger.js';
 const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
 
 const app = express();
+const isTest = env.isTest;
 
 // 1. Basic security and CORS (Must be at the top)
 app.use(helmet());
@@ -35,16 +36,11 @@ app.use(
 
 app.use(cookieParser());
 
-// SEC-024: global API rate limiter (100 req / 15 min). Disabled in test to avoid
-// polluting the route-manifest sweep and other enumeration tests.
-const isTest = process.env.NODE_ENV === 'test';
+// SEC-024: global API rate limiter (100 req / 15 min). Routed through the shared
+// factory so the counter lives in Redis in production and holds across replicas.
+// Skipped entirely in test to avoid polluting the route-manifest sweep.
 if (!isTest) {
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: { error: { message: 'Too many requests, please try again later.' } },
-  });
-  app.use('/api', limiter);
+  app.use('/api', globalApiLimiter);
 }
 
 

@@ -48,6 +48,10 @@ const env = {
   port: Number(process.env.PORT || 4000),
   corsOrigins: parseOrigins(process.env.CORS_ORIGIN),
   databaseUrl: process.env.DATABASE_URL || process.env.MONGODB_URI || process.env.MONGO_URI,
+  // Shared counter store for rate limiting. Required in production for the
+  // limiters to hold across replicas; when absent the limiters degrade to
+  // per-process memory and rate-limit.js warns once at first use.
+  redisUrl: process.env.REDIS_URL || null,
   get jwtSecret() {
     return this._jwtSecret ??= resolveSecret('JWT_SECRET');
   },

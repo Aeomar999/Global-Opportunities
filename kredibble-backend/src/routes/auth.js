@@ -1,6 +1,5 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
 import { requireAuth, requireAdminAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken, hashRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema } from '../schemas/auth.js';
@@ -14,19 +13,14 @@ import { SavedItem } from '../models/User.js';
 import { createVerificationCode, hashVerificationCode, sendVerificationEmail } from '../lib/email.js';
 import { env } from '../config/env.js';
 import { auditLog, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
-import { registrationLimiter, passwordResetLimiter } from '../lib/rate-limiters.js';
+import { registrationLimiter, passwordResetLimiter, authLimiter } from '../lib/rate-limiters.js';
 
 export const authRouter = Router();
 
 const isTest = process.env.NODE_ENV === 'test';
 if (!isTest) {
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 20,
-    message: { error: { message: 'Too many requests from this IP, please try again after 15 minutes' } },
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-  });
+  // SEC-024: routed through the shared factory so the brute-force counter is
+  // shared across replicas in production, not per-process.
   authRouter.use(authLimiter);
 }
 
