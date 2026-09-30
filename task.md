@@ -123,6 +123,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-037 | List fields stored as `String` instead of typed arrays | P3 | Backend models | ✅ Done |
 | SEC-039 | No request correlation ID or structured logger | P3 | Backend | ✅ Done |
 | SEC-040 | Admin panel has no independent admin token audience | P3 | Backend auth | ✅ Done |
+| SEC-041 | AI assistant prompt injection — dormant route hardened | P2 | Backend AI | ✅ Done |
 
 ---
 
@@ -612,6 +613,7 @@ Add `GET /api/auth/me/export` (full JSON archive) and `DELETE /api/auth/me` (cas
 | SEC-038 | `socket.on('join_user', userId)` lets any client join any user's private room. Restrict to `socket.data.user.id`, and check channel membership before `join_channel`. | A client cannot subscribe to another user's private room |
 | SEC-039 | Add a request correlation ID (`crypto.randomUUID()`) propagated through responses (`X-Request-Id`) and the audit log, so a user-reported failure maps to server logs. | Every response carries `X-Request-Id`; logs are searchable by it |
 | SEC-040 | Issue admin tokens with a distinct audience claim signed by `ADMIN_JWT_SECRET`, and have `requireRole('admin')` require that audience — so a stolen user token cannot be replayed against the admin panel and vice versa. | ✅ Done |
+| SEC-041 | Harden dormant AI assistant endpoint against prompt injection: server-owned system prompt, Zod schema (roles, counts, sizes), auth-before-limiter ordering, 15 new regression tests. Route is dormant (unmounted) — hardening is defense-in-depth; original F-001 HIGH/CVSS 7.5 corrected to MEDIUM (latent). | ✅ Done |
 
 ---
 
@@ -736,6 +738,7 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 | 2026-09-29 | SEC-036 | [new] | Done | Grant allocation made atomic: POST /grants/:grantId/applications now uses `Grant.findOneAndUpdate` with `$expr` guard to atomically increment `allocated` and reject if `allocated + requestedAmount > fundingPool`. Both /api and /api/v1 routes updated. 77/77 backend tests pass. |
 | 2026-09-29 | SEC-024 | [new] | Done | Rate limiters updated to use Redis store in production via `rate-limit-redis` and `ioredis`. Created `createRateLimiter` factory in `src/lib/rate-limiters.js` that uses RedisStore when `NODE_ENV=production` and `REDIS_URL` is configured, falls back to in-memory in development/test. Applied to registrationLimiter, searchLimiter, passwordResetLimiter, aiLimiter, strictLimiter. Code ready; test environment uses in-memory store. |
 | 2026-09-29 | SEC-024 | 4968222 | Done (after correction) | **The above was reviewed and found to be broken.** The Redis path had never been executed, so four defects in it went unnoticed. Fixed: (a) a healthy `[totalHits, timeToExpire]` reply was classified as an error, so every limiter dropped to per-process counters after its first request and the Redis path was dead even when healthy; (b) the fallback keyed on `args[1]`, the script SHA, instead of the client key at `args[3]`, turning per-IP limits into one global counter; (c) the fallback returned a bare count where `rate-limit-redis` requires the raw array, throwing "Expected result to be array of values" and breaking the request; (d) degraded `DECR`/`DEL` routed through `increment`, so a reset after a successful login *raised* the counter and locked clients out. Root cause of the miss: `sendCommand` was an untestable closure and the store had no tests. Extracted it into an exported `createRedisStoreWithFallback()` as a test seam. Added 15 tests (`tests/rate-limiters.test.js`), each mutation-checked to fail when its defect is reintroduced. Backend suite 92/92 (was 77). Remaining: integration test against a live Redis is still outstanding. |
+| 2026-09-30 | SEC-041 | [new] | Done | AI assistant hardened: server-owned `ASSISTANT_SYSTEM_PROMPT` exported from `src/lib/ai.js`; `getAssistantReply` no longer accepts `systemPrompt`; both OpenAI `instructions` and Anthropic `system` hardcoded to server constant. `src/schemas/assistant.js` added with Zod schema: `user`/`assistant` roles only, 1–50 messages, 1–4000 chars/turn, 20k total, legacy `message` supported. Route middleware reordered to `requireAuth, aiLimiter, validate(assistantChatSchema)` — auth runs first so limiter keys on `req.auth.sub`. 15 new regression tests in `tests/assistant.test.js` (schema bounds, prompt ownership, legacy `message`, 400/401 validation, per-user limiter). Route is dormant (unmounted in `app.js`, no mobile/admin caller) — original F-001 HIGH/CVSS 7.5 corrected to MEDIUM (latent). Full backend suite 107/107 passes. |
 
 ---
 
