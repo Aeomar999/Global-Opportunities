@@ -13,6 +13,7 @@ import { ApiError } from './utils/http.js';
 const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
 
 const app = express();
+app.set('trust proxy', 1);
 
 const localDevOriginPattern =
   /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
@@ -22,11 +23,6 @@ const isAllowedOrigin = (origin) => {
   if (!origin) return true;
   if (env.corsOrigins.includes(origin)) return true;
   if (env.isDevelopment && localDevOriginPattern.test(origin)) return true;
-  if (origin.endsWith('.vercel.app') || origin.endsWith('.onrender.com')) return true;
-  // Allow Expo/React Native app origins (no CORS for native apps)
-  if (origin.startsWith('exp://') || origin.startsWith('kredibbleapp://')) return true;
-  // Allow native app requests (no origin header)
-  if (origin === 'null' || origin === 'file://') return true;
   return false;
 };
 
@@ -48,6 +44,8 @@ app.use(
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
   message: { error: { message: 'Too many requests, please try again later.' } }
 });
 app.use('/api', limiter);
@@ -59,7 +57,7 @@ app.use(async (req, res, next) => {
     await connectToDatabase();
     next();
   } catch (error) {
-    next(new ApiError(503, `Service Unavailable: Database connection failed. ${error.message}`));
+    next(new ApiError(503, 'Service unavailable'));
   }
 });
 
@@ -76,14 +74,12 @@ app.use((req, res, next) => {
 
 // 3. Routes
 app.get('/', (req, res) => {
-  res.json({ message: 'Kredibble API is running', env: env.nodeEnv });
+  res.json({ message: 'Kredibble API is running' });
 });
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+if (env.isDevelopment) app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.use('/api', apiRouter);
-// Fallback for calls missing the /api prefix
-app.use('/', apiRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found' } });

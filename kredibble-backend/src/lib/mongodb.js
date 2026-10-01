@@ -51,8 +51,9 @@ import {
   Opportunity, Applicant, Event, Grant,
   GrantApplication, CompanyVerification, VerificationDoc
 } from '../models/Platform.js';
-import { Channel, ChannelPost, Report } from '../models/Community.js';
+import { Channel, ChannelPost, CommunityMembership, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
+import { Program, Partner, Ambassador, AmbassadorAmplification, Beneficiary, SocialPost, OpportunityEngagement, MonthlyTarget, Testimonial, AdminActivity } from '../models/AdminPortal.js';
 
 export const models = {
   User,
@@ -71,5 +72,16 @@ export const models = {
   ChannelPost,
   Report,
   Article,
-  Notification
+  Notification,
+  CommunityMembership,
+  Program,
+  Partner,
+  Ambassador,
+  AmbassadorAmplification,
+  Beneficiary,
+  SocialPost,
+  OpportunityEngagement,
+  MonthlyTarget,
+  Testimonial,
+  AdminActivity,
 };

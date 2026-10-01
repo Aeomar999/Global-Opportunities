@@ -1,19 +1,18 @@
 import { z } from 'zod';
 
 const passwordSchema = z.string()
-  .min(6, 'Password must be at least 6 characters long');
-  // Loosened for development/easier onboarding
-  // .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-  // .regex(/[0-9]/, 'Password must contain at least one number')
-  // .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
+  .min(10, 'Password must be at least 10 characters long')
+  .regex(/[a-z]/, 'Password must contain a lowercase letter')
+  .regex(/[A-Z]/, 'Password must contain an uppercase letter')
+  .regex(/[0-9]/, 'Password must contain a number');
 
 export const registerSchema = z.object({
   body: z.object({
     name: z.string().min(2, 'Name is too short').max(50),
     email: z.string().email('Invalid email format'),
     password: passwordSchema,
-    role: z.enum(['seeker', 'hirer', 'admin'], {
-      errorMap: () => ({ message: 'Role must be seeker, hirer, or admin' }),
+    role: z.enum(['seeker', 'hirer'], {
+      errorMap: () => ({ message: 'Role must be seeker or hirer' }),
     }),
     // Seeker optional fields
     profession: z.string().optional(),

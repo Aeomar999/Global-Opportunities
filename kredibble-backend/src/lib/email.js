@@ -1,15 +1,16 @@
 import crypto from 'crypto';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/http.js';
+import { fetchWithTimeout } from './fetch.js';
 
 export const createVerificationCode = () => crypto.randomInt(100000, 1000000).toString();
-export const hashVerificationCode = (code) => crypto.createHash('sha256').update(code).digest('hex');
+export const hashVerificationCode = (code) => crypto.createHmac('sha256', env.jwtSecret).update(code).digest('hex');
 
 export const sendVerificationEmail = async (email, code) => {
   if (!env.resendApiKey || env.resendApiKey.includes('placeholder') || !env.resendFromEmail) {
     throw new ApiError(503, 'Resend is not configured');
   }
-  const response = await fetch('https://api.resend.com/emails', {
+  const response = await fetchWithTimeout('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.resendApiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -18,8 +19,8 @@ export const sendVerificationEmail = async (email, code) => {
       subject: 'Verify your Kredibble email',
       text: `Your Kredibble verification code is ${code}. It expires in ${env.emailVerificationCodeTtlMinutes} minutes.`,
     }),
-  });
-  const payload = await response.json();
+  }, 'Resend');
+  const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(502, payload.message || 'Resend could not send the verification email');
   return payload;
 };

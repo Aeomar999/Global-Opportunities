@@ -10,7 +10,6 @@
         "dev": "node --watch src/server.js",
         "start": "node src/server.js",
         "db:init": "node scripts/init-db.js",
-        "db:seed:test": "node scripts/seed-test-credentials.js",
         "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
     },
     "dependencies": {

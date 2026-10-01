@@ -8,10 +8,15 @@ export const uploadRouter = Router();
 
 // Configure multer to store files in memory
 const storage = multer.memoryStorage();
+const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 const upload = multer({
   storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter(req, file, callback) {
+    const allowed = allowedMimeTypes.has(file.mimetype);
+    callback(allowed ? null : new ApiError(400, 'Only JPEG, PNG, WebP, and PDF files are allowed'), allowed);
   },
 });
 
@@ -30,7 +35,9 @@ uploadRouter.post(
       throw new ApiError(400, 'No file uploaded');
     }
 
-    const folder = safeFolder(req.query.folder || req.body?.folder);
+  const requestedFolder = safeFolder(req.query.folder || req.body?.folder);
+  const allowedFolders = new Set(['avatars', 'documents', 'logos', 'resumes', 'testimonials']);
+  const folder = allowedFolders.has(requestedFolder) ? requestedFolder : 'documents';
 
     // Upload buffer to Cloudinary
     const result = await uploadBufferToCloudinary(req.file.buffer, folder);

@@ -34,7 +34,8 @@ authRouter.post(
   '/register',
   validate(registerSchema),
   asyncHandler(async (req, res) => {
-    const { name, email, password, role } = req.body;
+    const { name, password, role } = req.body;
+    const email = req.body.email.trim().toLowerCase();
 
     const existing = await User.findOne({ email });
     if (existing) throw new ApiError(409, 'User already exists');
@@ -81,7 +82,15 @@ authRouter.post(
       await hirer.save();
     }
 
-    res.status(201).json({ data: { user: publicUser(user), token: signToken(user) } });
+    const code = createVerificationCode();
+    await EmailVerificationCode.create({
+      email: user.email,
+      codeHash: hashVerificationCode(code),
+      expiresAt: new Date(Date.now() + env.emailVerificationCodeTtlMinutes * 60 * 1000),
+    });
+    await sendVerificationEmail(user.email, code);
+
+    res.status(201).json({ data: { user: publicUser(user), verificationRequired: true } });
   }),
 );
 
@@ -89,13 +98,15 @@ authRouter.post(
   '/login',
   validate(loginSchema),
   asyncHandler(async (req, res) => {
-    const { email, password } = req.body;
+    const password = req.body.password;
+    const email = req.body.email.trim().toLowerCase();
 
     const user = await User.findOne({ email });
     if (!user?.passwordHash) throw new ApiError(401, 'Invalid email or password');
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new ApiError(401, 'Invalid email or password');
+    if (!user.emailVerified) throw new ApiError(403, 'Verify your email address before signing in');
 
     // Mongoose handles population easily if defined, but for now manual fetch for exact structure
     let profile = null;
@@ -113,6 +124,12 @@ authRouter.post('/verification-code/send', asyncHandler(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new ApiError(400, 'A valid email is required');
 
+  const user = await User.findOne({ email });
+  if (!user || user.emailVerified) {
+    res.status(202).json({ data: { email, expiresInMinutes: env.emailVerificationCodeTtlMinutes } });
+    return;
+  }
+
   const code = createVerificationCode();
   await EmailVerificationCode.deleteMany({ email });
   await EmailVerificationCode.create({
@@ -128,10 +145,14 @@ authRouter.post('/verification-code/verify', asyncHandler(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const code = String(req.body.code || '');
   const record = await EmailVerificationCode.findOne({ email, expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 });
-  if (!record || record.codeHash !== hashVerificationCode(code)) throw new ApiError(400, 'Invalid or expired verification code');
-  await User.updateOne({ email }, { emailVerified: true });
+  if (!record || record.attempts >= 5 || record.codeHash !== hashVerificationCode(code)) {
+    if (record) await EmailVerificationCode.updateOne({ _id: record._id }, { $inc: { attempts: 1 } });
+    throw new ApiError(400, 'Invalid or expired verification code');
+  }
+  const user = await User.findOneAndUpdate({ email }, { emailVerified: true }, { new: true });
+  if (!user) throw new ApiError(400, 'Invalid or expired verification code');
   await EmailVerificationCode.deleteMany({ email });
-  itemResponse(res, { email, verified: true });
+  itemResponse(res, { email, verified: true, token: signToken(user), user: publicUser(user) });
 }));
 
 authRouter.get(

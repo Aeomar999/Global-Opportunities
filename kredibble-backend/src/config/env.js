@@ -25,6 +25,10 @@ export const env = {
   resendApiKey: process.env.RESEND_API_KEY,
   resendFromEmail: process.env.RESEND_FROM_EMAIL,
   emailVerificationCodeTtlMinutes: Number(process.env.EMAIL_VERIFICATION_CODE_TTL_MINUTES || 10),
+  outboundRequestTimeoutMs: Number(process.env.OUTBOUND_REQUEST_TIMEOUT_MS || 10000),
+  aiSystemPrompt: process.env.AI_SYSTEM_PROMPT || 'You are the Global Opportunities assistant. Give accurate, helpful opportunity guidance.',
+  wordpressSyncBaseUrl: process.env.WORDPRESS_SYNC_BASE_URL,
+  wordpressApiKey: process.env.WORDPRESS_API_KEY,
 };
 
 if (!env.isDevelopment) {
@@ -36,5 +40,21 @@ if (!env.isDevelopment) {
   }
   if (!env.databaseUrl) {
     throw new Error(`CRITICAL ERROR: databaseUrl is missing in production!`);
+  }
+  if (!env.corsOrigins.length || env.corsOrigins.some((origin) => origin.includes('localhost'))) {
+    throw new Error('CRITICAL ERROR: CORS_ORIGIN must contain only deployed application origins in production.');
+  }
+  if (!Number.isFinite(env.outboundRequestTimeoutMs) || env.outboundRequestTimeoutMs < 1000) {
+    throw new Error('CRITICAL ERROR: OUTBOUND_REQUEST_TIMEOUT_MS must be at least 1000.');
+  }
+  const providerKey = env.aiProvider === 'anthropic' ? env.anthropicApiKey : env.openaiApiKey;
+  if (!providerKey || providerKey.includes('placeholder')) {
+    throw new Error(`CRITICAL ERROR: the configured ${env.aiProvider} API key is missing.`);
+  }
+  if (!env.resendApiKey || env.resendApiKey.includes('placeholder') || !env.resendFromEmail) {
+    throw new Error('CRITICAL ERROR: Resend must be configured in production.');
+  }
+  if (Boolean(env.wordpressSyncBaseUrl) !== Boolean(env.wordpressApiKey)) {
+    throw new Error('CRITICAL ERROR: WORDPRESS_SYNC_BASE_URL and WORDPRESS_API_KEY must be configured together.');
   }
 }
