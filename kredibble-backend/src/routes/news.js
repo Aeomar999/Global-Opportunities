@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { env } from '../config/env.js';
 import { ApiError, asyncHandler, listResponse } from '../utils/http.js';
+import { fetchWithTimeout } from '../lib/fetch.js';
 
 export const newsRouter = Router();
 
@@ -19,7 +20,7 @@ const fetchPosts = async ([sourceKey, source], page, perPage) => {
   endpoint.searchParams.set('page', String(page));
   endpoint.searchParams.set('per_page', String(perPage));
   endpoint.searchParams.set('_embed', '1');
-  const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+  const response = await fetchWithTimeout(endpoint, { headers: { Accept: 'application/json' } }, source.name);
   if (!response.ok) throw new Error(`${source.name} returned ${response.status}`);
   const posts = await response.json();
   return posts.map((post) => ({
@@ -28,7 +29,7 @@ const fetchPosts = async ([sourceKey, source], page, perPage) => {
     sourceName: source.name,
     title: withoutHtml(post.title?.rendered),
     summary: withoutHtml(post.excerpt?.rendered),
-    content: post.content?.rendered || '',
+    content: withoutHtml(post.content?.rendered),
     publishedAt: post.date_gmt || post.date,
     url: post.link,
     imageUrl: post._embedded?.['wp:featuredmedia']?.[0]?.source_url || null,

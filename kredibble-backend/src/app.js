@@ -17,6 +17,8 @@ import logger from './lib/logger.js';
 const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
 
 const app = express();
+app.set('trust proxy', 1);
+
 const isTest = env.isTest;
 
 // 1. Basic security and CORS (Must be at the top)
@@ -70,7 +72,7 @@ app.use((req, res, next) => {
 
 // 3. Routes
 app.get('/', (req, res) => {
-  res.json({ message: 'Kredibble API is running', env: env.nodeEnv });
+  res.json({ message: 'Kredibble API is running' });
 });
 
 // SEC-014: Swagger only in non-production unless explicitly enabled
