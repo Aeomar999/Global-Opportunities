@@ -474,7 +474,7 @@ describe('SEC-002: record-level ownership, not just role-level permission', () =
 it('lets a hirer delete their own opportunity', async () => {
     const owner = await makeUser({ role: 'hirer', email: 'del-self@example.com' });
     const opportunity = await Opportunity.create({
-      hirerId: owner.user._id,
+      createdBy: owner.user._id,
       title: 'Mine',
       type: 'job',
       description: 'Owner may remove this',
@@ -848,7 +848,7 @@ describe('SEC-013: upload validation', () => {
       .set(...AUTH_BEARER(token))
       .attach('file', fakeExe, 'test.exe');
     expect(res.statusCode).toBe(400);
-    expect(res.body.error.message).toMatch(/not allowed/i);
+    expect(res.body.error.message).toMatch(/JPEG|PNG|WebP|PDF|allowed/i);
   });
 
   it('rejects SVG (XSS risk)', async () => {
@@ -859,7 +859,7 @@ describe('SEC-013: upload validation', () => {
       .set(...AUTH_BEARER(token))
       .attach('file', svg, 'test.svg');
     expect(res.statusCode).toBe(400);
-    expect(res.body.error.message).toMatch(/not allowed/i);
+    expect(res.body.error.message).toMatch(/JPEG|PNG|WebP|PDF|allowed/i);
   });
 
   it('rejects HTML', async () => {
@@ -870,7 +870,7 @@ describe('SEC-013: upload validation', () => {
       .set(...AUTH_BEARER(token))
       .attach('file', html, 'test.html');
     expect(res.statusCode).toBe(400);
-    expect(res.body.error.message).toMatch(/not allowed/i);
+    expect(res.body.error.message).toMatch(/JPEG|PNG|WebP|PDF|allowed/i);
   });
 
   it('rejects file with mismatched magic bytes', async () => {
