@@ -48,6 +48,10 @@ const env = {
   port: Number(process.env.PORT || 4000),
   corsOrigins: parseOrigins(process.env.CORS_ORIGIN),
   databaseUrl: process.env.DATABASE_URL || process.env.MONGODB_URI || process.env.MONGO_URI,
+  // Shared counter store for rate limiting. Required in production for the
+  // limiters to hold across replicas; when absent the limiters degrade to
+  // per-process memory and rate-limit.js warns once at first use.
+  redisUrl: process.env.REDIS_URL || null,
   get jwtSecret() {
     return this._jwtSecret ??= resolveSecret('JWT_SECRET');
   },
@@ -67,6 +71,10 @@ const env = {
   resendApiKey: process.env.RESEND_API_KEY,
   resendFromEmail: process.env.RESEND_FROM_EMAIL,
   emailVerificationCodeTtlMinutes: Number(process.env.EMAIL_VERIFICATION_CODE_TTL_MINUTES || 10),
+  outboundRequestTimeoutMs: Number(process.env.OUTBOUND_REQUEST_TIMEOUT_MS || 10000),
+  aiSystemPrompt: process.env.AI_SYSTEM_PROMPT || 'You are the Global Opportunities assistant. Give accurate, helpful opportunity guidance.',
+  wordpressSyncBaseUrl: process.env.WORDPRESS_SYNC_BASE_URL,
+  wordpressApiKey: process.env.WORDPRESS_API_KEY,
   // Internal secret storage (secure getter pattern)
   _jwtSecret: undefined,
   _adminJwtSecret: undefined,
@@ -81,6 +89,22 @@ if (isProduction) {
   }
   if (!env.databaseUrl) {
     throw new Error('CRITICAL ERROR: databaseUrl is missing in production!');
+  }
+  if (!env.corsOrigins.length || env.corsOrigins.some((origin) => origin.includes('localhost'))) {
+    throw new Error('CRITICAL ERROR: CORS_ORIGIN must contain only deployed application origins in production.');
+  }
+  if (!Number.isFinite(env.outboundRequestTimeoutMs) || env.outboundRequestTimeoutMs < 1000) {
+    throw new Error('CRITICAL ERROR: OUTBOUND_REQUEST_TIMEOUT_MS must be at least 1000.');
+  }
+  const providerKey = env.aiProvider === 'anthropic' ? env.anthropicApiKey : env.openaiApiKey;
+  if (!providerKey || providerKey.includes('placeholder')) {
+    throw new Error(`CRITICAL ERROR: the configured ${env.aiProvider} API key is missing.`);
+  }
+  if (!env.resendApiKey || env.resendApiKey.includes('placeholder') || !env.resendFromEmail) {
+    throw new Error('CRITICAL ERROR: Resend must be configured in production.');
+  }
+  if (Boolean(env.wordpressSyncBaseUrl) !== Boolean(env.wordpressApiKey)) {
+    throw new Error('CRITICAL ERROR: WORDPRESS_SYNC_BASE_URL and WORDPRESS_API_KEY must be configured together.');
   }
 }
 

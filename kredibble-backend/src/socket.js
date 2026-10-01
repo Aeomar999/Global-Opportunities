@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from './config/env.js';
 import { socketCorsOptions } from './lib/cors.js';
+import { Channel, CommunityMembership } from './models/Community.js';
 import logger from './lib/logger.js';
 
 let io;
@@ -18,6 +19,12 @@ const extractToken = (socket) => {
   const header = socket.handshake?.headers?.authorization;
   if (typeof header === 'string' && header.startsWith('Bearer ')) return header.slice(7);
   return null;
+};
+
+const canAccessChannel = async (channel, user) => {
+  if (channel.visibility === 'public' || user.role === 'admin' || String(channel.createdBy) === String(user.sub)) return true;
+  const membership = await CommunityMembership.findOne({ channelId: channel._id, userId: user.sub, status: 'active' });
+  return Boolean(membership || channel.memberIds.some((id) => String(id) === String(user.sub)));
 };
 
 export const initSocket = (server) => {
@@ -60,13 +67,22 @@ export const initSocket = (server) => {
       if (typeof ack === 'function') ack(true);
     });
 
-    // Chat channels. Membership is not modelled in the database yet, so any
-    // authenticated user may join, matching the authenticated read policy on
-    // GET /api/community/channels/:channelId/posts.
-    socket.on('join_channel', (channelId, ack) => {
-      socket.join(`channel_${channelId}`);
-      logger.info({ socketId: socket.id, channelId }, 'Socket joined channel');
-      if (typeof ack === 'function') ack(true);
+    // Chat channels. Membership is verified against the database.
+    socket.on('join_channel', async (channelId, ack) => {
+      try {
+        const channel = await Channel.findById(channelId);
+        if (!channel || !await canAccessChannel(channel, auth)) {
+          logger.warn({ socketId: socket.id, channelId, userId: auth.sub }, 'Socket denied join_channel');
+          if (typeof ack === 'function') ack({ ok: false, error: 'Channel access denied' });
+          return;
+        }
+        socket.join(`channel_${channel._id}`);
+        logger.info({ socketId: socket.id, channelId }, 'Socket joined channel');
+        if (typeof ack === 'function') ack({ ok: true });
+      } catch {
+        logger.warn({ socketId: socket.id, channelId }, 'Socket join_channel error');
+        if (typeof ack === 'function') ack({ ok: false, error: 'Channel access denied' });
+      }
     });
 
     socket.on('send_message', (data, ack) => {

@@ -15,9 +15,20 @@ const collectionNames = {
   VerificationDoc: 'verificationdocs',
   Channel: 'channels',
   ChannelPost: 'channelposts',
+  CommunityMembership: 'communitymemberships',
   Report: 'reports',
   Article: 'articles',
   Notification: 'notifications',
+  Program: 'programs',
+  Partner: 'partners',
+  Ambassador: 'ambassadors',
+  AmbassadorAmplification: 'ambassadoramplifications',
+  Beneficiary: 'beneficiaries',
+  SocialPost: 'socialposts',
+  OpportunityEngagement: 'opportunityengagements',
+  MonthlyTarget: 'monthlytargets',
+  Testimonial: 'testimonials',
+  AdminActivity: 'adminactivities',
 };
 
 async function initDatabase() {

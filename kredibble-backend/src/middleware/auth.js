@@ -85,6 +85,19 @@ export const requireAdminAuth = (req, res, next) => {
   }
 };
 
+export const optionalAuth = (req, res, next) => {
+  const header = req.get('authorization');
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return next();
+
+  try {
+    req.auth = jwt.verify(token, env.jwtSecret);
+    next();
+  } catch {
+    next(new ApiError(401, 'Authentication token is invalid or expired'));
+  }
+};
+
 export const requireRole = (...roles) => (req, res, next) => {
   if (!req.auth || !roles.includes(req.auth.role)) {
     return next(new ApiError(403, 'You do not have permission to perform this action'));

@@ -11,7 +11,6 @@ assistantRouter.post('/chat', aiLimiter, requireAuth, asyncHandler(async (req, r
   const reply = await getAssistantReply({
     provider: req.body.provider,
     messages,
-    systemPrompt: req.body.systemPrompt,
   });
   itemResponse(res, reply);
 }));

@@ -1,6 +1,12 @@
 {
-  "dependencies": {
-    "cuid": "^3.0.0",
-    "uuid": "^14.0.2"
+  "private": true,
+  "workspaces": [
+    "kredibble-backend",
+    "kredibble-app",
+    "kredibble-admin"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
   }
 }

@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 let mongoServer;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryServer.create({ instance: { launchTimeout: 30000 } });
   const uri = mongoServer.getUri();
   
   if (mongoose.connection.readyState !== 0) {
