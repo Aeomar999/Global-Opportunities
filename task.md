@@ -208,10 +208,10 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-058 | Verification documents scoped to owner (companyId) | P1 | Backend routes | ✅ Done |
 | SEC-059 | Event capacity unenforced; attendee emails exposed to hirers | P1 | Backend routes | ✅ Done |
 | SEC-060 | Grant allocation not implemented; applications carry no identity | P2 | Backend | Open — needs decision (Q4) |
-| SEC-061 | NoSQL operator injection via query params | P2 | Backend routes | Open |
-| SEC-062 | Email verification code: weak RNG, no attempt cap | P2 | Backend auth | Open |
-| SEC-063 | Authorization fails open for missing policy actions | P2 | Backend | Open |
-| SEC-064 | 5xx responses leak internal error messages | P2 | Backend app | Open |
+| SEC-061 | NoSQL operator injection via query params | P2 | Backend routes | ✅ Done |
+| SEC-062 | Email verification code: weak RNG, no attempt cap | P2 | Backend auth | ✅ Done |
+| SEC-063 | Authorization fails open for missing policy actions | P2 | Backend | ✅ Done |
+| SEC-064 | 5xx responses leak internal error messages | P2 | Backend app | ✅ Done |
 | SEC-065 | GDPR deletion incomplete (tombstone, media, owned content) | P1 | Backend | Open |
 | SEC-066 | Backend `package-lock.json` out of sync — `npm ci` fails | P0 | CI/CD | ✅ Done |
 | SEC-067 | Admin `next build` fails on type error | P0 | Admin / CI | ✅ Done |
@@ -1207,12 +1207,15 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 
 ### SEC-061 — NoSQL operator injection via query params
 `routes/index.js:183-189` puts `req.query.status`/`type` straight into the Mongo filter; `?status[$ne]=approved` gets through (probe: 200). Coerce scalar query params to strings (or `mongoose.set('sanitizeFilter', true)`) and validate list queries with Zod. **Done when:** object-valued query params → 400 (test).
+**Status:** ✅ Done. Object-valued query parameters in collection filters now throw 400.
 
 ### SEC-062 — Email verification code: weak RNG, no attempt cap
 `lib/email.js:11` generates codes with `Math.random()`. `EmailVerificationCode.attempts` is never incremented (`routes/auth.js:429-457`), so a 6-digit code can be brute-forced within its TTL; only the broken limiter stood in the way. Use `crypto.randomInt(0, 1_000_000)`, zero-padded; increment attempts atomically and invalidate the code after 5; rate-limit `/verification-code/verify` per email. `emailVerified` is never enforced anywhere, so decide which actions require it (Open Question 9). **Done when:** a 6th wrong code invalidates the code (test).
+**Status:** ✅ Done. verification codes now use crypto.randomInt, increment attempts atomically, invalidate after 5 attempts, and are rate limited.
 
 ### SEC-063 — Authorization fails open for missing policy actions
 `policies.js:291-295`: `allowedRoles` returns `AUTHENTICATED` when a policy or action is missing. `guard('saved-items', …)` has no policy entry and passes by default. Fail closed: throw at startup for unknown policy keys, deny missing actions, and add an explicit `saved-items` policy. **Done when:** a route that references an unknown policy fails the test suite.
+**Status:** ✅ Done. `guard` now throws on missing policy keys during route definition, missing actions fail closed returning empty allowed roles, and `saved-items` explicitly added.
 
 ### SEC-064 — 5xx responses leak internal messages
 The `app.js` error handler sends `err.message` for every status, e.g. `logger is not defined` or crypto TypeErrors. The DB-connection middleware in `app.js` returns `Database connection failed. ${error.message}`, which can include hostnames. For status ≥ 500, return a generic message plus the `X-Request-Id` and log the details server-side. Reduce Mongoose cast/validation details to field names in production. **Done when:** a forced 500 in production mode returns no internal text (test).
