@@ -97,7 +97,11 @@ const AvatarStack = () => (
 
 type Grant = (typeof GRANTS_DATA)[number];
 
-const StatusBadge = ({ grant }: { grant: Grant }) => {
+/** The fields the card renders; satisfied by both the mock catalogue and live API rows. */
+type GrantCardData = Pick<Grant, 'id' | 'title' | 'org' | 'logoColor' | 'initial' | 'description' | 'applied'>
+  & { status?: Grant['status']; deadline?: string };
+
+const StatusBadge = ({ grant }: { grant: GrantCardData }) => {
   if (grant.status === 'ended') {
     return (
       <View style={{
@@ -110,6 +114,8 @@ const StatusBadge = ({ grant }: { grant: Grant }) => {
       </View>
     );
   }
+  // Live grants without a deadline show no badge rather than "Deadline: undefined".
+  if (!grant.deadline) return null;
   return (
     <View style={{
       backgroundColor: '#DCFCE7', borderRadius: 8,
@@ -123,7 +129,7 @@ const StatusBadge = ({ grant }: { grant: Grant }) => {
   );
 };
 
-export const GrantCard = ({ grant, onPress }: { grant: Grant; onPress: () => void }) => {
+export const GrantCard = ({ grant, onPress }: { grant: GrantCardData; onPress: () => void }) => {
   const { showToast } = useToast();
   const [isSaved, setIsSaved] = useState(profileStore.isSaved(grant.id, 'grants'));
 
@@ -250,6 +256,8 @@ export default function GrantsScreen() {
     initial: j.initial || 'G',
     description: j.description || '',
     applied: `${j.applicantsCount || 0} applied`,
+    status: j.status && j.status !== 'open' ? 'ended' as const : 'deadline' as const,
+    deadline: j.deadline,
     match: '92% Match',
   })) : GRANTS_DATA;
 

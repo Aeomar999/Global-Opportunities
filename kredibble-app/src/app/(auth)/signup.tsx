@@ -419,7 +419,7 @@ export default function SignupScreen() {
   // Picker sheet
   const [activePicker, setActivePicker] = useState<PickerType>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const pickerAnim = useRef(new Animated.Value(windowHeight)).current;
+  const [pickerAnim] = useState(() => new Animated.Value(windowHeight));
 
   const openPicker = (type: PickerType) => {
     setActivePicker(type);

@@ -1,18 +1,18 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
-import { requireAuth, requireAdminAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken, hashRefreshToken } from '../middleware/auth.js';
+import { requireAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
 import { User, RevokedRefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
-import { Opportunity, Applicant, Event, EventAttendee, Grant, GrantApplication, CompanyVerification, VerificationDoc } from '../models/Platform.js';
-import { Channel, ChannelPost, Report } from '../models/Community.js';
-import { Article, Notification } from '../models/Content.js';
+import { Applicant, EventAttendee, GrantApplication, CompanyVerification, VerificationDoc } from '../models/Platform.js';
+import { ChannelPost, Report } from '../models/Community.js';
+import { Notification } from '../models/Content.js';
 import { SavedItem } from '../models/User.js';
 import { createVerificationCode, hashVerificationCode, sendVerificationEmail } from '../lib/email.js';
 import { env } from '../config/env.js';
-import { auditLog, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
+import { AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
 import { registrationLimiter, passwordResetLimiter, authLimiter } from '../lib/rate-limiters.js';
 
 export const authRouter = Router();

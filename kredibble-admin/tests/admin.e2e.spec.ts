@@ -1,17 +1,28 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'test-admin@kredibble.com';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Password123';
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000';
 const API_URL = process.env.E2E_API_URL || 'http://localhost:4000/api';
 
-test.describe('Admin Authentication', () => {
-  test.beforeEach(async ({ page }) => {
-    // Clear any existing session
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
-  });
+/**
+ * Fill the login form and submit it. Text typed before React hydrates never
+ * reaches component state, which leaves the submit button disabled on a cold dev
+ * server, so the fill is retried until the form reacts.
+ */
+const signIn = async (page: Page, email: string, password: string) => {
+  await page.goto(`${BASE_URL}/login`);
+  const submit = page.locator('button[type="submit"]');
+  await expect(async () => {
+    await page.fill('input[type="email"]', email);
+    await page.fill('input[type="password"]', password);
+    await expect(submit).toBeEnabled({ timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
+  await submit.click();
+};
 
+// Each test gets a fresh browser context, so there is no session to clear between tests.
+test.describe('Admin Authentication', () => {
   test('login page loads correctly', async ({ page }) => {
     await page.goto(`${BASE_URL}/login`);
     await expect(page.locator('h1')).toContainText('Kredibble Admin');
@@ -21,24 +32,16 @@ test.describe('Admin Authentication', () => {
   });
 
   test('successful login redirects to dashboard', async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    
-    await page.fill('input[type="email"]', ADMIN_EMAIL);
-    await page.fill('input[type="password"]', ADMIN_PASSWORD);
-    await page.click('button[type="submit"]');
-    
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+
     // Should redirect to dashboard
     await expect(page).toHaveURL(`${BASE_URL}/`);
     await expect(page.locator('main')).toBeVisible();
   });
 
   test('failed login shows error message', async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    
-    await page.fill('input[type="email"]', 'wrong@email.com');
-    await page.fill('input[type="password"]', 'wrongpassword');
-    await page.click('button[type="submit"]');
-    
+    await signIn(page, 'wrong@email.com', 'wrongpassword');
+
     // Should show error and stay on login page
     await expect(page.locator('text=Invalid admin credentials')).toBeVisible({ timeout: 5000 });
     await expect(page).toHaveURL(`${BASE_URL}/login`);
@@ -50,20 +53,18 @@ test.describe('Admin Authentication', () => {
     // Submit button should be disabled when empty
     await expect(page.locator('button[type="submit"]')).toBeDisabled();
     
-    await page.fill('input[type="email"]', 'test@test.com');
-    await expect(page.locator('button[type="submit"]')).toBeDisabled();
-    
-    await page.fill('input[type="password"]', 'password');
-    await expect(page.locator('button[type="submit"]')).toBeEnabled();
+    // Retried for the same hydration reason as signIn().
+    await expect(async () => {
+      await page.fill('input[type="password"]', '');
+      await page.fill('input[type="email"]', 'test@test.com');
+      await expect(page.locator('button[type="submit"]')).toBeDisabled();
+      await page.fill('input[type="password"]', 'password');
+      await expect(page.locator('button[type="submit"]')).toBeEnabled({ timeout: 1_000 });
+    }).toPass({ timeout: 30_000 });
   });
 });
 
 test.describe('Admin Session Protection', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
-  });
-
   test('unauthenticated access to dashboard redirects to login', async ({ page }) => {
     await page.goto(`${BASE_URL}/`);
     
@@ -81,7 +82,9 @@ test.describe('Admin Session Protection', () => {
       '/verification',
       '/reports',
       '/community',
-      '/notifications',
+      '/notifications/compose',
+      '/notifications/history',
+      '/roles',
       '/analytics',
       '/staff',
       '/content/articles',
@@ -100,10 +103,7 @@ test.describe('Admin Session Protection', () => {
 test.describe('Admin Logout', () => {
   test('logout clears session and redirects to login', async ({ page }) => {
     // First login
-    await page.goto(`${BASE_URL}/login`);
-    await page.fill('input[type="email"]', ADMIN_EMAIL);
-    await page.fill('input[type="password"]', ADMIN_PASSWORD);
-    await page.click('button[type="submit"]');
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await expect(page).toHaveURL(`${BASE_URL}/`);
 
     // Find and click logout button (typically in sidebar or user menu)
@@ -124,26 +124,24 @@ test.describe('Admin Logout', () => {
 test.describe('Admin Dashboard Functionality', () => {
   test.beforeEach(async ({ page }) => {
     // Login before each test
-    await page.goto(`${BASE_URL}/login`);
-    await page.fill('input[type="email"]', ADMIN_EMAIL);
-    await page.fill('input[type="password"]', ADMIN_PASSWORD);
-    await page.click('button[type="submit"]');
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await expect(page).toHaveURL(`${BASE_URL}/`);
   });
 
   test('dashboard loads with summary data', async ({ page }) => {
-    await expect(page.locator('main')).toBeVisible();
-    // Dashboard should show some content
-    await expect(page.locator('text=Dashboard')).toBeVisible({ timeout: 5000 });
+    const main = page.locator('main');
+    await expect(main.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
+    // Stat cards render from /dashboard/summary.
+    await expect(main.getByText('Pending Verification', { exact: true })).toBeVisible();
   });
 
   test('navigation sidebar is present', async ({ page }) => {
-    await expect(page.locator('nav, aside')).toBeVisible();
+    const sidebar = page.locator('aside');
+    await expect(sidebar).toBeVisible();
     // Check for key navigation items
-    await expect(page.locator('text=Dashboard')).toBeVisible();
-    await expect(page.locator('text=Seekers')).toBeVisible();
-    await expect(page.locator('text=Hirers')).toBeVisible();
-    await expect(page.locator('text=Opportunities')).toBeVisible();
+    for (const label of ['Dashboard', 'Seekers', 'Hirers', 'Opportunities Queue']) {
+      await expect(sidebar.getByRole('link', { name: label, exact: true })).toBeVisible();
+    }
   });
 });
 

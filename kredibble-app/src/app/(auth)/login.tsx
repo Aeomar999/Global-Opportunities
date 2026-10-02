@@ -69,7 +69,7 @@ export default function LoginScreen() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const otpRefs = useRef<(TextInput | null)[]>([null, null, null, null, null]);
-  const slideAnim = useRef(new Animated.Value(windowHeight)).current;
+  const [slideAnim] = useState(() => new Animated.Value(windowHeight));
 
   useEffect(() => {
     if (forgotStep !== 'verify') return;
@@ -368,7 +368,7 @@ export default function LoginScreen() {
           {/* Sign Up Footer */}
           <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 }}>
             <Text style={{ fontSize: 13, color: '#8A8D9F' }} className="font-sans">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
             </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
               <Text style={{ fontSize: 13, color: '#6671E4', fontWeight: 'bold' }} className="font-sans">
@@ -446,7 +446,7 @@ export default function LoginScreen() {
                 </Text>
 
                 <Text style={{ fontSize: 12, color: '#8A8D9F', lineHeight: 18, marginBottom: 28 }} className="font-sans">
-                  Enter your email address and we'll send you a link to reset your password.
+                  Enter your email address and we&apos;ll send you a link to reset your password.
                 </Text>
 
                 <Text style={{ fontSize: 13, color: '#1A1A1A', fontWeight: '500', marginBottom: 8 }} className="font-sans">

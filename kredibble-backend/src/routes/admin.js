@@ -381,7 +381,6 @@ const dashboardMetrics = async (month) => {
 };
 
 const partnerPipelineHealth = async (month) => {
-  const { start, end } = monthBounds(month);
   const [total, closed, open, target] = await Promise.all([
     Partner.countDocuments(),
     Partner.countDocuments({ closed: true }),

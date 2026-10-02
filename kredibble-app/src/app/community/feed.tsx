@@ -45,8 +45,8 @@ export default function ChannelFeedScreen() {
   const [activePostId, setActivePostId] = useState<string | null>(null);
 
   // Animation values
-  const bottomSheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const backdropAnim = useRef(new Animated.Value(0)).current;
+  const [bottomSheetAnim] = useState(() => new Animated.Value(SCREEN_HEIGHT));
+  const [backdropAnim] = useState(() => new Animated.Value(0));
 
   // Fetch from APIs
   useEffect(() => {
@@ -442,7 +442,7 @@ export default function ChannelFeedScreen() {
             </Text>
           </View>
           <Text style={{ fontSize: 12, color: Colors.primary, marginTop: 10 }} className="font-sans">
-            The channel "{channel.name}" was created
+            The channel &quot;{channel.name}&quot; was created
           </Text>
         </View>
 

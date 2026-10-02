@@ -23,7 +23,7 @@ export default function DashboardHomePage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    getDashboardSummary()
+    getDashboardSummary<SummaryData>()
       .then(setSummary)
       .finally(() => setIsLoading(false));
   }, []);

@@ -1,6 +1,8 @@
 import { loginMobile, signupMobile, clearMobileSession, getMobileUser, getMobileToken, getOpportunities, getMe } from '../src/lib/api';
 import * as SecureStore from 'expo-secure-store';
 
+const mockSecureStore = SecureStore as jest.Mocked<typeof SecureStore>;
+
 // Mock fetch globally
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -9,9 +11,10 @@ describe('Auth API Functions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
-    SecureStore.setItemAsync = jest.fn();
-    SecureStore.getItemAsync = jest.fn();
-    SecureStore.deleteItemAsync = jest.fn();
+    // mockReset drops the in-memory store implementation, so each test starts from undefined returns.
+    mockSecureStore.setItemAsync.mockReset();
+    mockSecureStore.getItemAsync.mockReset();
+    mockSecureStore.deleteItemAsync.mockReset();
   });
 
   const mockAuthResponse = {

@@ -23,7 +23,7 @@ export const sendVerificationEmail = async (email, code) => {
   }
 
   try {
-    const response = await resend.emails.send({
+    await resend.emails.send({
       from: env.resendFromEmail || 'noreply@kredibble.app',
       to: email,
       subject: 'Your Kredibble verification code',

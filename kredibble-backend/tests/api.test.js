@@ -1,9 +1,10 @@
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { signToken } from '../src/middleware/auth.js';
+import { signToken, signAdminToken } from '../src/middleware/auth.js';
 import { User, StaffMember } from '../src/models/User.js';
 import { Opportunity } from '../src/models/Platform.js';
 import { Applicant } from '../src/models/Platform.js';
+import { Channel } from '../src/models/Community.js';
 import { Ambassador, OpportunityEngagement } from '../src/models/AdminPortal.js';
 
 describe('API Endpoints', () => {
@@ -87,12 +88,25 @@ describe('API Endpoints', () => {
       title: 'Saveable listing', type: 'competition', company: 'Example Org', location: 'Accra', description: 'Saveable listing.',
     });
 
-    const response = await request(app)
+    // SEC-026: there is no route that takes another user's id.
+    const byId = await request(app)
       .post(`/api/users/${anotherUser.id}/saved`)
       .set('Authorization', `Bearer ${signToken(user)}`)
       .send({ itemId: opportunity.id, itemType: 'opportunities' });
+    expect(byId.statusCode).toBe(404);
 
-    expect(response.statusCode).toBe(403);
+    const saved = await request(app)
+      .post('/api/users/me/saved')
+      .set('Authorization', `Bearer ${signToken(user)}`)
+      .send({ itemId: opportunity.id, itemType: 'opportunities' });
+    expect(saved.statusCode).toBe(201);
+    expect(String(saved.body.data.userId)).toBe(String(user._id));
+
+    const othersList = await request(app)
+      .get('/api/users/me/saved')
+      .set('Authorization', `Bearer ${signToken(anotherUser)}`);
+    expect(othersList.statusCode).toBe(200);
+    expect(othersList.body.data).toHaveLength(0);
   });
 
   it('does not allow standard opportunity writes to vet or publish a listing', async () => {
@@ -137,6 +151,56 @@ describe('API Endpoints', () => {
     const engagement = await OpportunityEngagement.findOne({ opportunityId: opportunity._id });
     expect(String(engagement.ambassadorId)).toBe(String(ambassador._id));
     expect(engagement.visitorId).toBe('visitor-001');
+  });
+
+  it('shows a hirer their own unpublished listing but hides it from seekers', async () => {
+    const hirer = await User.create({ name: 'Poster', email: 'poster@example.com', role: 'hirer' });
+    const seeker = await User.create({ name: 'Looker', email: 'looker@example.com', role: 'seeker' });
+    await Opportunity.create({
+      title: 'Draft listing', type: 'competition', company: 'Example Org', location: 'Accra', description: 'Not yet vetted.', hirerId: hirer._id,
+    });
+
+    const asHirer = await request(app).get('/api/opportunities').set('Authorization', `Bearer ${signToken(hirer)}`);
+    expect(asHirer.statusCode).toBe(200);
+    expect(asHirer.body.data.map((item) => item.title)).toEqual(['Draft listing']);
+
+    const asSeeker = await request(app).get('/api/opportunities').set('Authorization', `Bearer ${signToken(seeker)}`);
+    expect(asSeeker.statusCode).toBe(200);
+    expect(asSeeker.body.data).toHaveLength(0);
+  });
+
+  it('serves posts for public community groups and blocks private ones', async () => {
+    const member = await User.create({ name: 'Member', email: 'poster-member@example.com', role: 'seeker' });
+    const publicGroup = await Channel.create({ name: 'Open', category: 'General', visibility: 'public' });
+    const privateGroup = await Channel.create({ name: 'Closed', category: 'General', visibility: 'private' });
+
+    const posted = await request(app)
+      .post(`/api/community/channels/${publicGroup.id}/posts`)
+      .set('Authorization', `Bearer ${signToken(member)}`)
+      .send({ body: 'Hello group', authorName: 'Spoofed name' });
+    expect(posted.statusCode).toBe(201);
+    expect(posted.body.data.authorName).toBe('Member');
+
+    const listed = await request(app).get(`/api/community/channels/${publicGroup.id}/posts`);
+    expect(listed.statusCode).toBe(200);
+    expect(listed.body.data.map((post) => post.body)).toEqual(['Hello group']);
+
+    const blocked = await request(app)
+      .get(`/api/community/channels/${privateGroup.id}/posts`)
+      .set('Authorization', `Bearer ${signToken(member)}`);
+    expect(blocked.statusCode).toBe(403);
+  });
+
+  it('returns the dashboard summary fields the admin UI reads', async () => {
+    const admin = await User.create({ name: 'Admin', email: 'summary-admin@example.com', role: 'admin' });
+    const response = await request(app)
+      .get('/api/dashboard/summary')
+      .set('Authorization', `Bearer ${signAdminToken(admin)}`);
+
+    expect(response.statusCode).toBe(200);
+    for (const key of ['pendingVerifications', 'pendingOpportunities', 'activeSeekers', 'activeHirers', 'openReports', 'totalUsers', 'totalOpportunities']) {
+      expect(typeof response.body.data[key]).toBe('number');
+    }
   });
 
   it('automatically closes a partner when its pipeline stage is onboard', async () => {

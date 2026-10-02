@@ -80,7 +80,7 @@ export default function NotificationsScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {items.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText} className="font-sans">You're all caught up.</Text>
+            <Text style={styles.emptyText} className="font-sans">You&apos;re all caught up.</Text>
           </View>
         ) : (
           items.map(item => {

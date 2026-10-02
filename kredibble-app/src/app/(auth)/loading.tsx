@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { G, Rect, Defs, ClipPath } from 'react-native-svg';
@@ -14,7 +14,7 @@ const LogoSVG = () => (
 
 export default function LoadingScreen() {
   const router = useRouter();
-  const spinValue = useRef(new Animated.Value(0)).current;
+  const [spinValue] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     Animated.loop(

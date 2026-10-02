@@ -378,7 +378,7 @@ export default function OpportunitiesScreen() {
                 <Briefcase size={64} color="#A1A1AA" style={{ marginBottom: 16 }} />
                 <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1A1A1A' }} className="font-sans">No Listings Yet</Text>
                 <Text style={{ fontSize: 12, color: '#8A8D9F', marginTop: 4, textAlign: 'center' }} className="font-sans">
-                  Click the "+ Post" button above to publish your first {recruiterActiveTab.toLowerCase()}.
+                  Click the &quot;+ Post&quot; button above to publish your first {recruiterActiveTab.toLowerCase()}.
                 </Text>
               </View>
             ) : (
