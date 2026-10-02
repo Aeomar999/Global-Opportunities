@@ -44,11 +44,15 @@ export const getApiUrl = () => {
 export const API_BASE_URL = getApiUrl();
 
 const TOKEN_KEY = 'kredibble_app_token';
+const REFRESH_TOKEN_KEY = 'kredibble_app_refresh_token';
 const USER_KEY = 'kredibble_app_user';
 
-export const saveMobileSession = async ({ token, user }: AuthResponse) => {
+export const saveMobileSession = async ({ token, user, refreshToken }: AuthResponse) => {
   try {
     await SecureStore.setItemAsync(TOKEN_KEY, token);
+    if (refreshToken) {
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
+    }
     await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
   } catch {
     // Silently fail if secure store unavailable
@@ -63,6 +67,14 @@ export const getMobileToken = async () => {
   }
 };
 
+export const getMobileRefreshToken = async () => {
+  try {
+    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
 export const getMobileUser = async () => {
   try {
     const userJson = await SecureStore.getItemAsync(USER_KEY);
@@ -72,9 +84,17 @@ export const getMobileUser = async () => {
   }
 };
 
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const onRefreshed = (token: string) => {
+  refreshSubscribers.forEach((callback) => callback(token));
+  refreshSubscribers = [];
+};
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await getMobileToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  let response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -83,7 +103,65 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     },
   });
 
-  const payload = await response.json().catch(() => null);
+  let payload = await response.json().catch(() => null);
+
+  // Handle expired token by refreshing
+  if (response.status === 401 && payload?.error?.message === 'jwt expired') {
+    const refreshToken = await getMobileRefreshToken();
+    
+    if (refreshToken) {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        try {
+          const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          });
+          
+          const refreshPayload = await refreshResponse.json().catch(() => null);
+          
+          if (refreshResponse.ok && refreshPayload?.data?.token) {
+            const newToken = refreshPayload.data.token;
+            const newRefreshToken = refreshPayload.data.refreshToken;
+            
+            await SecureStore.setItemAsync(TOKEN_KEY, newToken);
+            if (newRefreshToken) {
+              await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, newRefreshToken);
+            }
+            
+            isRefreshing = false;
+            onRefreshed(newToken);
+          } else {
+            isRefreshing = false;
+            await clearMobileSession();
+            throw new Error('Session expired. Please log in again.');
+          }
+        } catch (e) {
+          isRefreshing = false;
+          await clearMobileSession();
+          throw e;
+        }
+      }
+      
+      // Wait for the token to be refreshed
+      const newToken = await new Promise<string>((resolve) => {
+        refreshSubscribers.push(resolve);
+      });
+      
+      // Retry original request with new token
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${newToken}`,
+          ...init.headers,
+        },
+      });
+      
+      payload = await response.json().catch(() => null);
+    }
+  }
 
   if (!response.ok) {
     const errorMsg = payload?.error?.message || `Request failed with status ${response.status}`;
@@ -174,6 +252,7 @@ export const signupMobile = async (values: {
 export const clearMobileSession = async () => {
   try {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);
   } catch {
     // Ignore errors

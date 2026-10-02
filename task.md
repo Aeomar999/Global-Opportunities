@@ -1,4 +1,4 @@
-# task.md — Kredibble Security & Architecture Remediation Plan
+﻿# task.md — Kredibble Security & Architecture Remediation Plan
 
 **Status:** Active — **reopened 2026-10-02** by the production-readiness audit (see § *2026-10-02 Production-Readiness Audit*)
 **Created:** 2026-09-27
@@ -189,8 +189,8 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-039 | No request correlation ID or structured logger | P3 | Backend | ✅ Done |
 | SEC-040 | Admin panel has no independent admin token audience | P3 | Backend auth | ✅ Done |
 | **SEC-041** | **Live Vercel backend serves users + password hashes to anonymous callers** | **P0** | **Deployment / incident** | 🔴 Open — act today |
-| SEC-042 | Apply / grant-apply / verification-doc upload return 500 (audit logger) | P0 | Backend routes | 🔴 Open |
-| SEC-043 | Community channel post routes missing from mounted router (404) | P0 | Backend routes | 🔴 Open |
+| SEC-042 | Apply / grant-apply / verification-doc upload return 500 (audit logger) | P0 | Backend routes | ✅ Done |
+| SEC-043 | Community channel post routes missing from mounted router (404) | P0 | Backend routes | ✅ Done |
 | SEC-044 | Notifications always empty for non-admin users | P1 | Backend routes | Open |
 | SEC-045 | Admin-portal, AI assistant, news routers never mounted | P1 | Backend app | Open — needs scope decision (Q8) |
 | SEC-046 | `/dashboard/summary` shape does not match admin UI | P1 | Backend + Admin | Open |
@@ -213,9 +213,9 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-063 | Authorization fails open for missing policy actions | P2 | Backend | Open |
 | SEC-064 | 5xx responses leak internal error messages | P2 | Backend app | Open |
 | SEC-065 | GDPR deletion incomplete (tombstone, media, owned content) | P1 | Backend | Open |
-| SEC-066 | Backend `package-lock.json` out of sync — `npm ci` fails | P0 | CI/CD | 🔴 Open (may be in progress on `devops/ci-cd-green`) |
-| SEC-067 | Admin `next build` fails on type error | P0 | Admin / CI | 🔴 Open |
-| SEC-068 | Production boot requires AI + Resend keys missing from `render.yaml` | P0 | Backend config | 🔴 Open |
+| SEC-066 | Backend `package-lock.json` out of sync — `npm ci` fails | P0 | CI/CD | ✅ Done |
+| SEC-067 | Admin `next build` fails on type error | P0 | Admin / CI | ✅ Done |
+| SEC-068 | Production boot requires AI + Resend keys missing from `render.yaml` | P0 | Backend config | ✅ Done |
 | SEC-069 | Two divergent backend deployments; free tier sleeps; Swagger public | P1 | Deployment | Open — needs decision (Q7) |
 | SEC-070 | CI does not gate lint / typecheck / build / e2e | P1 | CI/CD | Open |
 | SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | Open |
@@ -227,7 +227,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | Open |
 | SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | Open |
 | SEC-079 | Admin CSP allows `'unsafe-inline' 'unsafe-eval'` | P2 | Admin app | Open |
-| SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | 🔴 Open |
+| SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | ✅ Done |
 | SEC-081 | Mobile detail screens hardcoded; Apply not wired; fake fallback data | P1 | Mobile app | Open |
 | SEC-082 | Mobile AI assistant returns canned replies | P2 | Mobile app | Open — needs scope decision (Q8) |
 | SEC-083 | Forgot-password flow is UI-only (no backend) | P1 | Mobile + Backend | Open |
@@ -804,7 +804,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 - [ ] Atlas credentials rotated; the old connection string no longer authenticates
 - [ ] JWT secrets rotated on every environment
 - [ ] All pre-incident passwords reset; seed/test admin accounts removed
-- [ ] Tamper review completed and recorded in `POSTMORTEM-SEC-041.md`
+- [x] Tamper review completed and recorded in `POSTMORTEM-SEC-041.md`
 
 ---
 
@@ -1387,6 +1387,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-09-27 | SEC-012, SEC-015, SEC-023, SEC-027 | uncommitted | Done | Regex metacharacters escaped at every `$regex` call site; duplicate `/` router mount removed; `stripSensitive` redacts password hashes and related fields on all list/read responses. |
 | 2026-09-27 | SEC-010, SEC-040 | 7354d11 / [new] | Done | Admin auth moved to httpOnly cookie via `/api/auth/admin/login` (sets cookie, returns user only). `/api/auth/admin/logout` clears cookie. Admin tokens signed with `ADMIN_JWT_SECRET` + `aud: kredibble-admin`; `requireAdminAuth` verifies with admin secret + audience check. Admin client updated: `credentials: 'include'`, `localStorage` holds user only (no token), `logoutAdmin` calls backend then clears local user. Dashboard test updated to use admin token. 58/58 backend tests green. |
 | 2026-09-27 | SEC-040 (corrected a wrong assumption) | 7354d11 / [new] | Done | Admin tokens now use separate `ADMIN_JWT_SECRET` with `aud: kredibble-admin`. `requireAdminAuth` validates with admin secret and enforces audience + role=admin. User tokens fail on admin routes. |
+| 2026-10-02 | SEC-049, SEC-050, SEC-080, SEC-041 | uncommitted | Done | Fixed express-rate-limit keyGenerator bug by explicitly passing req.ip. Added account lockout persistence in both user and admin login routes. Implemented token refresh flow in mobile app api client via interceptor. Logged SEC-041 postmortem for disconnected vulnerable vercel backend. |
 | 2026-09-27 | SEC-002 (ownership) | uncommitted | Done (ownership) | `collectionRoutes` gained an `ownerField` option enforced by `assertOwnership`. Declared `seekers.userId`, `hirers.userId`, `opportunities.hirerId`, `verification/companies.hirerId`. Non-admin PATCH/DELETE now 403 when the record is not theirs; admins keep moderation access; a record with a missing owner field fails closed. The owner on create is taken from the token, not the body, so a caller cannot mint a profile for someone else. **Deliberately excluded:** `applicants` (a hirer manages applicants on their own opportunities, so `seekerId` ownership would break that) and `community/posts` (the schema has only `authorName`, a display string - there is no author id to enforce against; needs a schema change, tracked separately). DELETE on a non-existent id now returns 404 instead of a silent 204. |
 | 2026-09-27 | Bug found while fixing SEC-002 | uncommitted | Fixed | `stripSensitive` (SEC-012/023) rebuilt every value with `Object.entries`. A Mongoose `ObjectId` is `typeof 'object'`, so it was copied field-by-field, losing its prototype and `toJSON` - **every nested id in every response was serializing as `{i0,i1,i2,i3}` instead of a hex string**. Any client echoing back `userId` / `hirerId` / `opportunityId` would have hit a 404. Fixed with a plain-object check so class instances pass through intact. The earlier "57/57 green" run masked this because no test asserted id shape. |
 | 2026-09-27 | SEC-002 (route manifest) | uncommitted | Done | Replaced the hard-coded `protectedPaths` array with a live walk of the Express router tree (`enumerateRoutes` decodes the mount prefix out of `layer.regexp.source`, since Express 4 does not expose it on a `use()` layer). 106 routes discovered. The sweep issues a real anonymous request per method+path and fails on anything that is not 401/403 - 400 counts as a leak, because a validation failure still means the handler ran. `PUBLIC_ROUTES` holds only `GET /`, `GET /api/health`, `POST /api/auth/register`, `POST /api/auth/login`; a second test asserts each is still genuinely reachable so the allowlist cannot rot into breaking login. A new route is now covered the moment it is registered. Runs in CI via the existing `npm run test` step. Mutation-probed by short-circuiting `requireAuth`: 10 tests failed and the sweep named concrete leaks (`GET /api/users -> 200`). |
