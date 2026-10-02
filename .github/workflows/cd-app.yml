@@ -2,33 +2,64 @@ name: CD App
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
     paths:
       - 'kredibble-app/**'
+      - '.nvmrc'
+      - '.github/workflows/cd-app.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: cd-app
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   eas-update:
+    name: Publish EAS Update (production channel)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: kredibble-app
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_NO_TELEMETRY: 1
     steps:
-      - uses: actions/checkout@v4
-      - name: Use Node.js
-        uses: actions/setup-node@v4
+      - name: Check Expo token
+        id: creds
+        working-directory: .
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::notice title=EAS update skipped::Set the EXPO_TOKEN repository secret to publish app updates."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: './kredibble-app/package-lock.json'
-      
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-app/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --ci
+      - if: steps.creds.outputs.ready == 'true'
+        uses: expo/expo-github-action@v9
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
           packager: npm
-          
-      - name: Install dependencies
-        working-directory: ./kredibble-app
-        run: npm ci
-        
-      - name: Publish EAS Update
-        working-directory: ./kredibble-app
-        run: eas update --auto --non-interactive
+      # `eas update` does not read the build-profile env in eas.json, so the API URL
+      # is taken from it here. Without it the bundle falls back to a localhost URL.
+      - if: steps.creds.outputs.ready == 'true'
+        name: Publish update
+        run: |
+          EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build.production.env.EXPO_PUBLIC_API_URL")
+          export EXPO_PUBLIC_API_URL
+          echo "EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
+          eas update --channel production --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive

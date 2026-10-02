@@ -72,8 +72,8 @@ export default function LoginScreen() {
   const [slideAnim] = useState(() => new Animated.Value(windowHeight));
 
   useEffect(() => {
+    // The countdown is reset to 60 by the Send/Resend handlers that start it.
     if (forgotStep !== 'verify') return;
-    setTimeLeft(60);
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) { clearInterval(interval); return 0; }
@@ -468,7 +468,10 @@ export default function LoginScreen() {
 
                 <TouchableOpacity
                   disabled={!isForgotValid}
-                  onPress={() => setForgotStep('verify')}
+                  onPress={() => {
+                    setTimeLeft(60);
+                    setForgotStep('verify');
+                  }}
                   style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isForgotValid ? '#6671E4' : '#C5C9F0' }}
                 >
                   <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">Send</Text>
@@ -518,7 +521,10 @@ export default function LoginScreen() {
                   <Text style={{ fontSize: 13, color: '#8A8D9F' }} className="font-sans">Resend code </Text>
                   <TouchableOpacity
                     disabled={timeLeft > 0}
-                    onPress={() => setResendKey(k => k + 1)}
+                    onPress={() => {
+                      setTimeLeft(60);
+                      setResendKey(k => k + 1);
+                    }}
                   >
                     <Text style={{ fontSize: 13, color: timeLeft > 0 ? '#8A8D9F' : '#6671E4', fontWeight: 'bold' }} className="font-sans">
                       {timeLeft > 0 ? `(${countdownLabel})` : 'Resend'}

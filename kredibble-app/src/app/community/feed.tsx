@@ -12,6 +12,18 @@ import { getChannel, getChannelPosts, createChannelPost } from '../../lib/api';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+type AttachAction = 'image' | 'Poll' | 'Quiz' | 'Question';
+
+// Plain data: handlers are dispatched from the press callback, so render never
+// holds functions that touch the toast/recording refs.
+const ATTACH_ITEMS: { label: string; Icon: any; color: string; action: AttachAction }[] = [
+  { label: 'Photo', Icon: ImageIcon, color: '#8B5CF6', action: 'image' },
+  { label: 'Camera', Icon: Camera, color: '#EF4444', action: 'image' },
+  { label: 'Poll', Icon: BarChart3, color: '#10B981', action: 'Poll' },
+  { label: 'Quiz', Icon: ClipboardList, color: '#F59E0B', action: 'Quiz' },
+  { label: 'Question', Icon: HelpCircle, color: '#3B82F6', action: 'Question' },
+];
+
 export default function ChannelFeedScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -255,13 +267,10 @@ export default function ChannelFeedScreen() {
     }
   };
 
-  const ATTACH_ITEMS: { label: string; Icon: any; color: string; onPress: () => void }[] = [
-    { label: 'Photo', Icon: ImageIcon, color: '#8B5CF6', onPress: pickImageAndPost },
-    { label: 'Camera', Icon: Camera, color: '#EF4444', onPress: pickImageAndPost },
-    { label: 'Poll', Icon: BarChart3, color: '#10B981', onPress: () => promptAndPost('Poll') },
-    { label: 'Quiz', Icon: ClipboardList, color: '#F59E0B', onPress: () => promptAndPost('Quiz') },
-    { label: 'Question', Icon: HelpCircle, color: '#3B82F6', onPress: () => promptAndPost('Question') },
-  ];
+  const handleAttach = (action: AttachAction) => {
+    if (action === 'image') pickImageAndPost();
+    else promptAndPost(action);
+  };
 
   const stopRecordTimer = () => {
     if (recordIntervalRef.current) {
@@ -599,7 +608,7 @@ export default function ChannelFeedScreen() {
               {ATTACH_ITEMS.map(item => (
                 <TouchableOpacity
                   key={item.label}
-                  onPress={item.onPress}
+                  onPress={() => handleAttach(item.action)}
                   style={{ alignItems: 'center', gap: 6, width: 64 }}
                 >
                   <View

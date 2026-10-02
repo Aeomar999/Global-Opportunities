@@ -3,6 +3,12 @@
     "name": "kredibble-app",
     "slug": "kredibble-app",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9d567049-d386-4b4b-b386-6ea3e826d473"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kredibbleapp",

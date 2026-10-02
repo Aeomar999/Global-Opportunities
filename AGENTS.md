@@ -164,39 +164,21 @@ NEXT_PUBLIC_API_URL=https://api.kredibble.app
 
 ## CI/CD Pipeline (GitHub Actions)
 
-```yaml
-# .github/workflows/ci.yml
-on: [push, pull_request]
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm', cache-dependency-path: 'kredibble-backend/package-lock.json' }
-      - run: cd kredibble-backend && npm ci
-      - run: cd kredibble-backend && npm run lint
-      - run: cd kredibble-backend && npm run typecheck || true
-      - run: cd kredibble-backend && npm test -- --coverage
-  mobile:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm', cache-dependency-path: 'kredibble-app/package-lock.json' }
-      - run: cd kredibble-app && npm ci
-      - run: cd kredibble-app && npm run lint
-      - run: cd kredibble-app && npx tsc --noEmit
-  admin:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm', cache-dependency-path: 'kredibble-admin/package-lock.json' }
-      - run: cd kredibble-admin && npm ci
-      - run: cd kredibble-admin && npm run lint
-      - run: cd kredibble-admin && npm run build
-```
+The workflows in `.github/workflows/` are the source of truth; this is a summary. All jobs use Node from `.nvmrc` (24) and install each app with `npm ci` from **its own** `package-lock.json` — there are no npm workspaces (Docker, Vercel and EAS all build each app from its own directory).
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| `ci.yml` | PR to `main`, push to `main` | **Backend:** `lint`, `test` (Jest + mongodb-memory-server). **Backend image:** Docker build. **Admin:** `lint`, `typecheck`, `next build`. **Admin E2E:** Playwright against the real API (`npm run e2e:server`, in-memory Mongo with a seeded admin) and the admin dev server. **App:** `lint`, `typecheck`, `test`, Metro bundle export. |
+| `cd-backend.yml` | push to `main` touching `kredibble-backend/` | Re-verifies, pushes `ghcr.io/aeomar999/global-opportunities/kredibble-backend:{latest,sha}`, calls `RENDER_DEPLOY_HOOK_URL` if set. |
+| `cd-admin.yml` | push to `main` touching `kredibble-admin/` | Re-verifies, then `vercel pull/build/deploy --prebuilt --prod`. Skips with a notice until `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` are set. |
+| `cd-app.yml` | push to `main` touching `kredibble-app/` | Re-verifies, then `eas update --channel production` with `EXPO_PUBLIC_API_URL` from `eas.json`. Skips without `EXPO_TOKEN`. |
+
+Rules for changing CI:
+- Never mask a failing step (`|| true`, `|| echo`) — fix the cause.
+- Every job keeps a `timeout-minutes`; a hung test must fail fast, not burn six hours.
+- Run the same commands locally before pushing: `npm run lint && npm run typecheck && npm test` in the app you touched (`npm run test:e2e` in `kredibble-admin` starts both servers itself).
+
+**Deployment topology:** the API runs on Render (`kredibble-api.onrender.com`, Docker, long-running so Socket.io works). The admin runs on Vercel (`kredibble-admin` project) and reaches the API through a same-origin proxy (`NEXT_PUBLIC_API_URL=/api`, `API_PROXY_TARGET=https://kredibble-api.onrender.com/api`) because the admin session cookie is `SameSite=Strict`; the admin origin must be listed in the API's `CORS_ORIGIN`. The mobile app gets OTA updates through EAS Update (`runtimeVersion` policy `appVersion`).
 
 ---
 

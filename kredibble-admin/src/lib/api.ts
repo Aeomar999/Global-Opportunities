@@ -16,6 +16,10 @@ const getApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (!envUrl) return "http://localhost:4000/api";
 
+  // Same-origin path (the API_PROXY_TARGET rewrite in next.config.ts): requests
+  // go to the dashboard's own origin, so they inherit its HTTPS.
+  if (envUrl.startsWith("/")) return envUrl.replace(/\/$/, "");
+
   // SEC-016: In production, reject non-HTTPS URLs
   const isProduction = process.env.NODE_ENV === 'production';
   if (isProduction && !envUrl.startsWith('https://')) {

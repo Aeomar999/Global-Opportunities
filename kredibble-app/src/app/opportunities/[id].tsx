@@ -21,19 +21,25 @@ const VerifiedBadge = () => (
   </View>
 );
 
+const findOpportunity = (id: string | undefined): PostedOpportunity | null => {
+  const found = authStore.opportunities.find(o => o.id === id);
+  return found ? { ...found } : null;
+};
+
 export default function OpportunityDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [opp, setOpp] = useState<PostedOpportunity | null>(null);
+  const [opp, setOpp] = useState<PostedOpportunity | null>(() => findOpportunity(id));
+  const [oppId, setOppId] = useState(id);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
-  useEffect(() => {
-    // Find the opportunity
-    const found = authStore.opportunities.find(o => o.id === id);
-    if (found) {
-      setOpp({ ...found });
-    }
+  // Same screen, new route param: re-read the listing during render instead of in an effect.
+  if (oppId !== id) {
+    setOppId(id);
+    setOpp(findOpportunity(id));
+  }
 
+  useEffect(() => {
     const unsubscribe = authStore.subscribe(() => {
       const updatedFound = authStore.opportunities.find(o => o.id === id);
       if (updatedFound) {

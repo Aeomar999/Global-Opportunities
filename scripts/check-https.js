@@ -10,7 +10,8 @@ if (isProduction) {
     console.error('SEC-016 FAIL: No API URL configured in production');
     process.exit(1);
   }
-  if (!apiUrl.startsWith('https://')) {
+  // A same-origin path (e.g. /api behind the admin proxy) inherits the page's HTTPS.
+  if (!apiUrl.startsWith('https://') && !apiUrl.startsWith('/')) {
     console.error(`SEC-016 FAIL: API URL must use https:// in production. Got: ${apiUrl}`);
     process.exit(1);
   }

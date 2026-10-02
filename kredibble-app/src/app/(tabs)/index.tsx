@@ -160,10 +160,7 @@ export default function HomeScreen() {
 
     fetchData();
 
-    setRole(authStore.role);
-    setCompany(authStore.company ? { ...authStore.company } : null);
-    setOpps([...authStore.opportunities]);
-
+    // State is initialised from authStore; the subscription keeps it in sync.
     const unsubscribe = authStore.subscribe(() => {
       setRole(authStore.role);
       setCompany(authStore.company ? { ...authStore.company } : null);

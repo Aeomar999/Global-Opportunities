@@ -216,6 +216,10 @@ export default function CreateOpportunityScreen() {
     if (editId) {
       const opp = authStore.opportunities.find(o => o.id === editId);
       if (opp) {
+        // One-time prefill of ~25 independent form fields from the listing being
+        // edited (editId is fixed for the screen). Lifting every initializer is a
+        // larger refactor than this extra render is worth.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTitle(opp.title);
         setType(opp.type);
         setLocation(opp.location);

@@ -359,6 +359,36 @@ const UploadCard = ({
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+// ─── Role card ───────────────────────────────────────────────────────────────
+
+// Module level so it is not re-created (and remounted) on every SignupScreen render.
+const RoleCard = ({ label, active, onSelect }: { label: string; active: boolean; onSelect: () => void }) => (
+  <TouchableOpacity
+    onPress={onSelect}
+    style={{
+      flex: 1, borderWidth: 1.5,
+      borderColor: active ? '#6671E4' : '#EBEBEE',
+      borderRadius: 12, padding: 14, backgroundColor: '#FFFFFF',
+    }}
+  >
+    <View
+      style={{
+        width: 18, height: 18, borderRadius: 9,
+        borderWidth: 2, borderColor: active ? '#6671E4' : '#C4C4C4',
+        justifyContent: 'center', alignItems: 'center', marginBottom: 10,
+      }}
+    >
+      {active && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#6671E4' }} />}
+    </View>
+    <Text
+      style={{ fontSize: 13, fontWeight: '600', color: active ? '#6671E4' : '#8A8D9F', lineHeight: 18 }}
+      className="font-sans"
+    >
+      {label}
+    </Text>
+  </TouchableOpacity>
+);
+
 export default function SignupScreen() {
   const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
@@ -676,38 +706,6 @@ export default function SignupScreen() {
     }
   };
 
-  // ─── Role card ───────────────────────────────────────────────────────────────
-
-  const RoleCard = ({ value, label }: { value: 'seeker' | 'hirer'; label: string }) => {
-    const active = role === value;
-    return (
-      <TouchableOpacity
-        onPress={() => { setRole(value); setStep(1); }}
-        style={{
-          flex: 1, borderWidth: 1.5,
-          borderColor: active ? '#6671E4' : '#EBEBEE',
-          borderRadius: 12, padding: 14, backgroundColor: '#FFFFFF',
-        }}
-      >
-        <View
-          style={{
-            width: 18, height: 18, borderRadius: 9,
-            borderWidth: 2, borderColor: active ? '#6671E4' : '#C4C4C4',
-            justifyContent: 'center', alignItems: 'center', marginBottom: 10,
-          }}
-        >
-          {active && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#6671E4' }} />}
-        </View>
-        <Text
-          style={{ fontSize: 13, fontWeight: '600', color: active ? '#6671E4' : '#8A8D9F', lineHeight: 18 }}
-          className="font-sans"
-        >
-          {label}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
@@ -761,8 +759,8 @@ export default function SignupScreen() {
 
           {/* Role selector */}
           <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
-            <RoleCard value="seeker" label={`Looking for\nOpportunities`} />
-            <RoleCard value="hirer" label="Hiring Talent" />
+            <RoleCard label={`Looking for\nOpportunities`} active={role === 'seeker'} onSelect={() => { setRole('seeker'); setStep(1); }} />
+            <RoleCard label="Hiring Talent" active={role === 'hirer'} onSelect={() => { setRole('hirer'); setStep(1); }} />
           </View>
 
           {/* ── Step 1: Personal info (Seeker) ── */}
