@@ -1,10 +1,12 @@
 import bcrypt from 'bcryptjs';
+
+const DUMMY_HASH = '$2a$12$bRWsa/PC32qEk5cFCdQ/n.DrtmNZZeIr7Fc15SfH6SoezqktcAbCO';
 import { Router } from 'express';
 import { requireAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { loginSchema, registerSchema } from '../schemas/auth.js';
+import { loginSchema, registerSchema, refreshSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
-import { User, RevokedRefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode } from '../models/User.js';
+import { User, RevokedRefreshToken, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 import { Applicant, EventAttendee, GrantApplication, CompanyVerification, VerificationDoc } from '../models/Platform.js';
 import { ChannelPost, Report } from '../models/Community.js';
@@ -105,8 +107,15 @@ authRouter.post(
     }
 
     const refreshToken = generateRefreshToken();
-    user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
+    const tokenHash = hashRefreshTokenUtil(refreshToken);
+    user.refreshTokenHash = tokenHash;
     await user.save();
+    await RefreshToken.create({
+      userId: user._id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      deviceLabel: req.headers['user-agent'] || 'Unknown Device'
+    });
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.REGISTER,
@@ -132,77 +141,79 @@ authRouter.post(
     const normalizedEmail = normalizeEmail(email);
 
     const user = await User.findOne({ emailNormalized: normalizedEmail }).select('+refreshTokenHash');
-    if (!user?.passwordHash) {
-      await auditReq(req, {
-        action: AUDIT_ACTIONS.LOGIN_FAILURE,
-        resourceType: AUDIT_RESOURCE_TYPES.USER,
-        outcome: 'failure',
-        metadata: { reason: 'user_not_found', email },
-      });
-      throw new ApiError(401, 'Invalid email or password');
-    }
-
-    // SEC-025: Check for account lockout due to failed attempts
-    if (user.lockUntil && user.lockUntil > new Date()) {
-      const remainingMinutes = Math.ceil((user.lockUntil - new Date()) / 60000);
-      await auditReq(req, {
-        action: AUDIT_ACTIONS.LOGIN_FAILURE,
-        resourceType: AUDIT_RESOURCE_TYPES.USER,
-        resourceId: user._id,
-        outcome: 'failure',
-        metadata: { reason: 'account_locked', lockoutMinutes: remainingMinutes },
-      });
-      throw new ApiError(429, `Account temporarily locked. Try again in ${remainingMinutes} minute(s).`);
-    }
-
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      // SEC-025: Increment failed login attempts with progressive backoff
-      const maxAttempts = 5;
-      const baseLockoutMinutes = 15; // 15 min base lockout
       
-      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
-      user.lastFailedLogin = new Date();
-      
-      if (user.failedLoginAttempts >= maxAttempts) {
-        // Exponential backoff: 15min, 30min, 60min, 120min, 240min...
-        const lockoutMinutes = baseLockoutMinutes * Math.pow(2, user.failedLoginAttempts - maxAttempts);
-        user.lockUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
-        
-        await user.save();
+      // SEC-051: Always run bcrypt to prevent timing attacks for unknown emails
+      const hashToCompare = user?.passwordHash || DUMMY_HASH;
+      const valid = await bcrypt.compare(password, hashToCompare);
 
+      if (!user?.passwordHash) {
         await auditReq(req, {
           action: AUDIT_ACTIONS.LOGIN_FAILURE,
           resourceType: AUDIT_RESOURCE_TYPES.USER,
-          resourceId: user._id,
           outcome: 'failure',
-          metadata: { 
-            reason: 'account_locked', 
-            failedAttempts: user.failedLoginAttempts,
-            lockoutMinutes,
-          },
+          metadata: { reason: 'user_not_found', email },
         });
-        
-        throw new ApiError(429, `Too many failed attempts. Account locked for ${lockoutMinutes} minute(s).`);
-      } else {
-        await user.save();
-        
-        await auditReq(req, {
-          action: AUDIT_ACTIONS.LOGIN_FAILURE,
-          resourceType: AUDIT_RESOURCE_TYPES.USER,
-          resourceId: user._id,
-          outcome: 'failure',
-          metadata: { 
-            reason: 'invalid_password', 
-            email, 
-            failedAttempts: user.failedLoginAttempts,
-            remainingAttempts: maxAttempts - user.failedLoginAttempts,
-          },
-        });
-        
-        throw new ApiError(401, `Invalid email or password. ${maxAttempts - user.failedLoginAttempts} attempt(s) remaining before lockout.`);
+        throw new ApiError(401, 'Invalid email or password');
       }
-    }
+
+      if (!valid) {
+        // SEC-025: Increment failed login attempts with progressive backoff
+        const maxAttempts = 5;
+        const baseLockoutMinutes = 15;
+        
+        user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+        user.lastFailedLogin = new Date();
+        
+        if (user.failedLoginAttempts >= maxAttempts) {
+          const lockoutMinutes = baseLockoutMinutes * Math.pow(2, user.failedLoginAttempts - maxAttempts);
+          user.lockUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
+          
+          await user.save();
+  
+          await auditReq(req, {
+            action: AUDIT_ACTIONS.LOGIN_FAILURE,
+            resourceType: AUDIT_RESOURCE_TYPES.USER,
+            resourceId: user._id,
+            outcome: 'failure',
+            metadata: { 
+              reason: 'account_locked', 
+              failedAttempts: user.failedLoginAttempts,
+              lockoutMinutes,
+            },
+          });
+        } else {
+          await user.save();
+          
+          await auditReq(req, {
+            action: AUDIT_ACTIONS.LOGIN_FAILURE,
+            resourceType: AUDIT_RESOURCE_TYPES.USER,
+            resourceId: user._id,
+            outcome: 'failure',
+            metadata: { 
+              reason: 'invalid_password', 
+              email, 
+              failedAttempts: user.failedLoginAttempts,
+              remainingAttempts: maxAttempts - user.failedLoginAttempts,
+            },
+          });
+        }
+        
+        // SEC-051: Generic error message, no attempt count leaked
+        throw new ApiError(401, 'Invalid email or password');
+      }
+
+      // SEC-025: Check for account lockout due to failed attempts (only evaluated for valid password)
+      if (user.lockUntil && user.lockUntil > new Date()) {
+        const remainingMinutes = Math.ceil((user.lockUntil - new Date()) / 60000);
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.LOGIN_FAILURE,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          resourceId: user._id,
+          outcome: 'failure',
+          metadata: { reason: 'account_locked', lockoutMinutes: remainingMinutes },
+        });
+        throw new ApiError(429, `Account temporarily locked. Try again in ${remainingMinutes} minute(s).`);
+      }
 
     // SEC-025: Reset failed login attempts on successful login
     user.failedLoginAttempts = 0;
@@ -217,8 +228,15 @@ authRouter.post(
     finalUser[user.role] = profile;
 
     const refreshToken = generateRefreshToken();
-    user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
+    const tokenHash = hashRefreshTokenUtil(refreshToken);
+    user.refreshTokenHash = tokenHash;
     await user.save();
+    await RefreshToken.create({
+      userId: user._id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      deviceLabel: req.headers['user-agent'] || 'Unknown Device'
+    });
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.LOGIN_SUCCESS,
@@ -236,88 +254,78 @@ authRouter.post(
 
 // SEC-009: rotate refresh token
 authRouter.post(
-  '/refresh',
-  asyncHandler(async (req, res) => {
-    const { refreshToken } = req.body;
-    if (!refreshToken) throw new ApiError(400, 'Refresh token required');
+    '/refresh',
+    validate(refreshSchema),
+    asyncHandler(async (req, res) => {
+      const { refreshToken } = req.body;
+      const tokenHash = hashRefreshTokenUtil(refreshToken);
 
-    const tokenHash = hashRefreshTokenUtil(refreshToken);
+      const tokenDoc = await RefreshToken.findOne({ tokenHash }).populate('userId');
+      if (!tokenDoc) {
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.REFRESH_TOKEN,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          outcome: 'failure',
+          metadata: { reason: 'invalid_token' },
+        });
+        throw new ApiError(401, 'Invalid refresh token');
+      }
 
-    // Check if token is revoked
-    const revoked = await RevokedRefreshToken.findOne({ tokenHash });
-    if (revoked) {
-      await auditReq(req, {
-        action: AUDIT_ACTIONS.REFRESH_TOKEN,
-        resourceType: AUDIT_RESOURCE_TYPES.USER,
-        outcome: 'failure',
-        metadata: { reason: 'token_revoked' },
-      });
-      throw new ApiError(401, 'Refresh token revoked');
-    }
+      // Reuse detection (token is already replaced/revoked)
+      if (tokenDoc.revokedAt || tokenDoc.replacedBy) {
+        // SEC-053: Revoke all tokens for this user family
+        await RefreshToken.updateMany(
+          { userId: tokenDoc.userId._id, revokedAt: null },
+          { $set: { revokedAt: new Date() } }
+        );
+        
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.REFRESH_TOKEN,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          resourceId: tokenDoc.userId._id,
+          outcome: 'failure',
+          metadata: { reason: 'token_reused_revoked_family' },
+        });
+        throw new ApiError(401, 'Refresh token revoked, please login again');
+      }
 
-    // Find user by refresh token hash
-    const user = await User.findOne({ refreshTokenHash: tokenHash }).select('+refreshTokenHash');
-    if (!user) {
-      await auditReq(req, {
-        action: AUDIT_ACTIONS.REFRESH_TOKEN,
-        resourceType: AUDIT_RESOURCE_TYPES.USER,
-        outcome: 'failure',
-        metadata: { reason: 'invalid_token' },
-      });
-      throw new ApiError(401, 'Invalid refresh token');
-    }
+      if (tokenDoc.expiresAt < new Date()) {
+        throw new ApiError(401, 'Refresh token expired');
+      }
 
-    // Rotate: generate new refresh token, hash old one to denylist
-    const newRefreshToken = generateRefreshToken();
-    const newTokenHash = hashRefreshTokenUtil(newRefreshToken);
+      const user = tokenDoc.userId;
 
-    await RevokedRefreshToken.create({
-      tokenHash,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days TTL
-    });
-
-    user.refreshTokenHash = newTokenHash;
-    await user.save();
-
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.REFRESH_TOKEN,
-      resourceType: AUDIT_RESOURCE_TYPES.USER,
-      resourceId: user._id,
-      outcome: 'success',
-      metadata: { role: user.role },
-    });
-
-    res.json({ data: { token: signToken(user), refreshToken: newRefreshToken } });
-  }),
-);
-
-// Logout — revoke current refresh token
-authRouter.post(
-  '/logout',
-  requireAuth,
-  asyncHandler(async (req, res) => {
-    const user = await User.findById(req.auth.sub).select('+refreshTokenHash');
-    if (user?.refreshTokenHash) {
-      await RevokedRefreshToken.create({
-        tokenHash: user.refreshTokenHash,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      });
-      user.refreshTokenHash = undefined;
+      // Rotate: generate new refresh token
+      const newRefreshToken = generateRefreshToken();
+      const newTokenHash = hashRefreshTokenUtil(newRefreshToken);
+      
+      tokenDoc.revokedAt = new Date();
+      tokenDoc.replacedBy = newTokenHash;
+      await tokenDoc.save();
+      
+      user.refreshTokenHash = newTokenHash;
       await user.save();
-    }
+      
+      await RefreshToken.create({
+        userId: user._id,
+        tokenHash: newTokenHash,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days TTL
+        deviceLabel: req.headers['user-agent'] || 'Unknown Device'
+      });
+  
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.REFRESH_TOKEN,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        resourceId: user._id,
+        outcome: 'success',
+        metadata: { role: user.role },
+      });
+  
+      res.json({ data: { token: signToken(user), refreshToken: newRefreshToken } });
+    }),
+  );
 
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.LOGOUT,
-      resourceType: AUDIT_RESOURCE_TYPES.USER,
-      resourceId: req.auth.sub,
-      outcome: 'success',
-    });
-
-    res.json({ data: { message: 'Logged out' } });
-  }),
-);
-
-// Admin login — sets httpOnly cookie, returns user only (no token in body)
+  // Admin login — sets httpOnly cookie, returns user only (no token in body)
 authRouter.post(
   '/admin/login',
   validate(loginSchema),
@@ -328,71 +336,73 @@ authRouter.post(
     const normalizedEmail = normalizeEmail(email);
 
     const user = await User.findOne({ emailNormalized: normalizedEmail });
-    if (!user?.passwordHash || user.role !== 'admin') {
-      await auditReq(req, {
-        action: AUDIT_ACTIONS.LOGIN_FAILURE,
-        resourceType: AUDIT_RESOURCE_TYPES.USER,
-        outcome: 'failure',
-        metadata: { reason: 'not_admin_or_not_found', email },
-      });
-      throw new ApiError(401, 'Invalid admin credentials');
-    }
-
-    // SEC-025: Check for account lockout due to failed attempts
-    if (user.lockUntil && user.lockUntil > new Date()) {
-      const remainingMinutes = Math.ceil((user.lockUntil - new Date()) / 60000);
-      await auditReq(req, {
-        action: AUDIT_ACTIONS.LOGIN_FAILURE,
-        resourceType: AUDIT_RESOURCE_TYPES.USER,
-        resourceId: user._id,
-        outcome: 'failure',
-        metadata: { reason: 'account_locked', lockoutMinutes: remainingMinutes },
-      });
-      throw new ApiError(429, `Account temporarily locked. Try again in ${remainingMinutes} minute(s).`);
-    }
-
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      // SEC-025: Increment failed login attempts with progressive backoff
-      const maxAttempts = 5;
-      const baseLockoutMinutes = 15; // 15 min base lockout
       
-      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
-      user.lastFailedLogin = new Date();
-      
-      if (user.failedLoginAttempts >= maxAttempts) {
-        // Exponential backoff: 15min, 30min, 60min, 120min, 240min...
-        const lockoutMinutes = baseLockoutMinutes * Math.pow(2, user.failedLoginAttempts - maxAttempts);
-        user.lockUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
-        
-        await user.save();
+      // SEC-051: Always run bcrypt to prevent timing attacks for unknown emails
+      const hashToCompare = user?.passwordHash || DUMMY_HASH;
+      const valid = await bcrypt.compare(password, hashToCompare);
 
+      if (!user?.passwordHash || user.role !== 'admin') {
         await auditReq(req, {
           action: AUDIT_ACTIONS.LOGIN_FAILURE,
           resourceType: AUDIT_RESOURCE_TYPES.USER,
-          resourceId: user._id,
           outcome: 'failure',
-          metadata: { 
-            reason: 'account_locked', 
-            failedAttempts: user.failedLoginAttempts,
-            lockoutMinutes,
-          },
-        });
-        
-        throw new ApiError(429, `Too many failed attempts. Account locked for ${lockoutMinutes} minute(s).`);
-      } else {
-        await user.save();
-        
-        await auditReq(req, {
-          action: AUDIT_ACTIONS.LOGIN_FAILURE,
-          resourceType: AUDIT_RESOURCE_TYPES.USER,
-          resourceId: user._id,
-          outcome: 'failure',
-          metadata: { reason: 'invalid_password', email },
+          metadata: { reason: 'not_admin_or_not_found', email },
         });
         throw new ApiError(401, 'Invalid admin credentials');
       }
-    }
+
+      if (!valid) {
+        // SEC-025: Increment failed login attempts with progressive backoff
+        const maxAttempts = 5;
+        const baseLockoutMinutes = 15;
+        
+        user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+        user.lastFailedLogin = new Date();
+        
+        if (user.failedLoginAttempts >= maxAttempts) {
+          const lockoutMinutes = baseLockoutMinutes * Math.pow(2, user.failedLoginAttempts - maxAttempts);
+          user.lockUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
+          
+          await user.save();
+  
+          await auditReq(req, {
+            action: AUDIT_ACTIONS.LOGIN_FAILURE,
+            resourceType: AUDIT_RESOURCE_TYPES.USER,
+            resourceId: user._id,
+            outcome: 'failure',
+            metadata: { 
+              reason: 'account_locked', 
+              failedAttempts: user.failedLoginAttempts,
+              lockoutMinutes,
+            },
+          });
+        } else {
+          await user.save();
+          
+          await auditReq(req, {
+            action: AUDIT_ACTIONS.LOGIN_FAILURE,
+            resourceType: AUDIT_RESOURCE_TYPES.USER,
+            resourceId: user._id,
+            outcome: 'failure',
+            metadata: { reason: 'invalid_password', email },
+          });
+        }
+        
+        throw new ApiError(401, 'Invalid admin credentials');
+      }
+
+      // SEC-025: Check for account lockout due to failed attempts (only evaluated for valid password)
+      if (user.lockUntil && user.lockUntil > new Date()) {
+        const remainingMinutes = Math.ceil((user.lockUntil - new Date()) / 60000);
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.LOGIN_FAILURE,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          resourceId: user._id,
+          outcome: 'failure',
+          metadata: { reason: 'account_locked', lockoutMinutes: remainingMinutes },
+        });
+        throw new ApiError(429, `Account temporarily locked. Try again in ${remainingMinutes} minute(s).`);
+      }
 
     // Reset failed login attempts on successful login
     if (user.failedLoginAttempts > 0) {
@@ -405,8 +415,15 @@ authRouter.post(
 
     // Also issue refresh token for admin (stored on user)
     const refreshToken = generateRefreshToken();
-    user.refreshTokenHash = hashRefreshTokenUtil(refreshToken);
+    const tokenHash = hashRefreshTokenUtil(refreshToken);
+    user.refreshTokenHash = tokenHash;
     await user.save();
+    await RefreshToken.create({
+      userId: user._id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      deviceLabel: req.headers['user-agent'] || 'Unknown Device'
+    });
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.LOGIN_SUCCESS,
@@ -429,10 +446,10 @@ authRouter.post(
     const { refreshToken } = req.body;
     if (refreshToken) {
       const tokenHash = hashRefreshTokenUtil(refreshToken);
-      await RevokedRefreshToken.create({
-        tokenHash,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      });
+      await RefreshToken.findOneAndUpdate(
+        { tokenHash, revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      );
     }
 
     await auditReq(req, {
