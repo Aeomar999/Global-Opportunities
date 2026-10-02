@@ -273,3 +273,12 @@ export const uploadLimiter = createRateLimiter({
   message: { error: { message: 'Too many uploads, please try again later' } },
   keyGenerator: (req) => req.auth?.sub || ipKeyGenerator(req.ip, { ipv6Subnet: 56 }),
 });
+
+/** SEC-062: Rate limit verification code checks per email (10 attempts per hour). */
+export const emailVerificationLimiter = createRateLimiter({
+  prefix: 'email-verification',
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  message: { error: { message: 'Too many verification attempts for this email, please try again after an hour' } },
+  keyGenerator: (req) => String(req.body?.email || '').trim().toLowerCase() || 'unknown',
+});

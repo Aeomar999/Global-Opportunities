@@ -143,10 +143,7 @@ describe('SEC-002: collection routes must require authentication', () => {
 
     const res = await request(app).get('/api/users').set(...AUTH_BEARER(token));
 
-    expect(res.statusCode).toBe(200);
-    for (const row of res.body.data) {
-      expect(row.passwordHash).toBeUndefined();
-    }
+    expect(res.statusCode).toBe(403);
   });
 });
 

@@ -15,7 +15,7 @@ import { SavedItem } from '../models/User.js';
 import { createVerificationCode, hashVerificationCode, sendVerificationEmail } from '../lib/email.js';
 import { env } from '../config/env.js';
 import { AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
-import { registrationLimiter, passwordResetLimiter, authLimiter } from '../lib/rate-limiters.js';
+import { registrationLimiter, passwordResetLimiter, authLimiter, emailVerificationLimiter } from '../lib/rate-limiters.js';
 
 export const authRouter = Router();
 
@@ -497,20 +497,43 @@ authRouter.post(
 // Email verification — verify code
 authRouter.post(
   '/verification-code/verify',
+  emailVerificationLimiter,
   asyncHandler(async (req, res) => {
     const email = String(req.body.email || '').trim().toLowerCase();
     const code = String(req.body.code || '');
     const normalizedEmail = normalizeEmail(email);
-    const record = await EmailVerificationCode.findOne({ email: normalizedEmail, expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 });
-    if (!record || record.codeHash !== hashVerificationCode(code)) {
+    
+    const record = await EmailVerificationCode.findOneAndUpdate(
+      { email: normalizedEmail, expiresAt: { $gt: new Date() } },
+      { $inc: { attempts: 1 } },
+      { returnDocument: 'after', sort: { createdAt: -1 } }
+    );
+    
+    if (!record) {
       await auditReq(req, {
         action: AUDIT_ACTIONS.EMAIL_VERIFY,
         resourceType: AUDIT_RESOURCE_TYPES.USER,
         outcome: 'failure',
-        metadata: { step: 'verify_code', reason: 'invalid_or_expired', email: normalizedEmail },
+        metadata: { step: 'verify_code', reason: 'not_found_or_expired', email: normalizedEmail },
       });
       throw new ApiError(400, 'Invalid or expired verification code');
     }
+    
+    if (record.attempts > 5) {
+      await EmailVerificationCode.deleteOne({ _id: record._id });
+      throw new ApiError(400, 'Too many failed attempts. Please request a new code.');
+    }
+    
+    if (record.codeHash !== hashVerificationCode(code)) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.EMAIL_VERIFY,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        outcome: 'failure',
+        metadata: { step: 'verify_code', reason: 'invalid_code', email: normalizedEmail, attempts: record.attempts },
+      });
+      throw new ApiError(400, 'Invalid verification code');
+    }
+    
     await User.updateOne({ emailNormalized: normalizedEmail }, { emailVerified: true });
     await EmailVerificationCode.deleteMany({ email: normalizedEmail });
 

@@ -97,7 +97,11 @@ const assertPolicy = (policy, action, req, label = 'resource') => {
  * first so an anonymous caller receives 401 (not 403) and cannot probe which
  * resources exist.
  */
-const guard = (policyKey, action, label = 'resource') => [
+const guard = (policyKey, action, label = 'resource') => {
+  if (!RESOURCE_POLICIES[policyKey]) {
+    throw new Error(`Missing authorization policy for "${policyKey}"`);
+  }
+  return [
   requireAuth,
   (req, res, next) => {
     try {
@@ -108,6 +112,7 @@ const guard = (policyKey, action, label = 'resource') => [
     }
   },
 ];
+};
 
 /** Reduce a hand-written route's body to its policy allowlist (SEC-007). */
 const writableBody = (policyKey, req) => buildCreatePayload(RESOURCE_POLICIES[policyKey], req.body);
@@ -199,6 +204,11 @@ const collectionRoutes = ({
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'read', req, resourceName);
       const { status, type, q } = req.query;
+      
+      // SEC-061: Reject object-valued query params to prevent NoSQL operator injection
+      if (typeof status === 'object' || typeof type === 'object' || typeof q === 'object') {
+        throw new ApiError(400, 'Invalid query parameters');
+      }
       const { page, limit, skip } = parsePagination(req.query);
       const filter = {};
 

@@ -7,8 +7,8 @@ import logger from './logger.js';
 const resend = env.resendApiKey ? new Resend(env.resendApiKey) : null;
 
 export const createVerificationCode = () => {
-  // 6-digit numeric code
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  // SEC-062: Use cryptographically secure RNG for verification codes
+  return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 };
 
 export const hashVerificationCode = (code) => {
