@@ -200,7 +200,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-050 | Account lockout never persisted; admin login unthrottled | P0 | Backend auth | ✅ Done |
 | SEC-051 | Login reveals which emails are registered | P2 | Backend auth | ✅ Done |
 | SEC-052 | Token revocation works and checks DB | P1 | Backend auth | ✅ Done |
-| SEC-053 | One refresh token per user; malformed body → 500 | P2 | Backend auth | Open |
+| SEC-053 | One refresh token per user; malformed body → 500 | P2 | Backend auth | ✅ Done |
 | SEC-054 | Admin-only /users and proper PII stripping | P1 | Backend routes | ✅ Done |
 | SEC-055 | Search routes paginated and PII stripped | P1 | Backend routes | ✅ Done |
 | SEC-056 | Applicant endpoints explicitly check opportunity owner | P1 | Backend routes | ✅ Done |
@@ -1200,6 +1200,7 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 
 ### SEC-053 — One refresh token per user; malformed refresh body → 500
 `User.refreshTokenHash` is a single field, so signing in on a second device revokes the first (probe: phone refresh → 401 after a laptop login). `POST /auth/refresh` with a non-string `refreshToken` → 500 from a `crypto` TypeError. Move to a `RefreshToken { userId, tokenHash, deviceLabel, expiresAt, revokedAt, replacedBy }` collection with reuse detection (replaying a rotated token revokes its whole family), add a sessions list, and validate bodies with Zod. Relates to Open Question 2. **Done when:** two devices refresh independently, a replayed rotated token revokes its family, and a malformed body → 400.
+**Status:** ✅ Done. Created RefreshToken collection, added Zod validation to /refresh, and implemented token family revocation on reuse.
 
 ### SEC-060 — Grant allocation not implemented; applications carry no identity (reopens SEC-036)
 `routes/index.js:793-804` saves any `requestedAmount`: the probe requested 999,999,999 against a 1,000 pool, it was saved, and `allocated` stayed 0. The grant id isn't checked. `GrantApplication` stores no applicant user id, so GDPR export/delete (which query `applicantEmail`) never match, and applicants can't see their own applications. Implement the conditional `$expr` reservation the SEC-036 log describes (or reserve on approval, per Open Question 4). Store `applicantUserId`, return 404 for unknown or closed grants, and cap `requestedAmount` at the pool. **Done when:** concurrent over-allocation is impossible (test) and applicants can list their own grant applications.
