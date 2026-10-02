@@ -17,6 +17,8 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: https://admin.kredibble.com,https://app.kredibble.com,https://kredibble-admin-jerry-amoahs-projects.vercel.app
+      - key: REDIS_URL
+        sync: false
       - key: PORT
         value: 4000
       - key: AI_PROVIDER

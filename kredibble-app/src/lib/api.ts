@@ -20,13 +20,13 @@ type AuthResponse = {
 };
 
 const fallbackApiUrl = Platform.select({
-  android: 'http://10.0.2.2:4000/api',
-  default: 'http://localhost:4000/api',
+  android: 'http://10.0.2.2:4000/api/v1',
+  default: 'http://localhost:4000/api/v1',
 });
 
 export const getApiUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (!envUrl) return fallbackApiUrl || 'http://localhost:4000/api';
+  if (!envUrl) return fallbackApiUrl || 'http://localhost:4000/api/v1';
 
   // SEC-016: In production, reject non-HTTPS URLs
   const isProduction = process.env.NODE_ENV === 'production';

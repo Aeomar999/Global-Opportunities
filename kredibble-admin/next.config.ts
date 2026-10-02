@@ -1,7 +1,7 @@
 import path from "path";
 import type { NextConfig } from "next";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 
 // The dashboard calls the API on its own origin, so connect-src must name it or
 // the browser blocks every request (login included). NEXT_PUBLIC_API_URL is

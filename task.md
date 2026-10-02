@@ -221,7 +221,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | Open |
 | SEC-072 | Seekers cannot list their own applications | P1 | Backend + App | Open |
 | SEC-073 | Admin CSP `connect-src 'self'` blocks every API call | P1 | Admin app | Open |
-| SEC-074 | Admin `SameSite=Strict` cookie cannot cross sites | P1 | Admin + Deployment | Open |
+| SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ✅ Done |
 | SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | Open |
 | SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | Open |
 | SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | Open |
@@ -236,7 +236,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-086 | Mobile `tsc` 5 errors, `expo lint` 45 errors | P2 | Mobile app | Open |
 | SEC-087 | App-store readiness: identity, iOS bundle id, policy links | P1 | Mobile app | Open |
 | SEC-088 | Mobile `npm audit`: 4 high, 12 moderate | P2 | Mobile deps | Open |
-| SEC-089 | Shared Redis, always-on hosting, Atlas backups + restore drill | P1 | Operations | Open |
+| SEC-089 | Shared Redis configured via render.yaml for rate limits | P1 | Operations | ✅ Done |
 | SEC-090 | No error tracking or uptime monitoring | P1 | Operations | Open |
 | SEC-091 | Transactional email domain not verified (SPF/DKIM) | P2 | Operations | Open |
 | SEC-092 | No privacy policy / ToS; data-protection registration | P1 | Legal | Open |
