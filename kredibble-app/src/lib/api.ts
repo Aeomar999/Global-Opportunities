@@ -135,26 +135,37 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
           } else {
             isRefreshing = false;
             await clearMobileSession();
+            onRefreshed('');
             throw new Error('Session expired. Please log in again.');
           }
         } catch (e) {
           isRefreshing = false;
           await clearMobileSession();
+          onRefreshed('');
           throw e;
         }
       }
       
       // Wait for the token to be refreshed
       const newToken = await new Promise<string>((resolve) => {
-        refreshSubscribers.push(resolve);
+        if (!isRefreshing) {
+          resolve('');
+        } else {
+          refreshSubscribers.push(resolve);
+        }
       });
       
+      const retryToken = newToken || await getMobileToken();
+      if (!retryToken) {
+         throw new Error('Session expired. Please log in again.');
+      }
+
       // Retry original request with new token
       response = await fetch(`${API_BASE_URL}${path}`, {
         ...init,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${newToken}`,
+          Authorization: `Bearer ${retryToken}`,
           ...init.headers,
         },
       });
@@ -432,4 +443,5 @@ export const createReport = async (data: any) => {
     body: JSON.stringify(data)
   });
 };
+
 
