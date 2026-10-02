@@ -88,6 +88,7 @@ applicantSchema.index({ opportunityId: 1, seekerId: 1 }, { unique: true, sparse:
 const eventSchema = new mongoose.Schema({
   title: { type: String, required: true, index: true },
   hirer: { type: String, required: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   location: { type: String, required: true, index: true },
   dateTime: { type: String, required: true },
   capacity: { type: Number, required: true },

@@ -584,6 +584,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   // Search routes (must be registered BEFORE collection routes to avoid /:id swallowing them)
   router.get('/candidates/search', searchLimiter, ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
     const { skills, university, country, q } = req.query;
+    const { page, limit, skip } = parsePagination(req.query);
     const filter = {};
 
     const query = searchPattern(q);
@@ -595,12 +596,18 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     const skillMatch = searchAlternation(skills);
     if (skillMatch) filter.skills = skillMatch;
 
-    const data = await Candidate.find(filter).sort({ createdAt: -1 });
-    listResponse(res, data.map(withParsedCandidate));
+    const [data, total] = await Promise.all([
+      Candidate.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Candidate.countDocuments(filter),
+    ]);
+    
+    const mapped = data.map(item => stripPiiIfNeeded(withParsedCandidate(item), 'candidates', req.auth, 'userId'));
+    listResponse(res, mapped, { page, limit, total });
   }));
 
   router.get('/seekers/search', searchLimiter, ...guard('seekers', 'read', 'seeker'), asyncHandler(async (req, res) => {
     const { skills, university, country, q } = req.query;
+    const { page, limit, skip } = parsePagination(req.query);
     const filter = {};
 
     const query = searchPattern(q);
@@ -612,8 +619,13 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     const skillMatch = searchAlternation(skills);
     if (skillMatch) filter.technicalSkills = skillMatch;
 
-    const data = await SeekerProfile.find(filter).sort({ createdAt: -1 });
-    listResponse(res, data.map(withParsedProfile));
+    const [data, total] = await Promise.all([
+      SeekerProfile.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      SeekerProfile.countDocuments(filter),
+    ]);
+    
+    const mapped = data.map(item => stripPiiIfNeeded(withParsedProfile(item), 'seekers', req.auth, 'userId'));
+    listResponse(res, mapped, { page, limit, total });
   }));
 
   // Website and app view tracking, including ambassador referral attribution. Public
@@ -857,10 +869,10 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     normalizeOut: withParsedProfile,
     searchFields: ['profession', 'university', 'country'],
     ownerField: 'userId',
-    populate: { path: 'userId', select: 'name email avatarUrl' },
+    populate: { path: 'userId', select: 'name avatarUrl' },
     enablePopulate,
   }));
-  router.use('/hirers', collectionRoutes({ Model: HirerAccount, resourceName: 'Hirer', policyKey: 'hirers', searchFields: ['companyName', 'industry'], ownerField: 'userId', populate: { path: 'userId', select: 'name email avatarUrl' }, enablePopulate }));
+  router.use('/hirers', collectionRoutes({ Model: HirerAccount, resourceName: 'Hirer', policyKey: 'hirers', searchFields: ['companyName', 'industry'], ownerField: 'userId', populate: { path: 'userId', select: 'name avatarUrl' }, enablePopulate }));
   router.use('/opportunities', collectionRoutes({
     Model: Opportunity,
     resourceName: 'Opportunity',
@@ -885,9 +897,9 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     searchFields: ['name', 'profession'],
     enablePopulate,
   }));
-  router.use('/community/channels', collectionRoutes({ Model: Channel, resourceName: 'Channel', policyKey: 'community/channels', searchFields: ['name', 'category'], enablePopulate }));
+  router.use('/community/channels', collectionRoutes({ Model: Channel, resourceName: 'Channel', policyKey: 'community/channels', searchFields: ['name', 'category'], ownerField: 'createdBy', enablePopulate }));
   router.use('/reports', collectionRoutes({ Model: Report, resourceName: 'Report', policyKey: 'reports', searchFields: ['reason', 'details'], enablePopulate }));
-  router.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'], enablePopulate }));
+  router.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'], ownerField: 'createdBy', enablePopulate }));
   router.use('/grants', collectionRoutes({ Model: Grant, resourceName: 'Grant', policyKey: 'grants', searchFields: ['title', 'sector'], enablePopulate }));
   router.use('/articles', collectionRoutes({ Model: Article, resourceName: 'Article', policyKey: 'articles', searchFields: ['title', 'category'], enablePopulate }));
   router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate }));
@@ -902,10 +914,16 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       ? await findReferringAmbassador(req.body.referralCode)
       : { referralCode: undefined, ambassador: null };
 
+    // SEC-056: Force seekerId from token; unique index handles duplicate applications
+    const existing = await Applicant.findOne({ opportunityId: opportunity._id, seekerId: req.auth.sub });
+    if (existing) throw new ApiError(409, 'You have already applied for this opportunity');
+
     const applicant = new Applicant(
       stringifyArrayFields(buildCreatePayload(RESOURCE_POLICIES.applicants, req.body), ['skills']),
     );
     applicant.set('opportunityId', opportunity._id);
+    applicant.set('seekerId', req.auth.sub);
+    
     if (ambassador) {
       applicant.set('referralCode', referralCode);
       applicant.set('ambassadorId', ambassador._id);
@@ -933,6 +951,12 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.get('/opportunities/:opportunityId/applicants', ...guard('applicants', 'read', 'applicant'), asyncHandler(async (req, res) => {
+    const opportunity = await Opportunity.findById(req.params.opportunityId);
+    if (!opportunity) throw notFound('Opportunity');
+    if (req.auth.role !== ADMIN && String(opportunity.createdBy) !== req.auth.sub) {
+      throw new ApiError(403, 'You do not have permission to view applicants for this opportunity');
+    }
+
     const { page, limit, skip } = parsePagination(req.query);
     const filter = { opportunityId: req.params.opportunityId };
     const [data, total] = await Promise.all([
@@ -966,6 +990,11 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.post('/verification/companies/:companyId/documents', ...guard('verification/documents', 'create', 'document'), asyncHandler(async (req, res) => {
+    // SEC-058: Verify companyId belongs to the caller
+    if (req.auth.role !== ADMIN && String(req.params.companyId) !== req.auth.sub) {
+      throw new ApiError(403, 'You do not have permission to attach documents to this company');
+    }
+
     const doc = new VerificationDoc(buildCreatePayload(RESOURCE_POLICIES['verification/documents'], req.body));
     doc.set('companyId', req.params.companyId);
     await doc.save();
@@ -980,15 +1009,55 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.get('/verification/companies/:companyId/documents', ...guard('verification/documents', 'read', 'document'), asyncHandler(async (req, res) => {
+    // SEC-058: Verify companyId belongs to the caller
+    if (req.auth.role !== ADMIN && String(req.params.companyId) !== req.auth.sub) {
+      throw new ApiError(403, 'You do not have permission to view documents for this company');
+    }
+
     const docs = await VerificationDoc.find({ companyId: req.params.companyId }).sort({ createdAt: -1 });
     listResponse(res, docs.map(toClientObject));
   }));
 
   // Provide basic CRUD for these nested resources so they can be read, updated, or deleted directly by ID
-  router.use('/applicants', collectionRoutes({ Model: Applicant, resourceName: 'Applicant', policyKey: 'applicants', enablePopulate }));
+  // SEC-056: Explicit applicant routes with ownership checks (Seeker owns applicant, Hirer owns opportunity)
+  const verifyApplicantAccess = async (req, applicantId, action) => {
+    const applicant = await Applicant.findById(applicantId);
+    if (!applicant) throw notFound('Applicant');
+    if (req.auth.role === ADMIN) return applicant;
+
+    const opportunity = await Opportunity.findById(applicant.opportunityId);
+    if (!opportunity) throw notFound('Opportunity');
+
+    if (req.auth.role === SEEKER && String(applicant.seekerId) === req.auth.sub) return applicant;
+    if (req.auth.role === HIRER && String(opportunity.createdBy) === req.auth.sub) return applicant;
+    
+    throw new ApiError(403, 'Insufficient permissions to access this applicant');
+  };
+
+  router.get('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
+    const applicant = await verifyApplicantAccess(req, req.params.id, 'read');
+    itemResponse(res, toClientObject(applicant));
+  }));
+
+  router.patch('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
+    const applicant = await verifyApplicantAccess(req, req.params.id, 'update');
+    // SEC-056: Hirers can update status; Seekers can't update status, but can update resume
+    const updates = buildUpdatePayload(RESOURCE_POLICIES.applicants, req.body, req.auth.role);
+    Object.assign(applicant, updates);
+    await applicant.save();
+    itemResponse(res, toClientObject(applicant));
+  }));
+
+  router.delete('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
+    const applicant = await verifyApplicantAccess(req, req.params.id, 'delete');
+    await applicant.deleteOne();
+    await Opportunity.findByIdAndUpdate(applicant.opportunityId, { $inc: { applicantsCount: -1 } });
+    res.status(204).end();
+  }));
+
   router.use('/grant-applications', collectionRoutes({ Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications', enablePopulate }));
-  router.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents', enablePopulate }));
-  router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', enablePopulate }));
+  router.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents', ownerField: 'companyId', enablePopulate }));
+  router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', ownerField: 'authorId', enablePopulate }));
 
   /**
    * Saved items are private to their owner (SEC-026). The path is `/users/me/saved`
@@ -1041,10 +1110,27 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.post('/events/:eventId/attendees', ...guard('event-attendees', 'create', 'booking'), asyncHandler(async (req, res) => {
     const body = writableBody('event-attendees', req);
     const quantity = Math.min(Math.max(Number.parseInt(body.quantity, 10) || 1, 1), 10);
+    
+    // SEC-059: Atomic $expr capacity guard
+    const event = await Event.findOneAndUpdate(
+      { 
+        _id: req.params.eventId,
+        $expr: { $lte: [{ $add: ['$attendeesCount', quantity] }, '$capacity'] }
+      },
+      { $inc: { attendeesCount: quantity } },
+      { new: true }
+    );
+    
+    if (!event) {
+      // Differentiate between event not found and full
+      const exists = await Event.exists({ _id: req.params.eventId });
+      if (!exists) throw notFound('Event');
+      throw new ApiError(400, 'Event has reached capacity');
+    }
+
     const attendee = new EventAttendee({ ...body, quantity });
     attendee.set('eventId', req.params.eventId);
     await attendee.save();
-    await Event.findByIdAndUpdate(req.params.eventId, { $inc: { attendeesCount: quantity } });
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.EVENT_BOOK,
@@ -1058,6 +1144,13 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.get('/events/:eventId/attendees', ...guard('event-attendees', 'read', 'attendee'), asyncHandler(async (req, res) => {
+    // SEC-059: Enforce event ownership
+    const event = await Event.findById(req.params.eventId);
+    if (!event) throw notFound('Event');
+    if (req.auth.role !== ADMIN && String(event.createdBy) !== req.auth.sub) {
+      throw new ApiError(403, 'You do not have permission to view attendees for this event');
+    }
+
     const attendees = await EventAttendee.find({ eventId: req.params.eventId }).sort({ createdAt: -1 });
     listResponse(res, attendees.map(toClientObject));
   }));

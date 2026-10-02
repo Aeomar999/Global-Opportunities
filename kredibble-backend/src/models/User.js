@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema({
     required: true, 
     unique: true, 
     index: true, 
+    select: false,
     lowercase: true, 
     trim: true,
     // SEC-028: Auto-generate from email if not provided
