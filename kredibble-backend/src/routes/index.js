@@ -899,7 +899,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
   router.use('/community/channels', collectionRoutes({ Model: Channel, resourceName: 'Channel', policyKey: 'community/channels', searchFields: ['name', 'category'], ownerField: 'createdBy', enablePopulate }));
   router.use('/reports', collectionRoutes({ Model: Report, resourceName: 'Report', policyKey: 'reports', searchFields: ['reason', 'details'], enablePopulate }));
-  router.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'], enablePopulate }));
+  router.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'], ownerField: 'createdBy', enablePopulate }));
   router.use('/grants', collectionRoutes({ Model: Grant, resourceName: 'Grant', policyKey: 'grants', searchFields: ['title', 'sector'], enablePopulate }));
   router.use('/articles', collectionRoutes({ Model: Article, resourceName: 'Article', policyKey: 'articles', searchFields: ['title', 'category'], enablePopulate }));
   router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate }));
@@ -990,6 +990,11 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.post('/verification/companies/:companyId/documents', ...guard('verification/documents', 'create', 'document'), asyncHandler(async (req, res) => {
+    // SEC-058: Verify companyId belongs to the caller
+    if (req.auth.role !== ADMIN && String(req.params.companyId) !== req.auth.sub) {
+      throw new ApiError(403, 'You do not have permission to attach documents to this company');
+    }
+
     const doc = new VerificationDoc(buildCreatePayload(RESOURCE_POLICIES['verification/documents'], req.body));
     doc.set('companyId', req.params.companyId);
     await doc.save();
@@ -1004,6 +1009,11 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.get('/verification/companies/:companyId/documents', ...guard('verification/documents', 'read', 'document'), asyncHandler(async (req, res) => {
+    // SEC-058: Verify companyId belongs to the caller
+    if (req.auth.role !== ADMIN && String(req.params.companyId) !== req.auth.sub) {
+      throw new ApiError(403, 'You do not have permission to view documents for this company');
+    }
+
     const docs = await VerificationDoc.find({ companyId: req.params.companyId }).sort({ createdAt: -1 });
     listResponse(res, docs.map(toClientObject));
   }));
@@ -1046,7 +1056,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.use('/grant-applications', collectionRoutes({ Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications', enablePopulate }));
-  router.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents', enablePopulate }));
+  router.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents', ownerField: 'companyId', enablePopulate }));
   router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', ownerField: 'authorId', enablePopulate }));
 
   /**
@@ -1100,10 +1110,27 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.post('/events/:eventId/attendees', ...guard('event-attendees', 'create', 'booking'), asyncHandler(async (req, res) => {
     const body = writableBody('event-attendees', req);
     const quantity = Math.min(Math.max(Number.parseInt(body.quantity, 10) || 1, 1), 10);
+    
+    // SEC-059: Atomic $expr capacity guard
+    const event = await Event.findOneAndUpdate(
+      { 
+        _id: req.params.eventId,
+        $expr: { $lte: [{ $add: ['$attendeesCount', quantity] }, '$capacity'] }
+      },
+      { $inc: { attendeesCount: quantity } },
+      { new: true }
+    );
+    
+    if (!event) {
+      // Differentiate between event not found and full
+      const exists = await Event.exists({ _id: req.params.eventId });
+      if (!exists) throw notFound('Event');
+      throw new ApiError(400, 'Event has reached capacity');
+    }
+
     const attendee = new EventAttendee({ ...body, quantity });
     attendee.set('eventId', req.params.eventId);
     await attendee.save();
-    await Event.findByIdAndUpdate(req.params.eventId, { $inc: { attendeesCount: quantity } });
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.EVENT_BOOK,
@@ -1117,6 +1144,13 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.get('/events/:eventId/attendees', ...guard('event-attendees', 'read', 'attendee'), asyncHandler(async (req, res) => {
+    // SEC-059: Enforce event ownership
+    const event = await Event.findById(req.params.eventId);
+    if (!event) throw notFound('Event');
+    if (req.auth.role !== ADMIN && String(event.createdBy) !== req.auth.sub) {
+      throw new ApiError(403, 'You do not have permission to view attendees for this event');
+    }
+
     const attendees = await EventAttendee.find({ eventId: req.params.eventId }).sort({ createdAt: -1 });
     listResponse(res, attendees.map(toClientObject));
   }));

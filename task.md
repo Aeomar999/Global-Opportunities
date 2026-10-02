@@ -205,8 +205,8 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-055 | Search routes paginated and PII stripped | P1 | Backend routes | ✅ Done |
 | SEC-056 | Applicant endpoints explicitly check opportunity owner | P1 | Backend routes | ✅ Done |
 | SEC-057 | Community channels and posts enforce ownerField | P1 | Backend routes | ✅ Done |
-| SEC-058 | Verification documents readable by every hirer | P1 | Backend routes | Open |
-| SEC-059 | Event capacity unenforced; attendee emails exposed to hirers | P1 | Backend routes | Open |
+| SEC-058 | Verification documents scoped to owner (companyId) | P1 | Backend routes | ✅ Done |
+| SEC-059 | Event capacity unenforced; attendee emails exposed to hirers | P1 | Backend routes | ✅ Done |
 | SEC-060 | Grant allocation not implemented; applications carry no identity | P2 | Backend | Open — needs decision (Q4) |
 | SEC-061 | NoSQL operator injection via query params | P2 | Backend routes | Open |
 | SEC-062 | Email verification code: weak RNG, no attempt cap | P2 | Backend auth | Open |
@@ -1427,7 +1427,9 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-02 | Production-readiness audit | 3ffc51d | 55 new findings, 11 reopened | Full audit of all three apps on `main` @ `3ffc51d`; narrative in `PRODUCTION-READINESS-AUDIT.md`. New tasks SEC-041 … SEC-095 (9 P0, 30 P1, 14 P2, 2 P3). Reopened SEC-009, 010, 018, 019, 023, 024, 025, 029, 033, 036, 037. Verdict: not deployable, not launch-ready. |
 | 2026-10-02 | Verification snapshot | 3ffc51d | Red | Backend `npm test`: **92/102 (10 failing)** across `api.test.js` (5), `socket.integration.test.js` (2), `security.p0.test.js` (3). Backend `npm ci` from a clean `git archive` **fails** (lockfile missing `ioredis`, `rate-limit-redis` …). Backend `npm audit --omit=dev`: 0. Admin `npm run lint`: clean; `npm run build`: **fails** (`opportunities/page.tsx:47`); `npm audit --omit=dev`: 1 critical (`next`), 2 high. Mobile `tsc --noEmit`: 5 errors; `expo lint`: 45 errors / 123 warnings; Jest: 20/20; `npm audit --omit=dev`: 4 high / 12 moderate. Production boot with `render.yaml` env: **fails** (AI key required). |
 
-| 2026-10-02 | SEC-052, 054, 055, 056, 057, and tests | f8f5c2b | Done | Completed Phase 2 P1 Access Control & Privacy tasks. Added integration tests proving that token revocation, PII stripping on users and searches, applicant IDOR prevention, and community channel/post ownership enforcement all work securely. |
+
+| 2026-10-02 | SEC-058, 059 | uncommitted | Done | Completed Phase 2 P1 tasks for Verification documents IDOR (SEC-058) and Event bookings capacity & privacy (SEC-059). Validated via integration tests. |
+
 
 | 2026-10-02 | **Incident: SEC-041** | — | 🔴 Open | Anonymous `GET https://kredibble-backend.vercel.app/api/users` returned 10 users (6 admin) **with `passwordHash`**; `/api/v1/health` 404 there (old build); DB connected. Only read-only requests were made; writes were not tested against production. Render host (`kredibble-api.onrender.com`) correctly returns 401 for the same request but serves `/api-docs` publicly and cold-started in 21.6 s. |
 | 2026-10-02 | SEC-041 containment (partial) | — | 🟠 In progress | 11:49 UTC: Vercel project `jerry-amoahs-projects/kredibble-backend` paused; its domain `kredibble-backend-murex.vercel.app` → `503 DEPLOYMENT_PAUSED` (verified 11:54 UTC). **The leaking host `kredibble-backend.vercel.app` is a different project/account** and still returned all 10 users with `passwordHash` at 11:54 UTC. Remaining: owner of that domain pauses/protects it, or rotate the Atlas DB user password to cut its DB access. `kredibble-admin/.env.production` points at the leaking host. |
