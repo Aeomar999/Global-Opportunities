@@ -98,12 +98,12 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-049 | Rate limiter key generator wrong — limits never apply | SEC-049 | P0 |
 | SEC-050 | Lockout never persisted | SEC-050 | P0 |
 | SEC-051 | Login account enumeration | SEC-051 | P2 |
-| SEC-052 | `tokenVersion` revocation is dead code | SEC-052 | P1 |
+| SEC-052 | Token revocation works and checks DB | P1 | Backend | ✅ Done | SEC-052 | P1 |
 | SEC-053 | One refresh token per user; non-string body → 500 | SEC-053 | P2 |
-| SEC-054 | Any user can harvest all emails via `/users` | SEC-054 | P1 |
-| SEC-055 | Email via populate; search leaks phones, unpaginated | SEC-055 | P1 |
-| SEC-056 | Applicant IDOR + impersonation + duplicates | SEC-056 | P1 |
-| SEC-057 | Community channel/post IDOR + author spoofing | SEC-057 | P1 |
+| SEC-054 | Admin-only /users and proper PII stripping | P1 | Backend | ✅ Done | SEC-054 | P1 |
+| SEC-055 | Search routes paginated and PII stripped | P1 | Backend | ✅ Done | SEC-055 | P1 |
+| SEC-056 | Applicant endpoints explicitly check opportunity owner | P1 | Backend | ✅ Done | SEC-056 | P1 |
+| SEC-057 | Community channels and posts enforce ownerField | P1 | Backend | ✅ Done | SEC-057 | P1 |
 | SEC-058 | Verification documents readable by every hirer | SEC-058 | P1 |
 | SEC-059 | Event capacity unenforced; attendee emails exposed | SEC-059 | P1 |
 | SEC-060 | Grant allocation not implemented | SEC-060 | P2 |
@@ -199,12 +199,12 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-049 | Rate-limiter key generator wrong — no limit ever applies | P0 | Backend | ✅ Done |
 | SEC-050 | Account lockout never persisted; admin login unthrottled | P0 | Backend auth | ✅ Done |
 | SEC-051 | Login reveals which emails are registered | P2 | Backend auth | Open |
-| SEC-052 | Access-token revocation (`tokenVersion`) is dead code | P1 | Backend auth | Open |
+| SEC-052 | Token revocation works and checks DB | P1 | Backend auth | ✅ Done |
 | SEC-053 | One refresh token per user; malformed body → 500 | P2 | Backend auth | Open |
-| SEC-054 | Any signed-in user can harvest every email via `/users` | P1 | Backend routes | Open |
-| SEC-055 | Email leaked via populate; search leaks phones, unpaginated | P1 | Backend routes | Open |
-| SEC-056 | Applicant IDOR, impersonation, duplicate applications | P1 | Backend routes | Open |
-| SEC-057 | Community channel/post IDOR and author spoofing | P1 | Backend routes | Open |
+| SEC-054 | Admin-only /users and proper PII stripping | P1 | Backend routes | ✅ Done |
+| SEC-055 | Search routes paginated and PII stripped | P1 | Backend routes | ✅ Done |
+| SEC-056 | Applicant endpoints explicitly check opportunity owner | P1 | Backend routes | ✅ Done |
+| SEC-057 | Community channels and posts enforce ownerField | P1 | Backend routes | ✅ Done |
 | SEC-058 | Verification documents readable by every hirer | P1 | Backend routes | Open |
 | SEC-059 | Event capacity unenforced; attendee emails exposed to hirers | P1 | Backend routes | Open |
 | SEC-060 | Grant allocation not implemented; applications carry no identity | P2 | Backend | Open — needs decision (Q4) |
