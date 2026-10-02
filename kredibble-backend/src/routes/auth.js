@@ -169,6 +169,8 @@ authRouter.post(
         const lockoutMinutes = baseLockoutMinutes * Math.pow(2, user.failedLoginAttempts - maxAttempts);
         user.lockUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
         
+        await user.save();
+
         await auditReq(req, {
           action: AUDIT_ACTIONS.LOGIN_FAILURE,
           resourceType: AUDIT_RESOURCE_TYPES.USER,
@@ -336,16 +338,66 @@ authRouter.post(
       throw new ApiError(401, 'Invalid admin credentials');
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
+    // SEC-025: Check for account lockout due to failed attempts
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      const remainingMinutes = Math.ceil((user.lockUntil - new Date()) / 60000);
       await auditReq(req, {
         action: AUDIT_ACTIONS.LOGIN_FAILURE,
         resourceType: AUDIT_RESOURCE_TYPES.USER,
         resourceId: user._id,
         outcome: 'failure',
-        metadata: { reason: 'invalid_password', email },
+        metadata: { reason: 'account_locked', lockoutMinutes: remainingMinutes },
       });
-      throw new ApiError(401, 'Invalid admin credentials');
+      throw new ApiError(429, `Account temporarily locked. Try again in ${remainingMinutes} minute(s).`);
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      // SEC-025: Increment failed login attempts with progressive backoff
+      const maxAttempts = 5;
+      const baseLockoutMinutes = 15; // 15 min base lockout
+      
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+      user.lastFailedLogin = new Date();
+      
+      if (user.failedLoginAttempts >= maxAttempts) {
+        // Exponential backoff: 15min, 30min, 60min, 120min, 240min...
+        const lockoutMinutes = baseLockoutMinutes * Math.pow(2, user.failedLoginAttempts - maxAttempts);
+        user.lockUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
+        
+        await user.save();
+
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.LOGIN_FAILURE,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          resourceId: user._id,
+          outcome: 'failure',
+          metadata: { 
+            reason: 'account_locked', 
+            failedAttempts: user.failedLoginAttempts,
+            lockoutMinutes,
+          },
+        });
+        
+        throw new ApiError(429, `Too many failed attempts. Account locked for ${lockoutMinutes} minute(s).`);
+      } else {
+        await user.save();
+        
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.LOGIN_FAILURE,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          resourceId: user._id,
+          outcome: 'failure',
+          metadata: { reason: 'invalid_password', email },
+        });
+        throw new ApiError(401, 'Invalid admin credentials');
+      }
+    }
+
+    // Reset failed login attempts on successful login
+    if (user.failedLoginAttempts > 0) {
+      user.failedLoginAttempts = 0;
+      user.lockUntil = null;
     }
 
     const adminToken = signAdminToken(user);

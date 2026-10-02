@@ -197,7 +197,7 @@ function createRateLimiter({ prefix, windowMs, limit, message, keyGenerator, ski
     message,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
-    keyGenerator: keyGenerator || ipKeyGenerator,
+    keyGenerator: keyGenerator || ((req) => ipKeyGenerator(req.ip)),
     skip: skip || (() => env.isTest),
   };
 
@@ -238,7 +238,7 @@ export const aiLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   limit: 20,
   message: { error: { message: 'Too many AI requests, please try again later' } },
-  keyGenerator: (req) => req.auth?.sub || ipKeyGenerator(req, { ipv6Subnet: 56 }),
+  keyGenerator: (req) => req.auth?.sub || ipKeyGenerator(req.ip, { ipv6Subnet: 56 }),
 });
 
 /** 10 requests per hour per IP for sensitive endpoints. */
@@ -271,5 +271,5 @@ export const uploadLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   limit: 20,
   message: { error: { message: 'Too many uploads, please try again later' } },
-  keyGenerator: (req) => req.auth?.sub || ipKeyGenerator(req, { ipv6Subnet: 56 }),
+  keyGenerator: (req) => req.auth?.sub || ipKeyGenerator(req.ip, { ipv6Subnet: 56 }),
 });

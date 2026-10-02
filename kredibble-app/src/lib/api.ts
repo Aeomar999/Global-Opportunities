@@ -16,6 +16,7 @@ export type AuthUser = {
 type AuthResponse = {
   user: AuthUser;
   token: string;
+  refreshToken?: string;
 };
 
 const fallbackApiUrl = Platform.select({
