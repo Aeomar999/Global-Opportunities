@@ -1,4 +1,5 @@
 import { AuditLog } from '../models/User.js';
+import logger from './logger.js';
 import crypto from 'node:crypto';
 
 export const AUDIT_ACTIONS = {

@@ -1,32 +1,33 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import mongoose from 'mongoose';
 import { authRouter } from './auth.js';
 import { uploadRouter } from './upload.js';
-import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination, paginatedResponse } from '../utils/http.js';
-import { requireAuth, requireAdminAuth, requireRole } from '../middleware/auth.js';
+import { assistantRouter } from './assistant.js';
+import { newsRouter } from './news.js';
+import { adminRouter } from './admin.js';
+import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination } from '../utils/http.js';
+import { requireAuth, requireAdminAuth, optionalAuth } from '../middleware/auth.js';
 import {
   RESOURCE_POLICIES,
   ADMIN,
+  HIRER,
+  SEEKER,
   isAllowed,
   buildCreatePayload,
   buildUpdatePayload,
-  PII_FIELDS,
-  isOwner,
   stripPiiIfNeeded,
 } from '../lib/policies.js';
-import { User, StaffMember, AuditLog } from '../models/User.js';
+import { User, StaffMember } from '../models/User.js';
 import { SeekerProfile, HirerAccount, Candidate } from '../models/Profiles.js';
 import {
   Opportunity, Applicant, Event, Grant,
-  GrantApplication, CompanyVerification, VerificationDoc, EventAttendee
+  GrantApplication, CompanyVerification, VerificationDoc, EventAttendee, opportunityTypes,
 } from '../models/Platform.js';
-import { Channel, ChannelPost, Report } from '../models/Community.js';
+import { Channel, ChannelPost, CommunityMembership, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
+import { Ambassador, OpportunityEngagement, Testimonial } from '../models/AdminPortal.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 import { searchLimiter } from '../lib/rate-limiters.js';
-
-
-export const apiRouter = Router();
 
 const parseJson = (value, fallback = []) => {
   if (!value) return fallback;
@@ -136,6 +137,10 @@ const searchAlternation = (value) => {
   return terms.length > 0 ? { $regex: terms.join('|'), $options: 'i' } : undefined;
 };
 
+/** AND a caller-scope filter onto a query filter without clobbering either's `$or`. */
+const withScope = (filter, scope) =>
+  scope && Object.keys(scope).length > 0 ? { $and: [scope, filter] } : filter;
+
 /**
  * Enforce record-level ownership (SEC-002). A role policy answers "may this ROLE
  * write?"; it cannot answer "is this THEIR record?". Without this check any
@@ -164,13 +169,30 @@ const collectionRoutes = ({
   ownerField = null,
   populate = null,
   enablePopulate = false,
+  // GETs accept anonymous callers; every write still requires a token.
+  publicRead = false,
+  // Caller-specific read scope, e.g. "only vetted listings unless you are an admin".
+  readScope = () => ({}),
+  // Final per-caller projection, applied after PII stripping.
+  redact = (item) => item,
+  // Inspects the raw body before the allowlist runs; throws to reject the write outright.
+  assertWritable = () => {},
 }) => {
   const router = Router();
   const policy = RESOURCE_POLICIES[policyKey] || null;
   if (!policy) throw new Error(`Missing authorization policy for "${policyKey}"`);
 
-  // SEC-002: nothing in a collection is readable without a valid token.
-  router.use(requireAuth);
+  // SEC-002: nothing in a collection is readable without a valid token, unless the
+  // resource is explicitly public-read - and even then writes still need one.
+  router.use(publicRead
+    ? (req, res, next) => (req.method === 'GET' ? optionalAuth : requireAuth)(req, res, next)
+    : requireAuth);
+
+  // SEC-023: strip PII fields for non-owners/non-admins
+  const present = (item, req) => {
+    const base = normalizeOut ? normalizeOut(item) : toClientObject(item);
+    return redact(stripPiiIfNeeded(base, policyKey, req.auth, ownerField), req);
+  };
 
   router.get(
     '/',
@@ -201,18 +223,13 @@ const collectionRoutes = ({
         filter.userId = req.auth.sub;
       }
 
+      const scoped = withScope(filter, readScope(req));
       const [data, total] = await Promise.all([
-        Model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-        Model.countDocuments(filter),
+        Model.find(scoped).sort({ createdAt: -1 }).skip(skip).limit(limit),
+        Model.countDocuments(scoped),
       ]);
 
-      // SEC-023: strip PII fields for non-owners/non-admins
-      const processItem = (item) => {
-        const base = normalizeOut ? normalizeOut(item) : toClientObject(item);
-        return stripPiiIfNeeded(base, policyKey, req.auth, ownerField);
-      };
-
-      listResponse(res, data.map(processItem), total, page, limit);
+      listResponse(res, data.map((item) => present(item, req)), total, page, limit);
     }),
   );
 
@@ -220,18 +237,14 @@ const collectionRoutes = ({
     '/:id',
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'read', req, resourceName);
-      let query = Model.findById(req.params.id);
+      let query = Model.findOne(withScope({ _id: req.params.id }, readScope(req)));
       if (enablePopulate && populate) {
         query = query.populate(populate);
       }
       const item = await query;
       if (!item) throw notFound(resourceName);
 
-      // SEC-023: strip PII fields for non-owners/non-admins
-      const base = normalizeOut ? normalizeOut(item) : toClientObject(item);
-      const processed = stripPiiIfNeeded(base, policyKey, req.auth, ownerField);
-
-      itemResponse(res, processed);
+      itemResponse(res, present(item, req));
     }),
   );
 
@@ -239,6 +252,7 @@ const collectionRoutes = ({
     '/',
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'create', req, resourceName);
+      assertWritable(req.body, req);
       // SEC-007: the body is reduced to an explicit allowlist before it reaches the model.
       const allowed = buildCreatePayload(policy, req.body);
       // SEC-002: the owner is derived from the token, never from the body. Otherwise
@@ -272,6 +286,7 @@ const collectionRoutes = ({
       const existing = await Model.findById(req.params.id);
       if (!existing) throw notFound(resourceName);
       assertOwnership(existing, ownerField, req, resourceName);
+      assertWritable(req.body, req);
 
       // SEC-007: unknown keys are dropped, admin-only keys only for admins.
       const allowed = buildUpdatePayload(policy, req.body, req.auth?.role);
@@ -324,337 +339,118 @@ const collectionRoutes = ({
   return router;
 };
 
+// --- Opportunities --------------------------------------------------------
 
-apiRouter.get('/health', (req, res) => {
-  const dbStatus = mongoose.connection.readyState;
-  const statusMap = {
-    0: 'disconnected',
-    1: 'connected',
-    2: 'connecting',
-    3: 'disconnecting',
-  };
-
-  const isHealthy = dbStatus === 1;
-
-  res.status(isHealthy ? 200 : 503).json({
-    status: isHealthy ? 'ok' : 'error',
-    service: 'kredibble-backend',
-    database: {
-      status: statusMap[dbStatus] || 'unknown',
-      connected: isHealthy,
-    },
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// SEC-003: the summary exposes platform-wide counts (total users, open reports,
- // pending moderation queues), so it is admin-only. `requireAdminAuth` validates
- // the admin cookie or header and enforces role=admin + audience=kredibble-admin.
- apiRouter.get('/dashboard/summary', requireAdminAuth, asyncHandler(async (req, res) => {
-
-  const [
-    pendingVerifications,
-    pendingOpportunities,
-    activeSeekers,
-    activeHirers,
-    openReports,
-    totalUsers,
-    totalOpportunities,
-  ] = await Promise.all([
-    CompanyVerification.countDocuments({ overallStatus: 'pending' }),
-    Opportunity.countDocuments({ moderationStatus: 'pending' }),
-    SeekerProfile.countDocuments({ status: 'active' }),
-    HirerAccount.countDocuments({ status: 'active' }),
-    Report.countDocuments({ status: 'open' }),
-    User.countDocuments(),
-    Opportunity.countDocuments(),
-  ]);
-
-  itemResponse(res, {
-    pendingVerifications,
-    pendingOpportunities,
-    activeSeekers,
-    activeHirers,
-    openReports,
-    totalUsers,
-    totalOpportunities,
-  });
-}));
-
-apiRouter.use('/auth', authRouter);
-apiRouter.use('/upload', uploadRouter);
-
-// Resource Routes
-// Search routes must be registered BEFORE the /seekers and /candidates collection
-// mounts below. collectionRoutes defines a `/:id` handler, and "search" is a
-// single path segment, so mounting the collection first would swallow
-// /candidates/search and /seekers/search and turn them into a findById('search')
-// CastError. Both are called by the mobile career screen.
-apiRouter.get('/candidates/search', searchLimiter, ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
-    const { skills, university, country, q } = req.query;
-    const filter = {};
-
-    const query = searchPattern(q);
-    if (query) filter.$or = [{ name: query }, { profession: query }];
-    const location = searchPattern(country);
-    if (location) filter.location = location;
-    const school = searchPattern(university);
-    if (school) filter.university = school;
-    const skillMatch = searchAlternation(skills);
-    if (skillMatch) filter.skills = skillMatch;
-
-    const data = await Candidate.find(filter).sort({ createdAt: -1 });
-    listResponse(res, data.map(withParsedCandidate));
-}));
-
-apiRouter.get('/seekers/search', searchLimiter, ...guard('seekers', 'read', 'seeker'), asyncHandler(async (req, res) => {
-    const { skills, university, country, q } = req.query;
-    const filter = {};
-
-    const query = searchPattern(q);
-    if (query) filter.profession = query;
-    const origin = searchPattern(country);
-    if (origin) filter.country = origin;
-    const school = searchPattern(university);
-    if (school) filter.university = school;
-    const skillMatch = searchAlternation(skills);
-    if (skillMatch) filter.technicalSkills = skillMatch;
-
-    const data = await SeekerProfile.find(filter).sort({ createdAt: -1 });
-    listResponse(res, data.map(withParsedProfile));
-}));
-
-apiRouter.use('/users', collectionRoutes({ Model: User, resourceName: 'User', policyKey: 'users', searchFields: ['name', 'email'] }));
-apiRouter.use('/staff', collectionRoutes({ Model: StaffMember, resourceName: 'Staff', policyKey: 'staff', searchFields: ['name', 'email'] }));
-apiRouter.use('/seekers', collectionRoutes({
-  Model: SeekerProfile,
-  resourceName: 'Seeker',
-  policyKey: 'seekers',
-  normalizeIn: (data) => stringifyArrayFields(data, ['technicalSkills', 'softSkills', 'tools', 'certifications']),
-  normalizeOut: withParsedProfile,
-  searchFields: ['profession', 'university', 'country'],
-  ownerField: 'userId',
-  populate: { path: 'userId', select: 'name email avatarUrl' },
-}));
-apiRouter.use('/hirers', collectionRoutes({ Model: HirerAccount, resourceName: 'Hirer', policyKey: 'hirers', searchFields: ['companyName', 'industry'], ownerField: 'userId', populate: { path: 'userId', select: 'name email avatarUrl' } }));
-apiRouter.use('/opportunities', collectionRoutes({
-  Model: Opportunity,
-  resourceName: 'Opportunity',
-  policyKey: 'opportunities',
-  normalizeIn: (data) => stringifyArrayFields(data, ['experienceLevels']),
-  normalizeOut: withParsedOpportunity,
-  searchFields: ['title', 'company', 'location'],
-  ownerField: 'hirerId',
-  populate: { path: 'hirerId', select: 'companyName tagline logo industry location' },
-}));
-apiRouter.use('/candidates', collectionRoutes({
-  Model: Candidate,
-  resourceName: 'Candidate',
-  policyKey: 'candidates',
-  normalizeIn: (data) => stringifyArrayFields(data, ['skills']),
-  normalizeOut: withParsedCandidate,
-  searchFields: ['name', 'profession']
-}));
-apiRouter.use('/community/channels', collectionRoutes({ Model: Channel, resourceName: 'Channel', policyKey: 'community/channels', searchFields: ['name', 'category'] }));
-apiRouter.use('/reports', collectionRoutes({ Model: Report, resourceName: 'Report', policyKey: 'reports', searchFields: ['reason', 'details'] }));
-apiRouter.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'] }));
-apiRouter.use('/grants', collectionRoutes({ Model: Grant, resourceName: 'Grant', policyKey: 'grants', searchFields: ['title', 'sector'] }));
-apiRouter.use('/articles', collectionRoutes({ Model: Article, resourceName: 'Article', policyKey: 'articles', searchFields: ['title', 'category'] }));
-apiRouter.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'] }));
-apiRouter.use('/verification/companies', collectionRoutes({ Model: CompanyVerification, resourceName: 'Company verification', policyKey: 'verification/companies', searchFields: ['name', 'industry'], ownerField: 'hirerId' }));
-
-
-// Special nested routes
-apiRouter.post('/opportunities/:opportunityId/applicants', ...guard('applicants', 'create', 'applicant'), asyncHandler(async (req, res) => {
-    const applicant = new Applicant(
-      stringifyArrayFields(writableBody('applicants', req), ['skills']),
-    );
-    applicant.set('opportunityId', req.params.opportunityId);
-    await applicant.save();
-    await Opportunity.findByIdAndUpdate(req.params.opportunityId, { $inc: { applicantsCount: 1 } });
-
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.APPLICATION_SUBMIT,
-      resourceType: AUDIT_RESOURCE_TYPES.APPLICANT,
-      resourceId: applicant._id,
-      outcome: 'success',
-      metadata: { opportunityId: req.params.opportunityId },
-    });
-
-    res.status(201).json({ data: toClientObject(applicant) });
-}));
-
-apiRouter.get('/opportunities/:opportunityId/applicants', ...guard('applicants', 'read', 'applicant'), asyncHandler(async (req, res) => {
-    const applicants = await Applicant.find({ opportunityId: req.params.opportunityId }).sort({ createdAt: -1 });
-    listResponse(res, applicants.map(toClientObject));
-}));
-
-apiRouter.post('/community/channels/:channelId/posts', ...guard('community/posts', 'create', 'post'), asyncHandler(async (req, res) => {
-    const post = new ChannelPost(writableBody('community/posts', req));
-    post.set('channelId', req.params.channelId);
-    await post.save();
-    await Channel.findByIdAndUpdate(req.params.channelId, { $inc: { postsCount: 1 } });
-    
-    try {
-      const { getIO } = await import('../socket.js');
-      const io = getIO();
-      io.to(`channel_${req.params.channelId}`).emit('receive_message', toClientObject(post.toObject()));
-    } catch (err) {
-      logger.warn({ error: err.message }, 'Socket not initialized or failed to broadcast');
-    }
-
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.ADMIN_USER_UPDATE, // Using generic admin action for now
-      resourceType: AUDIT_RESOURCE_TYPES.COMMUNITY_POST,
-      resourceId: post._id,
-      outcome: 'success',
-      metadata: { channelId: req.params.channelId },
-    });
-    
-    res.status(201).json({ data: toClientObject(post) });
-}));
-
-apiRouter.get('/community/channels/:channelId/posts', ...guard('community/posts', 'read', 'post'), asyncHandler(async (req, res) => {
-    const posts = await ChannelPost.find({ channelId: req.params.channelId }).sort({ createdAt: -1 });
-    listResponse(res, posts.map(toClientObject));
-}));
-
-apiRouter.post('/grants/:grantId/applications', ...guard('grant-applications', 'create', 'grant application'), asyncHandler(async (req, res) => {
-    const application = new GrantApplication(writableBody('grant-applications', req));
-    application.set('grantId', req.params.grantId);
-    await application.save();
-
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.GRANT_APPLY,
-      resourceType: AUDIT_RESOURCE_TYPES.GRANT_APPLICATION,
-      resourceId: application._id,
-      outcome: 'success',
-      metadata: { grantId: req.params.grantId },
-    });
-
-    res.status(201).json({ data: toClientObject(application) });
-}));
-
-apiRouter.post('/events/:eventId/attendees', ...guard('event-attendees', 'create', 'booking'), asyncHandler(async (req, res) => {
-    // Read quantity from the sanitized body, not req.body, and bound it. The raw
-    // expression `Number(req.body.quantity) || 1` treats -5 and NaN-ish input as
-    // truthy, so a caller could decrement attendeesCount or pass Infinity.
-    const body = writableBody('event-attendees', req);
-    const quantity = Math.min(Math.max(Number.parseInt(body.quantity, 10) || 1, 1), 10);
-
-    const attendee = new EventAttendee({ ...body, quantity });
-    attendee.set('eventId', req.params.eventId);
-    await attendee.save();
-    await Event.findByIdAndUpdate(req.params.eventId, { $inc: { attendeesCount: quantity } });
-
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.EVENT_BOOK,
-      resourceType: AUDIT_RESOURCE_TYPES.EVENT_ATTENDEE,
-      resourceId: attendee._id,
-      outcome: 'success',
-      metadata: { eventId: req.params.eventId, quantity },
-    });
-
-    res.status(201).json({ data: toClientObject(attendee) });
-}));
-
-apiRouter.get('/events/:eventId/attendees', ...guard('event-attendees', 'read', 'attendee'), asyncHandler(async (req, res) => {
-    const attendees = await EventAttendee.find({ eventId: req.params.eventId }).sort({ createdAt: -1 });
-    listResponse(res, attendees.map(toClientObject));
-}));
-
-apiRouter.get('/grants/:grantId/applications', ...guard('grant-applications', 'read', 'grant application'), asyncHandler(async (req, res) => {
-    const applications = await GrantApplication.find({ grantId: req.params.grantId }).sort({ createdAt: -1 });
-    listResponse(res, applications.map(toClientObject));
-}));
-
-apiRouter.post('/verification/companies/:id/documents', ...guard('verification/documents', 'create', 'document'), asyncHandler(async (req, res) => {
-    const doc = new VerificationDoc(writableBody('verification/documents', req));
-    doc.set('companyId', req.params.id);
-    await doc.save();
-
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.UPLOAD,
-      resourceType: AUDIT_RESOURCE_TYPES.VERIFICATION_DOC,
-      resourceId: doc._id,
-      outcome: 'success',
-      metadata: { companyId: req.params.id },
-    });
-
-    res.status(201).json({ data: toClientObject(doc) });
-}));
-
-apiRouter.get('/verification/companies/:id/documents', ...guard('verification/documents', 'read', 'document'), asyncHandler(async (req, res) => {
-    const docs = await VerificationDoc.find({ companyId: req.params.id }).sort({ createdAt: -1 });
-    listResponse(res, docs.map(toClientObject));
-}));
-
-// Provide basic CRUD for these nested resources so they can be read, updated, or deleted directly by ID
-
-apiRouter.use('/applicants', collectionRoutes({ Model: Applicant, resourceName: 'Applicant', policyKey: 'applicants' }));
-apiRouter.use('/grant-applications', collectionRoutes({ Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications' }));
-apiRouter.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents' }));
-apiRouter.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts' }));
-
+const publicOpportunityFilter = () => ({ vetted: true, moderationStatus: { $in: ['published', 'approved'] } });
 
 /**
- * Saved items are private to their owner. Use `/users/me/saved` so the server
- * derives the user ID from the JWT. This prevents IDOR where a user could
- * pass another user's ID in the path.
+ * Who sees which listings. Admins moderate everything; a hirer also sees their
+ * own unpublished listings; everyone else - including anonymous website and
+ * app visitors - sees only vetted, published listings.
  */
-const savedItemsGuard = [
-  requireAuth,
-  (req, res, next) => {
-    // No need for assertSelfOrAdmin since we use the authenticated user's ID
-    next();
-  },
-];
-
-apiRouter.post('/users/me/saved', savedItemsGuard, asyncHandler(async (req, res) => {
-  const { SavedItem } = await import('../models/User.js');
-  const { itemId, itemType } = req.body;
-  if (!itemId || !['opportunities', 'events', 'grants', 'internships'].includes(itemType)) {
-    throw new ApiError(400, 'A valid itemId and itemType are required');
+const opportunityReadScope = (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  if (req.auth?.role === HIRER) {
+    return { $or: [publicOpportunityFilter(), { hirerId: req.auth.sub }, { createdBy: req.auth.sub }] };
   }
-  const userId = req.auth.sub;
-  const existing = await SavedItem.findOne({ userId, itemId, itemType });
-  if (existing) {
-    await SavedItem.findByIdAndDelete(existing._id);
+  return publicOpportunityFilter();
+};
 
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.SAVED_ITEM_TOGGLE,
-      resourceType: AUDIT_RESOURCE_TYPES.SAVED_ITEM,
-      resourceId: existing._id,
-      outcome: 'success',
-      metadata: { action: 'removed', itemId, itemType },
-    });
+/** Moderation and integration bookkeeping stays with administrators. */
+const redactOpportunity = (opportunity, req) => {
+  if (req.auth?.role === ADMIN) return opportunity;
+  const { wordpressSync, assignedWriterId, vettedBy, vettedAt, ...visible } = opportunity;
+  return visible;
+};
 
-    res.json({ action: 'removed' });
-  } else {
-    const newItem = new SavedItem({ userId, itemId, itemType });
-    await newItem.save();
-
-    await auditReq(req, {
-      action: AUDIT_ACTIONS.SAVED_ITEM_TOGGLE,
-      resourceType: AUDIT_RESOURCE_TYPES.SAVED_ITEM,
-      resourceId: newItem._id,
-      outcome: 'success',
-      metadata: { action: 'added', itemId, itemType },
-    });
-
-    res.status(201).json({ action: 'added', data: toClientObject(newItem) });
+/** Vetting and publishing go through the admin opportunity API, never the standard one. */
+const assertOpportunityWritable = (body, req) => {
+  if (req.auth?.role === ADMIN) return;
+  if (body?.vetted === true || ['published', 'approved'].includes(body?.moderationStatus)) {
+    throw new ApiError(403, 'Only the admin opportunity API can vet or publish an opportunity');
   }
-}));
+};
 
-apiRouter.get('/users/me/saved', savedItemsGuard, asyncHandler(async (req, res) => {
-  const { SavedItem } = await import('../models/User.js');
-  const savedItems = await SavedItem.find({ userId: req.auth.sub }).sort({ createdAt: -1 });
-  listResponse(res, savedItems.map(toClientObject));
-}));
+const findReferringAmbassador = async (rawCode) => {
+  const referralCode = String(rawCode || '').trim().toUpperCase();
+  if (!referralCode) return { referralCode: undefined, ambassador: null };
+  const ambassador = await Ambassador.findOne({ referralCode });
+  if (!ambassador) throw new ApiError(400, 'Invalid referral code');
+  return { referralCode, ambassador };
+};
 
+// --- Community ------------------------------------------------------------
+
+const toId = (value) => value?.toString();
+
+const getChannelOrThrow = async (channelId) => {
+  const channel = await Channel.findById(channelId);
+  if (!channel) throw notFound('Channel');
+  return channel;
+};
+
+const getCommunityUserOrThrow = async (userId) => {
+  if (!mongoose.isValidObjectId(userId)) throw new ApiError(400, 'A valid userId is required');
+  const user = await User.findById(userId);
+  if (!user) throw notFound('User');
+  return user;
+};
+
+const getMembership = (channelId, userId) =>
+  userId ? CommunityMembership.findOne({ channelId, userId }) : null;
+
+const isLegacyMember = (channel, userId) =>
+  (channel.memberIds || []).some((memberId) => toId(memberId) === userId);
+
+const canAccessChannel = async (channel, user) => {
+  if (channel.visibility === 'public' || user?.role === ADMIN || toId(channel.createdBy) === user?.sub) return true;
+  const membership = await getMembership(channel._id, user?.sub);
+  return membership?.status === 'active' || isLegacyMember(channel, user?.sub);
+};
+
+const canManageChannel = async (channel, user) => {
+  if (user?.role === ADMIN || toId(channel.createdBy) === user?.sub) return true;
+  const membership = await getMembership(channel._id, user?.sub);
+  return membership?.status === 'active' && membership.role === 'admin';
+};
+
+const requireChannelAdmin = async (channel, user) => {
+  if (!await canManageChannel(channel, user)) throw new ApiError(403, 'Only a community admin can manage this group');
+};
+
+const submitJoinRequest = async (channel, userId, body = {}) => {
+  let membership = await getMembership(channel._id, userId);
+  if (membership?.status === 'banned') throw new ApiError(403, 'This user is banned from this community');
+  if (membership?.status === 'active') return { membership, accepted: true };
+  if (!membership && isLegacyMember(channel, userId)) {
+    membership = await CommunityMembership.create({ channelId: channel._id, userId, status: 'active' });
+    return { membership, accepted: true };
+  }
+  const status = channel.visibility === 'private' || channel.requiresApproval ? 'pending' : 'active';
+  if (!membership) membership = new CommunityMembership({ channelId: channel._id, userId });
+  membership.status = status;
+  membership.application = {
+    message: String(body.message || '').trim(),
+    answers: body.answers && typeof body.answers === 'object' ? body.answers : {},
+  };
+  membership.reviewedBy = null;
+  membership.reviewedAt = null;
+  membership.bannedReason = undefined;
+  await membership.save();
+  return { membership, accepted: status === 'active' };
+};
+
+const CHANNEL_POST_FIELDS = ['body', 'title', 'bannerImage', 'link', 'linkText', 'hasRespondButton', 'reactions'];
+const CHANNEL_UPDATE_FIELDS = ['name', 'category', 'bio', 'avatar', 'visibility', 'status', 'requiresApproval'];
+
+const publicTestimonial = (testimonial) => {
+  const { email, ...visible } = toClientObject(testimonial);
+  return visible;
+};
 
 /**
- * Factory function to create the API router with optional populate support.
+ * Build the API router. It is mounted twice by app.js - at /api/v1 with populate
+ * and at the deprecated /api without - so every route lives here exactly once.
  * @param {Object} options - Configuration options
  * @param {boolean} options.enablePopulate - Whether to enable populate on single item endpoints (SEC-032)
  * @returns {Router} Express router with all API routes
@@ -664,6 +460,126 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.use('/auth', authRouter);
   router.use('/upload', uploadRouter);
+  router.use('/assistant', assistantRouter);
+  router.use('/news', newsRouter);
+  router.use('/admin', adminRouter);
+
+  router.get('/health', (req, res) => {
+    const dbStatus = mongoose.connection.readyState;
+    const statusMap = {
+      0: 'disconnected',
+      1: 'connected',
+      2: 'connecting',
+      3: 'disconnecting',
+    };
+
+    const isHealthy = dbStatus === 1;
+
+    res.status(isHealthy ? 200 : 503).json({
+      status: isHealthy ? 'ok' : 'error',
+      service: 'kredibble-backend',
+      database: {
+        status: statusMap[dbStatus] || 'unknown',
+        connected: isHealthy,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // SEC-003: platform-wide counts are admin-only. `requireAdminAuth` validates the
+  // admin cookie or header and enforces role=admin + audience=kredibble-admin.
+  router.get('/dashboard/summary', requireAdminAuth, asyncHandler(async (req, res) => {
+    const [
+      pendingVerifications,
+      pendingOpportunities,
+      activeSeekers,
+      activeHirers,
+      openReports,
+      totalUsers,
+      totalSeekers,
+      totalHirers,
+      totalOpportunities,
+      totalApplications,
+      totalEvents,
+      totalGrants,
+      totalGrantApplications,
+    ] = await Promise.all([
+      CompanyVerification.countDocuments({ overallStatus: 'pending' }),
+      Opportunity.countDocuments({ moderationStatus: 'pending' }),
+      SeekerProfile.countDocuments({ status: 'active' }),
+      HirerAccount.countDocuments({ status: 'active' }),
+      Report.countDocuments({ status: 'open' }),
+      User.countDocuments(),
+      SeekerProfile.countDocuments(),
+      HirerAccount.countDocuments(),
+      Opportunity.countDocuments(),
+      Applicant.countDocuments(),
+      Event.countDocuments(),
+      Grant.countDocuments(),
+      GrantApplication.countDocuments(),
+    ]);
+
+    itemResponse(res, {
+      // Keys read by the admin dashboard.
+      pendingVerifications,
+      pendingOpportunities,
+      activeSeekers,
+      activeHirers,
+      openReports,
+      totalUsers,
+      totalOpportunities,
+      // Totals added with API versioning (SEC-019).
+      users: totalUsers,
+      seekers: totalSeekers,
+      hirers: totalHirers,
+      opportunities: totalOpportunities,
+      applications: totalApplications,
+      events: totalEvents,
+      grants: totalGrants,
+      grantApplications: totalGrantApplications,
+    });
+  }));
+
+  router.get('/opportunity-types', (req, res) => {
+    itemResponse(res, opportunityTypes);
+  });
+
+  // The caller's own seeker or hirer profile, resolved from the token.
+  router.get('/me/profile', requireAuth, asyncHandler(async (req, res) => {
+    const isSeeker = req.auth.role === SEEKER;
+    const Model = isSeeker ? SeekerProfile : req.auth.role === HIRER ? HirerAccount : null;
+    if (!Model) throw new ApiError(404, 'Profile not found');
+    const profile = await Model.findOne({ userId: req.auth.sub });
+    if (!profile) throw notFound('Profile');
+    itemResponse(res, isSeeker ? withParsedProfile(profile) : toClientObject(profile));
+  }));
+
+  router.patch('/me/profile', requireAuth, asyncHandler(async (req, res) => {
+    const isSeeker = req.auth.role === SEEKER;
+    const Model = isSeeker ? SeekerProfile : req.auth.role === HIRER ? HirerAccount : null;
+    if (!Model) throw new ApiError(403, 'Only seeker and hirer accounts have editable profiles');
+    // SEC-007: the same self-service allowlist as PATCH /seekers/:id and /hirers/:id.
+    const updates = buildUpdatePayload(RESOURCE_POLICIES[isSeeker ? 'seekers' : 'hirers'], req.body, req.auth.role);
+    const normalized = isSeeker ? stringifyArrayFields(updates, ['technicalSkills', 'softSkills', 'tools', 'certifications']) : updates;
+    const profile = await Model.findOneAndUpdate({ userId: req.auth.sub }, normalized, { new: true, runValidators: true });
+    if (!profile) throw notFound('Profile');
+    itemResponse(res, isSeeker ? withParsedProfile(profile) : toClientObject(profile));
+  }));
+
+  // Only approved testimonials are public, and never with the submitter's email.
+  router.get('/testimonials', asyncHandler(async (req, res) => {
+    const testimonials = await Testimonial.find({ status: 'approved' }).sort({ createdAt: -1 });
+    listResponse(res, testimonials.map(publicTestimonial));
+  }));
+
+  router.post('/testimonials', requireAuth, asyncHandler(async (req, res) => {
+    const name = String(req.body.name || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const comment = String(req.body.comment || '').trim();
+    if (!name || !/^\S+@\S+\.\S+$/.test(email) || !comment) throw new ApiError(400, 'name, a valid email, and comment are required');
+    const testimonial = await Testimonial.create({ name, email, comment, photo: req.body.photo });
+    res.status(201).json({ data: publicTestimonial(testimonial) });
+  }));
 
   // Search routes (must be registered BEFORE collection routes to avoid /:id swallowing them)
   router.get('/candidates/search', searchLimiter, ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
@@ -700,6 +616,236 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     listResponse(res, data.map(withParsedProfile));
   }));
 
+  // Website and app view tracking, including ambassador referral attribution. Public
+  // by design (the WordPress site reports anonymous visitors), so it is registered
+  // before the /opportunities collection, whose router requires a token for writes.
+  router.post('/opportunities/:opportunityId/views', optionalAuth, asyncHandler(async (req, res) => {
+    const opportunity = await Opportunity.findById(req.params.opportunityId);
+    if (!opportunity) throw notFound('Opportunity');
+    const { referralCode, ambassador } = await findReferringAmbassador(req.body.referralCode);
+    await OpportunityEngagement.create({
+      opportunityId: opportunity._id,
+      event: 'view',
+      source: req.body.source === 'website' ? 'website' : 'app',
+      userId: req.auth?.sub,
+      ambassadorId: ambassador?._id,
+      referralCode,
+      visitorId: String(req.body.visitorId || '').trim() || undefined,
+    });
+    res.status(202).json({ data: { recorded: true } });
+  }));
+
+  // Community groups. Membership-aware routes are registered before the generic
+  // /community/channels collection so they take precedence over its CRUD handlers.
+  router.get('/community/channels', optionalAuth, asyncHandler(async (req, res) => {
+    const membershipChannelIds = req.auth
+      ? await CommunityMembership.find({ userId: req.auth.sub, status: 'active' }).distinct('channelId')
+      : [];
+    const visible = req.auth
+      ? { $or: [{ visibility: 'public' }, { createdBy: req.auth.sub }, { memberIds: req.auth.sub }, { _id: { $in: membershipChannelIds } }] }
+      : { visibility: 'public' };
+    const clauses = [visible];
+    if (req.query.visibility) clauses.push({ visibility: String(req.query.visibility) });
+    const pattern = searchPattern(req.query.q);
+    if (pattern) clauses.push({ $or: [{ name: pattern }, { category: pattern }] });
+    const filter = clauses.length === 1 ? visible : { $and: clauses };
+
+    const { page, limit, skip } = parsePagination(req.query);
+    const [channels, total] = await Promise.all([
+      Channel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Channel.countDocuments(filter),
+    ]);
+    listResponse(res, channels.map(toClientObject), total, page, limit);
+  }));
+
+  router.post('/community/channels', requireAuth, asyncHandler(async (req, res) => {
+    const { visibility = 'public', bio, avatar } = req.body;
+    const name = String(req.body.name || '').trim();
+    const category = String(req.body.category || '').trim();
+    if (!name || !category) throw new ApiError(400, 'name and category are required');
+    if (!['public', 'private'].includes(visibility)) throw new ApiError(400, 'visibility must be public or private');
+    const channel = await Channel.create({
+      name,
+      category,
+      visibility,
+      bio,
+      avatar,
+      createdBy: req.auth.sub,
+      requiresApproval: typeof req.body.requiresApproval === 'boolean' ? req.body.requiresApproval : visibility === 'private',
+    });
+    await CommunityMembership.create({ channelId: channel._id, userId: req.auth.sub, role: 'admin', status: 'active' });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
+      resourceType: AUDIT_RESOURCE_TYPES.COMMUNITY_CHANNEL,
+      resourceId: channel._id,
+      outcome: 'success',
+      metadata: { visibility },
+    });
+
+    res.status(201).json({ data: toClientObject(channel) });
+  }));
+
+  router.get('/community/channels/:channelId', optionalAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
+    itemResponse(res, toClientObject(channel));
+  }));
+
+  router.patch('/community/channels/:channelId', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    const updates = Object.fromEntries(Object.entries(req.body).filter(([key]) => CHANNEL_UPDATE_FIELDS.includes(key)));
+    if (updates.visibility && !['public', 'private'].includes(updates.visibility)) throw new ApiError(400, 'visibility must be public or private');
+    Object.assign(channel, updates);
+    await channel.save();
+    itemResponse(res, toClientObject(channel));
+  }));
+
+  router.post('/community/channels/:channelId/join-requests', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    const result = await submitJoinRequest(channel, req.auth.sub, req.body);
+    res.status(result.accepted ? 201 : 202).json({ data: { membership: toClientObject(result.membership), accepted: result.accepted } });
+  }));
+
+  router.get('/community/channels/:channelId/join-requests', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    const status = String(req.query.status || 'pending');
+    const memberships = await CommunityMembership.find({ channelId: channel._id, status }).populate('userId', 'name email avatarUrl');
+    listResponse(res, memberships.map(toClientObject));
+  }));
+
+  router.post('/community/channels/:channelId/members', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    const userId = String(req.body.userId || '');
+    await getCommunityUserOrThrow(userId);
+    if (toId(channel.createdBy) === userId && req.body.role !== 'admin') throw new ApiError(400, 'The group creator must remain an admin');
+    const membership = await CommunityMembership.findOneAndUpdate(
+      { channelId: channel._id, userId },
+      { $set: { status: 'active', role: req.body.role === 'admin' ? 'admin' : 'member', reviewedBy: req.auth.sub, reviewedAt: new Date(), bannedReason: undefined } },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+    itemResponse(res, toClientObject(membership));
+  }));
+
+  router.post('/community/channels/:channelId/members/:userId/accept', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    const membership = await CommunityMembership.findOne({ channelId: channel._id, userId: req.params.userId });
+    if (!membership || membership.status !== 'pending') throw new ApiError(404, 'Pending join request not found');
+    membership.status = 'active';
+    membership.role = req.body.role === 'admin' ? 'admin' : 'member';
+    membership.reviewedBy = req.auth.sub;
+    membership.reviewedAt = new Date();
+    await membership.save();
+    itemResponse(res, toClientObject(membership));
+  }));
+
+  router.delete('/community/channels/:channelId/members/:userId', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    if (toId(channel.createdBy) === req.params.userId) throw new ApiError(400, 'The group creator cannot be removed');
+    const membership = await CommunityMembership.findOneAndUpdate(
+      { channelId: channel._id, userId: req.params.userId },
+      { $set: { status: 'removed', reviewedBy: req.auth.sub, reviewedAt: new Date() } },
+      { new: true },
+    );
+    if (!membership) throw notFound('Community member');
+    itemResponse(res, toClientObject(membership));
+  }));
+
+  router.post('/community/channels/:channelId/members/:userId/ban', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    if (toId(channel.createdBy) === req.params.userId) throw new ApiError(400, 'The group creator cannot be banned');
+    await getCommunityUserOrThrow(req.params.userId);
+    const membership = await CommunityMembership.findOneAndUpdate(
+      { channelId: channel._id, userId: req.params.userId },
+      { $set: { status: 'banned', reviewedBy: req.auth.sub, reviewedAt: new Date(), bannedReason: String(req.body.reason || '').trim() || undefined } },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+    itemResponse(res, toClientObject(membership));
+  }));
+
+  router.post('/community/channels/:channelId/members/:userId/unban', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    const membership = await CommunityMembership.findOneAndUpdate(
+      { channelId: channel._id, userId: req.params.userId, status: 'banned' },
+      { $set: { status: 'removed', reviewedBy: req.auth.sub, reviewedAt: new Date(), bannedReason: undefined } },
+      { new: true },
+    );
+    if (!membership) throw new ApiError(404, 'Banned community member not found');
+    itemResponse(res, toClientObject(membership));
+  }));
+
+  router.get('/community/channels/:channelId/posts', optionalAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
+    const { page, limit, skip } = parsePagination(req.query);
+    const filter = { channelId: channel._id };
+    const [posts, total] = await Promise.all([
+      ChannelPost.find(filter).sort({ pinnedAt: -1, createdAt: -1 }).skip(skip).limit(limit),
+      ChannelPost.countDocuments(filter),
+    ]);
+    listResponse(res, posts.map(toClientObject), total, page, limit);
+  }));
+
+  router.post('/community/channels/:channelId/posts', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
+    const author = await User.findById(req.auth.sub);
+    // SEC-007: author identity comes from the token; only content fields come from the body.
+    const post = new ChannelPost({
+      ...Object.fromEntries(Object.entries(req.body).filter(([key]) => CHANNEL_POST_FIELDS.includes(key))),
+      channelId: channel._id,
+      authorId: req.auth.sub,
+      authorName: author?.name || 'Community member',
+    });
+    await post.save();
+    await Channel.findByIdAndUpdate(channel._id, { $inc: { postsCount: 1 } });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
+      resourceType: AUDIT_RESOURCE_TYPES.COMMUNITY_POST,
+      resourceId: post._id,
+      outcome: 'success',
+      metadata: { channelId: String(channel._id) },
+    });
+
+    res.status(201).json({ data: toClientObject(post) });
+  }));
+
+  router.put('/community/channels/:channelId/posts/:postId/pin', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    const post = await ChannelPost.findOne({ _id: req.params.postId, channelId: channel._id });
+    if (!post) throw notFound('Channel post');
+    if (channel.pinnedPostId && toId(channel.pinnedPostId) !== toId(post._id)) {
+      await ChannelPost.findByIdAndUpdate(channel.pinnedPostId, { pinnedAt: null, pinnedBy: null });
+    }
+    post.pinnedAt = new Date();
+    post.pinnedBy = req.auth.sub;
+    channel.pinnedPostId = post._id;
+    await Promise.all([post.save(), channel.save()]);
+    itemResponse(res, { channel: toClientObject(channel), post: toClientObject(post) });
+  }));
+
+  router.delete('/community/channels/:channelId/posts/:postId/pin', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await requireChannelAdmin(channel, req.auth);
+    if (toId(channel.pinnedPostId) !== req.params.postId) throw new ApiError(400, 'This message is not pinned');
+    const post = await ChannelPost.findOne({ _id: req.params.postId, channelId: channel._id });
+    if (!post) throw notFound('Channel post');
+    channel.pinnedPostId = null;
+    post.pinnedAt = null;
+    post.pinnedBy = null;
+    await Promise.all([post.save(), channel.save()]);
+    itemResponse(res, { channel: toClientObject(channel), post: toClientObject(post) });
+  }));
+
   // Collection routes with populate option
   router.use('/users', collectionRoutes({ Model: User, resourceName: 'User', policyKey: 'users', searchFields: ['name', 'email'], enablePopulate }));
   router.use('/staff', collectionRoutes({ Model: StaffMember, resourceName: 'Staff', policyKey: 'staff', searchFields: ['name', 'email'], enablePopulate }));
@@ -725,6 +871,10 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     ownerField: 'hirerId',
     populate: { path: 'hirerId', select: 'companyName tagline logo industry location' },
     enablePopulate,
+    publicRead: true,
+    readScope: opportunityReadScope,
+    redact: redactOpportunity,
+    assertWritable: assertOpportunityWritable,
   }));
   router.use('/candidates', collectionRoutes({
     Model: Candidate,
@@ -743,38 +893,40 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate }));
   router.use('/verification/companies', collectionRoutes({ Model: CompanyVerification, resourceName: 'Company verification', policyKey: 'verification/companies', searchFields: ['name', 'industry'], ownerField: 'hirerId', enablePopulate }));
 
-  // Search routes (must be registered BEFORE collection routes to avoid /:id swallowing them)
-  router.get('/candidates/search', searchLimiter, ...guard('candidates', 'read', 'candidate'), asyncHandler(async (req, res) => {
-    const { skills, university, country, q } = req.query;
-    const filter = {};
-
-    const query = searchPattern(q);
-    if (query) filter.$or = [{ name: query }, { profession: query }];
-    const location = searchPattern(country);
-    if (location) filter.location = location;
-    const school = searchPattern(university);
-    if (school) filter.university = school;
-    const skillMatch = searchAlternation(skills);
-    if (skillMatch) filter.skills = skillMatch;
-
-    const data = await Candidate.find(filter).sort({ createdAt: -1 });
-    listResponse(res, data.map(withParsedCandidate));
-  }));
-
   // Special nested routes
   router.post('/opportunities/:opportunityId/applicants', ...guard('applicants', 'create', 'applicant'), asyncHandler(async (req, res) => {
+    // Applications are only accepted for listings this caller can see.
+    const opportunity = await Opportunity.findOne(withScope({ _id: req.params.opportunityId }, opportunityReadScope(req)));
+    if (!opportunity) throw notFound('Opportunity');
+    const { referralCode, ambassador } = opportunity.referralCodeOnApply
+      ? await findReferringAmbassador(req.body.referralCode)
+      : { referralCode: undefined, ambassador: null };
+
     const applicant = new Applicant(
       stringifyArrayFields(buildCreatePayload(RESOURCE_POLICIES.applicants, req.body), ['skills']),
     );
-    applicant.set('opportunityId', req.params.opportunityId);
+    applicant.set('opportunityId', opportunity._id);
+    if (ambassador) {
+      applicant.set('referralCode', referralCode);
+      applicant.set('ambassadorId', ambassador._id);
+    }
     await applicant.save();
-    await Opportunity.findByIdAndUpdate(req.params.opportunityId, { $inc: { applicantsCount: 1 } });
+    await Opportunity.findByIdAndUpdate(opportunity._id, { $inc: { applicantsCount: 1 } });
+    await OpportunityEngagement.create({
+      opportunityId: opportunity._id,
+      event: 'application',
+      source: 'app',
+      userId: req.auth.sub,
+      ambassadorId: ambassador?._id,
+      referralCode,
+    });
 
     await auditReq(req, {
-      action: AUDIT_ACTIONS.CREATE,
+      action: AUDIT_ACTIONS.APPLICATION_SUBMIT,
       resourceType: AUDIT_RESOURCE_TYPES.APPLICANT,
       resourceId: applicant._id,
       outcome: 'success',
+      metadata: { opportunityId: String(opportunity._id), referred: Boolean(ambassador) },
     });
 
     res.status(201).json({ data: toClientObject(applicant) });
@@ -795,7 +947,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     application.set('grantId', req.params.grantId);
     await application.save();
     await auditReq(req, {
-      action: AUDIT_ACTIONS.CREATE,
+      action: AUDIT_ACTIONS.GRANT_APPLY,
       resourceType: AUDIT_RESOURCE_TYPES.GRANT_APPLICATION,
       resourceId: application._id,
       outcome: 'success',
@@ -818,10 +970,11 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     doc.set('companyId', req.params.companyId);
     await doc.save();
     await auditReq(req, {
-      action: AUDIT_ACTIONS.CREATE,
+      action: AUDIT_ACTIONS.UPLOAD,
       resourceType: AUDIT_RESOURCE_TYPES.VERIFICATION_DOC,
       resourceId: doc._id,
       outcome: 'success',
+      metadata: { companyId: req.params.companyId },
     });
     res.status(201).json({ data: toClientObject(doc) });
   }));
@@ -837,41 +990,11 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents', enablePopulate }));
   router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', enablePopulate }));
 
-  // Dashboard summary (admin only)
-  router.get('/dashboard/summary', requireAdminAuth, asyncHandler(async (req, res) => {
-    const [
-      usersCount,
-      seekersCount,
-      hirersCount,
-      opportunitiesCount,
-      applicationsCount,
-      eventsCount,
-      grantsCount,
-      grantApplicationsCount,
-    ] = await Promise.all([
-      User.countDocuments(),
-      SeekerProfile.countDocuments(),
-      HirerAccount.countDocuments(),
-      Opportunity.countDocuments(),
-      Applicant.countDocuments(),
-      Event.countDocuments(),
-      Grant.countDocuments(),
-      GrantApplication.countDocuments(),
-    ]);
-
-    itemResponse(res, {
-      users: usersCount,
-      seekers: seekersCount,
-      hirers: hirersCount,
-      opportunities: opportunitiesCount,
-      applications: applicationsCount,
-      events: eventsCount,
-      grants: grantsCount,
-      grantApplications: grantApplicationsCount,
-    });
-  }));
-
-  // Saved items (private to owner)
+  /**
+   * Saved items are private to their owner (SEC-026). The path is `/users/me/saved`
+   * so the user ID always comes from the token; there is no `/users/:id/saved`
+   * through which one user could address another's list.
+   */
   router.post('/users/me/saved', ...guard('saved-items', 'create', 'savedItem'), asyncHandler(async (req, res) => {
     const { SavedItem } = await import('../models/User.js');
     const { itemId, itemType } = req.body;
@@ -939,30 +1062,5 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     listResponse(res, attendees.map(toClientObject));
   }));
 
-  // Health check endpoint
-  router.get('/health', (req, res) => {
-    const dbStatus = mongoose.connection.readyState;
-    const statusMap = {
-      0: 'disconnected',
-      1: 'connected',
-      2: 'connecting',
-      3: 'disconnecting',
-    };
-
-    const isHealthy = dbStatus === 1;
-
-    res.status(isHealthy ? 200 : 503).json({
-      status: isHealthy ? 'ok' : 'error',
-      service: 'kredibble-backend',
-      database: {
-        status: statusMap[dbStatus] || 'unknown',
-        connected: isHealthy,
-      },
-      timestamp: new Date().toISOString(),
-    });
-  });
-
   return router;
 };
-
-

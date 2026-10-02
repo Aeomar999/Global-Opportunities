@@ -41,10 +41,7 @@ export default function ProfileScreen() {
       fetchProfile();
     }
 
-    setRole(authStore.role);
-    setCompany(authStore.company ? { ...authStore.company } : null);
-    setAuthUser(authStore.user);
-
+    // State is initialised from authStore; the subscription keeps it in sync.
     const unsubscribe = authStore.subscribe(() => {
       setRole(authStore.role);
       setCompany(authStore.company ? { ...authStore.company } : null);

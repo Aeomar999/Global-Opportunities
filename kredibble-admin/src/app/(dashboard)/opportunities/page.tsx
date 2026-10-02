@@ -43,8 +43,8 @@ export default function OpportunitiesQueuePage() {
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(true), 0);
-    getOpportunities()
-      .then((data) => setOpportunities(data as Opportunity[]))
+    getOpportunities<Opportunity>()
+      .then(setOpportunities)
       .finally(() => setIsLoading(false));
     return () => clearTimeout(timer);
   }, []);

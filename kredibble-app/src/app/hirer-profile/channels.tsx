@@ -40,7 +40,7 @@ export default function MyChannelsScreen() {
 
         {managedGroups.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText} className="font-sans">You haven't created any channels yet.</Text>
+            <Text style={styles.emptyText} className="font-sans">You haven&apos;t created any channels yet.</Text>
           </View>
         ) : (
           managedGroups.map(group => (

@@ -74,7 +74,7 @@ export default function AssistantScreen() {
 
   const [role, setRole] = useState(authStore.role);
   useEffect(() => {
-    setRole(authStore.role);
+    // State is initialised from authStore; the subscription keeps it in sync.
     const unsubscribe = authStore.subscribe(() => setRole(authStore.role));
     return unsubscribe;
   }, []);

@@ -2,21 +2,83 @@ name: CD Admin
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
     paths:
       - 'kredibble-admin/**'
+      - '.nvmrc'
+      - '.github/workflows/cd-admin.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: cd-admin
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  deploy-vercel:
+  verify:
+    name: Verify (lint, typecheck)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: kredibble-admin
     steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v20
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./kredibble-admin
-          vercel-args: '--prod'
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-admin/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+
+  deploy:
+    name: Deploy to Vercel (production)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: kredibble-admin
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - name: Check Vercel credentials
+        id: creds
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::notice title=Admin deploy skipped::Set the VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID repository secrets to deploy the admin."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: .
+      - if: steps.creds.outputs.ready == 'true'
+        uses: actions/checkout@v7
+      - if: steps.creds.outputs.ready == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-admin/package-lock.json
+      - if: steps.creds.outputs.ready == 'true'
+        run: npm install --global vercel@59
+        working-directory: .
+      # Pulls the project settings and the production env vars (NEXT_PUBLIC_API_URL,
+      # API_PROXY_TARGET) that the build inlines.
+      - if: steps.creds.outputs.ready == 'true'
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - if: steps.creds.outputs.ready == 'true'
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+      - if: steps.creds.outputs.ready == 'true'
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed $url"

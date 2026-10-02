@@ -43,7 +43,7 @@ export default function MyPostingsScreen() {
 
         {opportunities.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText} className="font-sans">You haven't posted any opportunities yet.</Text>
+            <Text style={styles.emptyText} className="font-sans">You haven&apos;t posted any opportunities yet.</Text>
           </View>
         ) : (
           opportunities.map(opp => {

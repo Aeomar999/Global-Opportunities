@@ -10,15 +10,16 @@ export const uploadRouter = Router();
 
 // Configure multer to store files in memory
 const storage = multer.memoryStorage();
-const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 const upload = multer({
   storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
+  // Reject disallowed types before buffering them. Shares the SEC-013 allowlist
+  // and wording with the handler so the client sees one message either way.
   fileFilter(req, file, callback) {
-    const allowed = allowedMimeTypes.has(file.mimetype);
-    callback(allowed ? null : new ApiError(400, 'Only JPEG, PNG, WebP, and PDF files are allowed'), allowed);
+    const allowed = ALLOWED_MIME_TYPES.has(file.mimetype);
+    callback(allowed ? null : new ApiError(400, `File type ${file.mimetype} not allowed. Allowed: PDF, PNG, JPEG, WebP`), allowed);
   },
 });
 

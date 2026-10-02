@@ -669,11 +669,33 @@ const concretize = (path) =>
  * public in the sense of not needing a pre-existing access token. Admin
  * login/logout are cookie-based and intentionally accessible without a
  * pre-existing token (login validates credentials, logout is idempotent).
+ *
+ * Published content is public so the WordPress site and signed-out app visitors
+ * can read it: vetted+published opportunities (the collection scopes anonymous
+ * reads to those), approved testimonials (without emails), opportunity types,
+ * news, public community groups and their posts (private groups still return
+ * 403), and the anonymous view counter used for ambassador referral tracking.
  */
+const PUBLIC_CONTENT_ROUTES = [
+  'GET /opportunities',
+  'GET /opportunities/64b7f1c2a1b2c3d4e5f60718',
+  'POST /opportunities/64b7f1c2a1b2c3d4e5f60718/views',
+  'GET /opportunity-types',
+  'GET /testimonials',
+  'GET /news',
+  'GET /community/channels',
+  'GET /community/channels/64b7f1c2a1b2c3d4e5f60718',
+  'GET /community/channels/64b7f1c2a1b2c3d4e5f60718/posts',
+];
+
 const PUBLIC_ROUTES = new Set([
   'GET /',
   'GET /api/health',
   'GET /api/v1/health',
+  ...PUBLIC_CONTENT_ROUTES.flatMap((route) => {
+    const [method, path] = route.split(' ');
+    return [`${method} /api${path}`, `${method} /api/v1${path}`];
+  }),
   'POST /api/auth/register',
   'POST /api/auth/login',
   'POST /api/auth/refresh',

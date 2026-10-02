@@ -52,6 +52,9 @@ export function DateTimePickerModal({
           const dateStr = parts[0].replace(/(\d+)(st|nd|rd|th)/, '$1').trim();
           const parsed = new Date(dateStr);
           if (!isNaN(parsed.getTime())) {
+            // Re-seeds the picker from initialValue each time the modal opens; the
+            // selection is user-editable state, so it cannot simply be derived.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedDate(parsed);
             setViewDate(parsed);
           }

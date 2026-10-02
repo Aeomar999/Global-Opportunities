@@ -24,7 +24,7 @@ export default function CommunityScreen() {
   // Seeker states
   const [channels, setChannels] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Hirer states
   const [hirerTab, setHirerTab] = useState<'discover' | 'managed'>('managed');
@@ -35,24 +35,15 @@ export default function CommunityScreen() {
   const [newChannelCategory, setNewChannelCategory] = useState('');
   const [newChannelBio, setNewChannelBio] = useState('');
 
-  // Fetch channels from backend
-  const fetchChannels = async () => {
-    setIsLoading(true);
-    try {
-      const data = await getChannels();
-      setChannels(data);
-    } catch (e) {
-      console.error('Failed to fetch channels:', e);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   // Subscribe to auth store updates & fetch initial data
   useEffect(() => {
-    setRole(authStore.role);
-    fetchChannels();
+    // Fetch channels from backend; isLoading starts true.
+    getChannels()
+      .then(setChannels)
+      .catch((e) => console.error('Failed to fetch channels:', e))
+      .finally(() => setIsLoading(false));
 
+    // State is initialised from authStore; the subscription keeps it in sync.
     const unsubAuth = authStore.subscribe(() => {
       setRole(authStore.role);
     });

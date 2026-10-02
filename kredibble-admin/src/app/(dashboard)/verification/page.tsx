@@ -27,8 +27,8 @@ export default function VerificationQueuePage() {
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(true), 0);
-    getVerifications(filter === "all" ? undefined : filter)
-      .then((data) => setCompanies(data as CompanyVerification[]))
+    getVerifications<CompanyVerification>(filter === "all" ? undefined : filter)
+      .then(setCompanies)
       .finally(() => setIsLoading(false));
     return () => clearTimeout(timer);
   }, [filter]);

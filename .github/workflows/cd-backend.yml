@@ -2,34 +2,94 @@ name: CD Backend
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
     paths:
       - 'kredibble-backend/**'
+      - '.nvmrc'
+      - '.github/workflows/cd-backend.yml'
+  workflow_dispatch:
+
+# Never run two deploys of the same service at once; let an in-flight one finish.
+concurrency:
+  group: cd-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  MONGOMS_DOWNLOAD_DIR: ${{ github.workspace }}/.mongodb-binaries
 
 jobs:
-  build-and-deploy:
+  verify:
+    name: Verify (lint, test)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: kredibble-backend
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./kredibble-backend
-        push: true
-        tags: ghcr.io/${{ github.repository }}/kredibble-backend:latest
-        
-    - name: Trigger Render Deployment
-      run: |
-        if [ -n "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
-        else
-          echo "RENDER_DEPLOY_HOOK_URL secret is not set, skipping automatic deploy."
-        fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-backend/package-lock.json
+      - uses: actions/cache@v6
+        with:
+          path: .mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('kredibble-backend/package-lock.json') }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test -- --ci
+
+  image:
+    name: Build and push image (GHCR)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # metadata-action lowercases the image name; GHCR rejects the mixed-case
+      # owner/repo that github.repository contains ("Aeomar999/Global-Opportunities").
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}/kredibble-backend
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+      - uses: docker/build-push-action@v7
+        with:
+          context: kredibble-backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-render:
+    name: Trigger Render deploy
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::notice title=Render deploy skipped::RENDER_DEPLOY_HOOK_URL is not set. Render's own GitHub auto-deploy (if enabled) still deploys main."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 60 -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+          echo "Render deploy triggered."

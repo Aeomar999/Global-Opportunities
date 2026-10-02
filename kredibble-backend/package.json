@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "engines": {
-        "node": ">=20.0.0"
+        "node": ">=22.13.0"
     },
     "scripts": {
         "dev": "node --watch src/server.js",
@@ -12,7 +12,9 @@
         "db:init": "node scripts/init-db.js",
         "db:seed:test": "node scripts/seed-test-credentials.js",
         "user:create-admin": "node scripts/create-admin.js",
-        "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest"
+        "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+        "lint": "eslint .",
+        "e2e:server": "node scripts/e2e-server.js"
     },
     "dependencies": {
         "bcryptjs": "^2.4.3",
@@ -41,8 +43,11 @@
     },
     "devDependencies": {
         "@babel/preset-env": "^7.26.0",
+        "@eslint/js": "^9.39.5",
         "babel-jest": "^30.5.2",
         "cross-env": "^10.1.0",
+        "eslint": "^9.39.5",
+        "globals": "^17.13.0",
         "jest": "^30.5.2",
         "mongodb-memory-server": "^11.3.0",
         "openapi-to-postmanv2": "^6.3.3",

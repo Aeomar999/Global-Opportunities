@@ -1,12 +1,11 @@
 {
   "private": true,
-  "workspaces": [
-    "kredibble-backend",
-    "kredibble-app",
-    "kredibble-admin"
-  ],
+  "description": "Convenience scripts only. Each app is an independent npm project with its own package-lock.json; there are deliberately no npm workspaces, because Docker, Vercel and EAS all build each app from its own directory.",
   "scripts": {
-    "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "install:all": "npm ci --prefix kredibble-backend && npm ci --prefix kredibble-admin && npm ci --prefix kredibble-app",
+    "test": "npm test --prefix kredibble-backend && npm test --prefix kredibble-app",
+    "lint": "npm run lint --prefix kredibble-backend && npm run lint --prefix kredibble-admin && npm run lint --prefix kredibble-app",
+    "typecheck": "npm run typecheck --prefix kredibble-admin && npm run typecheck --prefix kredibble-app",
+    "build:admin": "npm run build --prefix kredibble-admin"
   }
 }
