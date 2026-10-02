@@ -16,6 +16,6 @@ services:
       - key: ADMIN_JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: https://admin.kredibble.com,https://app.kredibble.com
+        value: https://admin.kredibble.com,https://app.kredibble.com,https://kredibble-admin-jerry-amoahs-projects.vercel.app
       - key: PORT
         value: 4000
