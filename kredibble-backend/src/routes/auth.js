@@ -7,18 +7,18 @@ import { requireAuth, signToken, signAdminToken, setAdminCookie, clearAdminCooki
 import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, deleteAccountSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
-import { User, RevokedRefreshToken, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode, PasswordResetCode } from '../models/User.js';
+import { User, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode, PasswordResetCode } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
-import { Applicant, EventAttendee, GrantApplication, CompanyVerification, VerificationDoc } from '../models/Platform.js';
-import { ChannelPost, Report } from '../models/Community.js';
-import { Notification } from '../models/Content.js';
+import { Applicant, EventAttendee, CompanyVerification, VerificationDoc, Opportunity } from '../models/Platform.js';
+import { Channel, ChannelPost, CommunityMembership } from '../models/Community.js';
+import { Testimonial } from '../models/AdminPortal.js';
 import { SavedItem } from '../models/User.js';
 import { createVerificationCode, hashVerificationCode, sendVerificationEmail, sendPasswordResetEmail } from '../lib/email.js';
 import { env } from '../config/env.js';
 import { AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
 import { registrationLimiter, passwordResetLimiter, authLimiter, emailVerificationLimiter, forgotPasswordLimiter, passwordResetAttemptLimiter } from '../lib/rate-limiters.js';
 import logger from '../lib/logger.js';
-import { deleteAccount } from '../lib/account-deletion.js';
+import { deleteAccount, userDataFilters } from '../lib/account-deletion.js';
 
 export const authRouter = Router();
 
@@ -750,49 +750,42 @@ authRouter.get(
     const user = await User.findById(userId);
     if (!user) throw new ApiError(404, 'User not found');
 
-    // Gather all related data
+    const where = await userDataFilters(user);
     const [
-      seekerProfile,
-      hirerAccount,
-      applications,
-      eventAttendees,
-      grantApplications,
-      verifications,
-      verificationDocs,
-      savedItems,
-      notifications,
-      channelPosts,
-      reports,
-      refreshTokens,
+      seekerProfile, hirerAccount, applications, eventBookings, companyVerifications, verificationDocs,
+      savedItems, channelMemberships, communityPosts, channels, opportunities, testimonials, sessions,
     ] = await Promise.all([
-      SeekerProfile.findOne({ userId }),
-      HirerAccount.findOne({ userId }),
-      Applicant.find({ seekerId: userId }),
-      EventAttendee.find({ email: user.email }),
-      GrantApplication.find({ applicantEmail: user.email }),
-      CompanyVerification.find({ userId }),
-      VerificationDoc.find({ userId }),
-      SavedItem.find({ userId }),
-      Notification.find({ userId }),
-      ChannelPost.find({ authorEmail: user.email }),
-      Report.find({ reporterEmail: user.email }),
-      RevokedRefreshToken.find({ userId }),
+      SeekerProfile.findOne(where.seekerProfile).lean(),
+      HirerAccount.findOne(where.hirerAccount).lean(),
+      Applicant.find(where.applications).lean(),
+      EventAttendee.find(where.eventBookings).lean(),
+      CompanyVerification.find(where.companyVerifications).lean(),
+      VerificationDoc.find(where.verificationDocs).lean(),
+      SavedItem.find(where.savedItems).lean(),
+      CommunityMembership.find(where.channelMemberships).lean(),
+      ChannelPost.find(where.communityPosts).lean(),
+      Channel.find(where.channels).lean(),
+      Opportunity.find(where.opportunities).lean(),
+      Testimonial.find(where.testimonials).lean(),
+      // Device and dates only: token hashes stay on the server.
+      RefreshToken.find(where.sessions).select('deviceLabel createdAt expiresAt revokedAt').lean(),
     ]);
 
     const exportData = {
       user: publicUser(user),
-      seekerProfile: seekerProfile ? seekerProfile.toObject() : null,
-      hirerAccount: hirerAccount ? hirerAccount.toObject() : null,
-      applications: applications.map(a => a.toObject()),
-      eventAttendees: eventAttendees.map(e => e.toObject()),
-      grantApplications: grantApplications.map(g => g.toObject()),
-      verifications: verifications.map(v => v.toObject()),
-      verificationDocs: verificationDocs.map(v => v.toObject()),
-      savedItems: savedItems.map(s => s.toObject()),
-      notifications: notifications.map(n => n.toObject()),
-      channelPosts: channelPosts.map(c => c.toObject()),
-      reports: reports.map(r => r.toObject()),
-      refreshTokens: refreshTokens.map(r => r.toObject()),
+      seekerProfile,
+      hirerAccount,
+      applications,
+      eventBookings,
+      companyVerifications,
+      verificationDocs,
+      savedItems,
+      channelMemberships,
+      communityPosts,
+      channels,
+      opportunities,
+      testimonials,
+      sessions,
       exportedAt: new Date().toISOString(),
     };
 

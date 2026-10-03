@@ -173,3 +173,24 @@ describe('SEC-065: account deletion', () => {
     expect(await findPersonalData()).toEqual([]);
   });
 });
+
+describe('SEC-029: data export', () => {
+  it('returns every record deletion would remove, without token hashes', async () => {
+    await seedSeeker();
+    const session = await login(EMAIL, PASSWORD);
+
+    const res = await request(app).get('/api/v1/auth/me/export').set('Authorization', `Bearer ${session.body.data.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.seekerProfile.phone).toBe(PHONE);
+    expect(res.body.applications).toHaveLength(1);
+    expect(res.body.eventBookings).toHaveLength(1);
+    expect(res.body.communityPosts).toHaveLength(1);
+    expect(res.body.channels).toHaveLength(1);
+    expect(res.body.channelMemberships).toHaveLength(1);
+    expect(res.body.savedItems).toHaveLength(1);
+    expect(res.body.testimonials).toHaveLength(1);
+    expect(res.body.sessions).toHaveLength(1);
+    expect(res.body.sessions[0]).not.toHaveProperty('tokenHash');
+  });
+});
