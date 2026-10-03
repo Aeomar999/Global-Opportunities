@@ -16,7 +16,7 @@ Covers SEC-065, SEC-075, SEC-077, SEC-081, SEC-083, SEC-084, SEC-087, SEC-090 an
 
 | # | Plan | Items | Depends on | Status |
 |---|---|---|---|---|
-| 1 | [Backend account security](PLAN-1-account-security.md) | SEC-083, SEC-084 (backend), SEC-065, plus the 3 lint errors that keep CI red | — | Ready |
+| 1 | [Backend account security](PLAN-1-account-security.md) | SEC-083, SEC-084 (backend), SEC-065, plus the 3 lint errors that keep CI red | — | In review (PR pending) |
 | 2 | Admin on real data | SEC-075, SEC-076, SEC-077 (all 20 pages) | Plan 1 merged (CI green) | Not written |
 | 3 | Mobile launch surface | SEC-081, SEC-083/084 screens, SEC-087, legal links | Plan 1; SEC-072 for "my applications" | Not written |
 | 4 | Operations and legal | SEC-090, SEC-092 | Plan 3 for in-app links | Not written |
@@ -37,3 +37,4 @@ These block a launch but can't be done from the repo:
 - SEC-078: admin `next@16.2.10` has a critical advisory; `npm audit` also reports high findings in all three apps.
 - SEC-047 (Q10): opportunity and verification records mix `HirerAccount` ids and `User` ids. Plan 1 matches both when deleting; Plan 2 needs the decision.
 - SEC-060: grant applications and reports store no user id, so deletion and export cannot find them.
+- SEC-080 (reopened), SEC-097…SEC-103: filed during Plan 1; SEC-097 and SEC-098 should be done before launch.
