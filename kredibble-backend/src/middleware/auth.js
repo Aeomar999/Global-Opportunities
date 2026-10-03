@@ -119,3 +119,52 @@ export const optionalAuth = async (req, res, next) => {
     next();
   }
 };
+
+/**
+ * Combined auth for admin routes: accepts admin cookie/JWT OR user Bearer token with StaffMember role.
+ * This maintains backward compatibility while supporting the admin panel's cookie-based auth.
+ */
+export const requireAdminOrStaffAuth = async (req, res, next) => {
+  // Try admin auth first (cookie or Bearer with admin audience)
+  const cookieToken = req.cookies?.kredibble_admin_token;
+  const headerToken = req.get('authorization')?.startsWith('Bearer ')
+    ? req.get('authorization').slice(7)
+    : null;
+
+  // Check if it's an admin token (has audience claim or is in cookie)
+  const isAdminToken = cookieToken || (headerToken && headerToken.startsWith('eyJ'));
+
+  if (isAdminToken && (cookieToken || headerToken)) {
+    try {
+      const token = cookieToken || headerToken;
+      const payload = jwt.verify(token, env.adminJwtSecret);
+      if (payload.aud === 'kredibble-admin' && payload.role === 'admin') {
+        const user = await User.findById(payload.sub).select('tokenVersion role').lean();
+        if (user && user.role !== 'deleted') {
+          req.auth = payload;
+          return next();
+        }
+      }
+    } catch {
+      // Fall through to user auth
+    }
+  }
+
+  // Fall back to user auth with StaffMember check
+  const userToken = headerToken;
+  if (!userToken) return next(new ApiError(401, 'Authentication required'));
+
+  try {
+    const payload = jwt.verify(userToken, env.jwtSecret);
+    
+    const user = await User.findById(payload.sub).select('tokenVersion role').lean();
+    if (!user || user.role === 'deleted' || (payload.tv !== undefined && payload.tv !== user.tokenVersion)) {
+      return next(new ApiError(401, 'Account no longer active'));
+    }
+    
+    req.auth = payload;
+    next();
+  } catch {
+    next(new ApiError(401, 'Authentication token is invalid or expired'));
+  }
+};

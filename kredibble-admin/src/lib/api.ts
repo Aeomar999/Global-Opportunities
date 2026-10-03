@@ -78,16 +78,16 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 }
 
 export const getDashboardSummary = async <T = Record<string, unknown>>() => {
-  return request<T>("/dashboard/summary");
+  return request<T>("/admin/dashboard");
 };
 
 export const getVerifications = async <T = Record<string, unknown>>(status?: string) => {
   const query = status ? `?status=${status}` : "";
-  return request<T[]>(`/verification/companies${query}`);
+  return request<T[]>(`/admin/verification/companies${query}`);
 };
 
 export const updateVerificationStatus = async (companyId: string, status: string) => {
-  return request<Record<string, unknown>>(`/verification/companies/${companyId}`, {
+  return request<Record<string, unknown>>(`/admin/verification/companies/${companyId}`, {
     method: "PATCH",
     body: JSON.stringify({ overallStatus: status }),
   });
@@ -95,7 +95,7 @@ export const updateVerificationStatus = async (companyId: string, status: string
 
 export const getOpportunities = async <T = Record<string, unknown>>(status?: string) => {
   const query = status ? `?status=${status}` : "";
-  return request<T[]>(`/opportunities${query}`);
+  return request<T[]>(`/admin/opportunities${query}`);
 };
 
 export const loginAdmin = async (email: string, password: string) => {

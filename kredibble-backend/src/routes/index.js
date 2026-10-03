@@ -4,7 +4,7 @@ import { authRouter } from './auth.js';
 import { uploadRouter } from './upload.js';
 import { assistantRouter } from './assistant.js';
 import { newsRouter } from './news.js';
-import { adminRouter } from './admin.js';
+import { adminApiRouter } from './admin-api.js';
 import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination } from '../utils/http.js';
 import { requireAuth, requireAdminAuth, optionalAuth } from '../middleware/auth.js';
 import {
@@ -477,7 +477,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.use('/upload', uploadRouter);
   router.use('/assistant', assistantRouter);
   router.use('/news', newsRouter);
-  router.use('/admin', adminRouter);
+  router.use('/admin', adminApiRouter);
 
   router.get('/health', (req, res) => {
     const dbStatus = mongoose.connection.readyState;
