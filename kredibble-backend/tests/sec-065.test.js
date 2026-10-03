@@ -3,12 +3,13 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { app } from '../src/app.js';
-import { User, SavedItem, AuditLog, UserTombstone } from '../src/models/User.js';
+import { signToken } from '../src/middleware/auth.js';
+import { User, SavedItem, AuditLog, UserTombstone, RefreshToken } from '../src/models/User.js';
 import { SeekerProfile, HirerAccount } from '../src/models/Profiles.js';
 import { Opportunity, Applicant, Event, EventAttendee, CompanyVerification, VerificationDoc } from '../src/models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership } from '../src/models/Community.js';
 import { Testimonial } from '../src/models/AdminPortal.js';
-import { deleteAccount, purgeUserData } from '../src/lib/account-deletion.js';
+import { deleteAccount, purgeUserData, completePendingDeletions } from '../src/lib/account-deletion.js';
 
 const PASSWORD = 'DeleteMe-Passw0rd';
 const EMAIL = 'Ama.Mensah@Example.com';
@@ -58,12 +59,19 @@ const findPersonalData = async () => {
 describe('SEC-065: account deletion', () => {
   it('erases personal data, keeps public content anonymised and signs the user out', async () => {
     const { user, opportunity, channel } = await seedSeeker();
+    // Someone else's booking and testimonial: matched by email, so they must survive.
+    const otherEvent = await Event.create({ title: 'Other meetup', hirer: 'Acme', location: 'Kumasi', dateTime: '2026-11-02T10:00', capacity: 10 });
+    const otherBooking = await EventAttendee.create({ eventId: otherEvent._id, fullName: 'Kwame Asante', email: 'kwame.asante@example.com' });
+    const otherTestimonial = await Testimonial.create({ name: 'Kwame Asante', email: 'kwame.asante@example.com', comment: 'Great platform.', status: 'approved' });
     const session = await login(EMAIL, PASSWORD);
 
     const res = await deleteMe(session.body.data.token, { password: PASSWORD, confirmation: CONFIRMATION });
 
     expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('completed');
     expect(await findPersonalData()).toEqual([]);
+    expect(await EventAttendee.countDocuments({ _id: otherBooking._id })).toBe(1);
+    expect(await Testimonial.countDocuments({ _id: otherTestimonial._id })).toBe(1);
 
     const tombstone = await UserTombstone.findOne({ userId: user._id }).lean();
     expect(tombstone).toMatchObject({ status: 'completed', mediaDeleted: true });
@@ -75,28 +83,111 @@ describe('SEC-065: account deletion', () => {
     expect(await Opportunity.countDocuments({ _id: opportunity._id })).toBe(1);
     // Someone else's posting is not touched.
     expect((await Opportunity.findById(opportunity._id).lean()).moderationStatus).toBe('published');
-    expect(await Testimonial.countDocuments()).toBe(0);
+    expect(await Testimonial.countDocuments()).toBe(1);
 
     expect((await request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${session.body.data.token}`)).status).toBe(401);
     expect((await request(app).post('/api/v1/auth/refresh').send({ refreshToken: session.body.data.refreshToken })).status).toBe(401);
     expect((await login(EMAIL, PASSWORD)).status).toBe(401);
   });
 
-  it('closes live postings and removes company records for a hirer', async () => {
+  it('exports and closes the postings a hirer made through the API, and removes company records', async () => {
     const hirer = await User.create({ name: 'Kofi Boateng', email: 'kofi@example.com', role: 'hirer', passwordHash: await bcrypt.hash(PASSWORD, 12) });
     const account = await HirerAccount.create({ userId: hirer._id, companyName: 'Boateng Ltd', industry: 'Technology', location: 'Accra', recruiterPhone: '+233209999999' });
-    const live = await Opportunity.create({ ...opportunityFields, createdBy: hirer._id, hirerId: account._id, moderationStatus: 'published', vetted: true });
     await CompanyVerification.create({ hirerId: account._id, name: 'Boateng Ltd', recruiterEmail: 'kofi@example.com' });
     await VerificationDoc.create({ companyId: account._id, key: 'certificate', fileName: 'certificate.pdf' });
+    const otherHirer = await User.create({ name: 'Efua Owusu', email: 'efua@example.com', role: 'hirer', passwordHash: 'x' });
+    const otherLive = await Opportunity.create({ ...opportunityFields, hirerId: otherHirer._id, moderationStatus: 'published', vetted: true });
     const session = await login('kofi@example.com', PASSWORD);
+
+    // The hirer posts through the real API, which stores hirerId and no createdBy.
+    const created = await request(app)
+      .post('/api/v1/opportunities')
+      .set('Authorization', `Bearer ${session.body.data.token}`)
+      .send(opportunityFields);
+    expect(created.status).toBe(201);
+    const liveId = created.body.data.id || created.body.data._id;
+    await Opportunity.updateOne({ _id: liveId }, { $set: { moderationStatus: 'published', vetted: true } });
+
+    const exported = await request(app).get('/api/v1/auth/me/export').set('Authorization', `Bearer ${session.body.data.token}`);
+    expect(exported.status).toBe(200);
+    expect(exported.body.opportunities.map((item) => String(item._id))).toEqual([String(liveId)]);
 
     const res = await deleteMe(session.body.data.token, { password: PASSWORD, confirmation: CONFIRMATION });
 
     expect(res.status).toBe(200);
-    expect((await Opportunity.findById(live._id).lean()).moderationStatus).toBe('closed');
+    expect((await Opportunity.findById(liveId).lean()).moderationStatus).toBe('closed');
+    expect((await Opportunity.findById(otherLive._id).lean()).moderationStatus).toBe('published');
     expect(await HirerAccount.countDocuments()).toBe(0);
     expect(await CompanyVerification.countDocuments()).toBe(0);
     expect(await VerificationDoc.countDocuments()).toBe(0);
+  });
+
+  it('keeps a private channel closed to outsiders after its creator is deleted', async () => {
+    const { user } = await seedSeeker();
+    const member = await User.create({ name: 'Yaw Darko', email: 'yaw@example.com', role: 'seeker', passwordHash: 'x' });
+    const outsider = await User.create({ name: 'Abena Ofori', email: 'abena@example.com', role: 'seeker', passwordHash: 'x' });
+    const admin = await User.create({ name: 'Site Admin', email: 'admin@example.com', role: 'admin', passwordHash: 'x' });
+    const channel = await Channel.create({ name: 'Private circle', category: 'Tech', visibility: 'private', createdBy: user._id });
+    await CommunityMembership.create({ channelId: channel._id, userId: member._id, status: 'active' });
+    await ChannelPost.create({ channelId: channel._id, authorId: member._id, authorName: 'Yaw Darko', body: 'Members only' });
+    const posts = (token) => {
+      const req = request(app).get(`/api/v1/community/channels/${channel._id}/posts`);
+      return token ? req.set('Authorization', `Bearer ${token}`) : req;
+    };
+    expect((await posts()).status).toBe(403);
+    const session = await login(EMAIL, PASSWORD);
+
+    const res = await deleteMe(session.body.data.token, { password: PASSWORD, confirmation: CONFIRMATION });
+
+    expect(res.status).toBe(200);
+    expect((await Channel.findById(channel._id).lean()).createdBy).toBeNull();
+    expect((await posts()).status).toBe(403);
+    expect((await posts(session.body.data.token)).status).toBe(403);
+    expect((await posts(signToken(outsider))).status).toBe(403);
+    expect((await posts(signToken(member))).status).toBe(200);
+    expect((await posts(signToken(admin))).status).toBe(200);
+  });
+
+  it('finishes a deletion that failed part-way: 202 now, completed by the recovery run', async () => {
+    const { user } = await seedSeeker();
+    const session = await login(EMAIL, PASSWORD);
+    const spy = jest.spyOn(SavedItem, 'deleteMany').mockRejectedValueOnce(new Error('boom'));
+
+    const res = await deleteMe(session.body.data.token, { password: PASSWORD, confirmation: CONFIRMATION });
+    spy.mockRestore();
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.status).toBe('pending');
+    expect((await UserTombstone.findOne({ userId: user._id }).lean()).status).toBe('pending');
+    expect((await request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${session.body.data.token}`)).status).toBe(401);
+
+    await expect(completePendingDeletions({ minAgeMs: 0 })).resolves.toEqual({ processed: 1, failed: 0 });
+
+    expect((await UserTombstone.findOne({ userId: user._id }).lean()).status).toBe('completed');
+    expect(await findPersonalData()).toEqual([]);
+  });
+
+  it('refuses to delete an admin account from the app and leaves it untouched', async () => {
+    const admin = await User.create({ name: 'Site Admin', email: 'admin@example.com', role: 'admin', passwordHash: await bcrypt.hash(PASSWORD, 12) });
+
+    const res = await deleteMe(signToken(admin), { password: PASSWORD, confirmation: CONFIRMATION });
+
+    expect(res.status).toBe(403);
+    expect(await User.findById(admin._id).lean()).toMatchObject({ role: 'admin', name: 'Site Admin', email: 'admin@example.com' });
+    expect(await UserTombstone.countDocuments()).toBe(0);
+  });
+
+  it('refuses to refresh a session whose user is deleted or gone', async () => {
+    await seedSeeker();
+    const session = await login(EMAIL, PASSWORD);
+    const user = await User.findOne({ emailNormalized: EMAIL.toLowerCase() });
+
+    await User.updateOne({ _id: user._id }, { $set: { role: 'deleted' } });
+    expect((await request(app).post('/api/v1/auth/refresh').send({ refreshToken: session.body.data.refreshToken })).status).toBe(401);
+
+    await User.deleteOne({ _id: user._id });
+    expect(await RefreshToken.countDocuments({ userId: user._id })).toBe(1);
+    expect((await request(app).post('/api/v1/auth/refresh').send({ refreshToken: session.body.data.refreshToken })).status).toBe(401);
   });
 
   it('rejects a wrong password with 400 and deletes nothing', async () => {
@@ -192,5 +283,9 @@ describe('SEC-029: data export', () => {
     expect(res.body.testimonials).toHaveLength(1);
     expect(res.body.sessions).toHaveLength(1);
     expect(res.body.sessions[0]).not.toHaveProperty('tokenHash');
+    // The pre-SEC-029 keys are gone; the timestamp stays.
+    expect(res.body).not.toHaveProperty('refreshTokens');
+    expect(res.body).not.toHaveProperty('eventAttendees');
+    expect(res.body).toHaveProperty('exportedAt');
   });
 });

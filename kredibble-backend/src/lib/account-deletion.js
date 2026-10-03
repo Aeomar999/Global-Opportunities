@@ -47,7 +47,9 @@ export async function userDataFilters(user) {
     channelMemberships: { userId },
     communityPosts: { authorId: userId },
     channels: { createdBy: userId },
-    opportunities: { createdBy: userId },
+    // Staff postings set createdBy; a hirer's own postings (POST /opportunities)
+    // only set hirerId, to the User id.
+    opportunities: { $or: [{ createdBy: userId }, { hirerId: { $in: companyIds } }] },
     sessions: { userId },
   };
 }
@@ -55,7 +57,7 @@ export async function userDataFilters(user) {
 /**
  * Delete what is private, strip the person from what stays public, then
  * anonymise the user document. Every step is idempotent, so an interrupted run
- * can be repeated (scripts/complete-account-deletions.js).
+ * can be repeated (completePendingDeletions).
  */
 export async function purgeUserData(user, { deleteMedia = deleteUserMedia } = {}) {
   const userId = user._id;
@@ -110,7 +112,8 @@ export async function purgeUserData(user, { deleteMedia = deleteUserMedia } = {}
 /**
  * SEC-065: erase an account. Access is cut first, so the person is signed out
  * everywhere even if a later step fails; the tombstone stays `pending` until
- * every step has run.
+ * every step has run. An error thrown after access is cut carries
+ * `accountClosed: true`: completePendingDeletions finishes that deletion.
  */
 export async function deleteAccount(user, deps = {}) {
   const deletedAt = new Date();
@@ -129,13 +132,56 @@ export async function deleteAccount(user, deps = {}) {
   );
 
   await User.updateOne({ _id: user._id }, { $set: { role: 'deleted' }, $inc: { tokenVersion: 1 } });
-  await RefreshToken.deleteMany({ userId: user._id });
 
-  const { mediaDeleted } = await purgeUserData(user, deps);
+  try {
+    await RefreshToken.deleteMany({ userId: user._id });
 
-  await UserTombstone.updateOne(
-    { userId: user._id },
-    { $set: { status: 'completed', completedAt: new Date(), mediaDeleted } },
-  );
+    const { mediaDeleted } = await purgeUserData(user, deps);
+
+    await UserTombstone.updateOne(
+      { userId: user._id },
+      { $set: { status: 'completed', completedAt: new Date(), mediaDeleted } },
+    );
+  } catch (error) {
+    error.accountClosed = true;
+    throw error;
+  }
   return { deletedAt };
+}
+
+/**
+ * SEC-065: finish account deletions that stopped part-way. A tombstone stays
+ * `pending`, or has `mediaDeleted: false`, when a step failed. Every step is
+ * idempotent, so running the purge again completes it. Deletions younger than
+ * `minAgeMs` may still be running and are left alone.
+ *
+ * Run hourly by the server and by scripts/complete-account-deletions.js.
+ */
+export async function completePendingDeletions({ minAgeMs = 10 * 60 * 1000 } = {}) {
+  const tombstones = await UserTombstone.find({
+    $or: [{ status: 'pending' }, { mediaDeleted: false }],
+    deletedAt: { $lte: new Date(Date.now() - minAgeMs) },
+  });
+
+  let failed = 0;
+  for (const tombstone of tombstones) {
+    const userId = String(tombstone.userId);
+    // One broken account must not stop the rest from being finished.
+    try {
+      const user = await User.findById(tombstone.userId);
+      if (!user) {
+        logger.warn({ userId }, 'Tombstone has no user document; skipping');
+        continue;
+      }
+      const { mediaDeleted } = await purgeUserData(user);
+      tombstone.set({ status: 'completed', completedAt: new Date(), mediaDeleted });
+      await tombstone.save();
+      if (!mediaDeleted) failed += 1;
+      logger.info({ userId, mediaDeleted }, 'Account deletion completed');
+    } catch (error) {
+      failed += 1;
+      logger.error({ err: error.message, userId }, 'Completing account deletion failed');
+    }
+  }
+  return { processed: tombstones.length, failed };
 }

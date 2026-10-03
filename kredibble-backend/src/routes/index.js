@@ -393,6 +393,11 @@ const findReferringAmbassador = async (rawCode) => {
 
 const toId = (value) => value?.toString();
 
+// A channel whose creator was deleted has `createdBy: null`; without the guards an
+// anonymous caller (no `sub`) would match it as `undefined === undefined`.
+const isChannelCreator = (channel, user) =>
+  Boolean(user?.sub && channel.createdBy && toId(channel.createdBy) === user.sub);
+
 const getChannelOrThrow = async (channelId) => {
   const channel = await Channel.findById(channelId);
   if (!channel) throw notFound('Channel');
@@ -413,13 +418,13 @@ const isLegacyMember = (channel, userId) =>
   (channel.memberIds || []).some((memberId) => toId(memberId) === userId);
 
 const canAccessChannel = async (channel, user) => {
-  if (channel.visibility === 'public' || user?.role === ADMIN || toId(channel.createdBy) === user?.sub) return true;
+  if (channel.visibility === 'public' || user?.role === ADMIN || isChannelCreator(channel, user)) return true;
   const membership = await getMembership(channel._id, user?.sub);
   return membership?.status === 'active' || isLegacyMember(channel, user?.sub);
 };
 
 const canManageChannel = async (channel, user) => {
-  if (user?.role === ADMIN || toId(channel.createdBy) === user?.sub) return true;
+  if (user?.role === ADMIN || isChannelCreator(channel, user)) return true;
   const membership = await getMembership(channel._id, user?.sub);
   return membership?.status === 'active' && membership.role === 'admin';
 };

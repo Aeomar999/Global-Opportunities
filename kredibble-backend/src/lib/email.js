@@ -46,6 +46,7 @@ export const sendVerificationEmail = async (email, code) => {
     throw new ApiError(502, 'Failed to send verification email');
   }
 };
+
 export const sendPasswordResetEmail = async (email, code, ttlMinutes) => {
   if (!resend) {
     logger.warn('Resend not configured, skipping password reset email');

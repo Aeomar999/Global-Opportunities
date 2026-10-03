@@ -299,3 +299,29 @@ export const passwordResetAttemptLimiter = createRateLimiter({
   message: { error: { message: 'Too many password reset attempts for this email, please try again after an hour' } },
   keyGenerator: (req) => String(req.body?.email || '').trim().toLowerCase() || 'unknown',
 });
+
+/**
+ * SEC-083: reset-code requests — 3 per hour per target email. The per-IP limit
+ * alone lets rotating IPs flood one inbox, cancel its code on every request and
+ * spend the shared email quota.
+ */
+export const forgotPasswordEmailLimiter = createRateLimiter({
+  prefix: 'forgot-password-email',
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+  message: { error: { message: 'Too many password reset requests for this email, please try again after an hour' } },
+  keyGenerator: (req) => String(req.body?.email || '').trim().toLowerCase() || 'unknown',
+});
+
+/**
+ * SEC-084/SEC-065: current-password checks behind a session (change password,
+ * delete account) — 5 per hour per user, so a stolen token can't be used to
+ * guess the password from many IPs.
+ */
+export const reauthLimiter = createRateLimiter({
+  prefix: 'reauth',
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  message: { error: { message: 'Too many password attempts, please try again after an hour' } },
+  keyGenerator: (req) => String(req.auth?.sub || 'unknown'),
+});

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { app } from '../src/app.js';
-import { User, PasswordResetCode } from '../src/models/User.js';
+import { User, PasswordResetCode, AuditLog } from '../src/models/User.js';
 import { hashVerificationCode } from '../src/lib/email.js';
 
 const PASSWORD = 'OldPassw0rd-x';
@@ -83,6 +83,7 @@ describe('SEC-083: forgot / reset password', () => {
     const sixth = await reset('reset@example.com', KNOWN_CODE);
 
     expect(sixth.status).toBe(400);
+    expect(await AuditLog.countDocuments({ action: 'auth.password.reset', 'metadata.reason': 'attempt_cap' })).toBe(1);
     expect((await login('reset@example.com', PASSWORD)).status).toBe(200);
   });
 
@@ -110,6 +111,7 @@ describe('SEC-084: change password', () => {
     const res = await changePassword(thisDevice.body.data.token, { currentPassword: PASSWORD, newPassword: NEW_PASSWORD });
 
     expect(res.status).toBe(200);
+    expect((await me(thisDevice.body.data.token)).status).toBe(401);
     expect((await me(otherDevice.body.data.token)).status).toBe(401);
     expect((await refresh(otherDevice.body.data.refreshToken)).status).toBe(401);
     expect((await me(res.body.data.token)).status).toBe(200);

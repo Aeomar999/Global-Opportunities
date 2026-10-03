@@ -16,7 +16,7 @@ import { SavedItem } from '../models/User.js';
 import { createVerificationCode, hashVerificationCode, sendVerificationEmail, sendPasswordResetEmail } from '../lib/email.js';
 import { env } from '../config/env.js';
 import { AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
-import { registrationLimiter, passwordResetLimiter, authLimiter, emailVerificationLimiter, forgotPasswordLimiter, passwordResetAttemptLimiter } from '../lib/rate-limiters.js';
+import { registrationLimiter, passwordResetLimiter, authLimiter, emailVerificationLimiter, forgotPasswordLimiter, forgotPasswordEmailLimiter, passwordResetAttemptLimiter, reauthLimiter } from '../lib/rate-limiters.js';
 import logger from '../lib/logger.js';
 import { deleteAccount, userDataFilters } from '../lib/account-deletion.js';
 
@@ -279,6 +279,11 @@ authRouter.post(
           outcome: 'failure',
           metadata: { reason: 'invalid_token' },
         });
+        throw new ApiError(401, 'Invalid refresh token');
+      }
+
+      // SEC-065: a deleted or missing account can't be refreshed back into a session.
+      if (!tokenDoc.userId || tokenDoc.userId.role === 'deleted') {
         throw new ApiError(401, 'Invalid refresh token');
       }
 
@@ -585,6 +590,7 @@ const hashesMatch = (a, b) => {
 authRouter.post(
   '/password/forgot',
   forgotPasswordLimiter,
+  forgotPasswordEmailLimiter,
   validate(forgotPasswordSchema),
   asyncHandler(async (req, res) => {
     const user = await User.findOne({
@@ -648,6 +654,13 @@ authRouter.post(
 
     if (record.attempts > PASSWORD_RESET_MAX_ATTEMPTS) {
       await PasswordResetCode.deleteMany({ userId: user._id });
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.PASSWORD_RESET,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        resourceId: user._id,
+        outcome: 'failure',
+        metadata: { reason: 'attempt_cap' },
+      });
       throw invalidCode();
     }
 
@@ -662,13 +675,17 @@ authRouter.post(
       throw invalidCode();
     }
 
+    // Consume the code before changing anything: of two requests racing with the
+    // same code, only the one that deletes it goes on.
+    const { deletedCount } = await PasswordResetCode.deleteOne({ _id: record._id });
+    if (deletedCount !== 1) throw invalidCode();
+
     user.passwordHash = await bcrypt.hash(newPassword, 12);
     user.failedLoginAttempts = 0;
     user.lockUntil = null;
     user.lastFailedLogin = null;
     await revokeAllSessions(user);
     await user.save();
-    await PasswordResetCode.deleteMany({ userId: user._id });
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.PASSWORD_RESET,
@@ -687,6 +704,7 @@ authRouter.post(
 authRouter.post(
   '/password',
   requireAuth,
+  reauthLimiter,
   validate(changePasswordSchema),
   asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = req.body;
@@ -741,7 +759,8 @@ authRouter.get(
 );
 
 // SEC-029: GDPR/CCPA Data Export
-// Returns a complete JSON archive of all user data
+// Returns a JSON archive of the user's data. Grant applications and reports
+// store no user id, so they aren't included yet (SEC-060).
 authRouter.get(
   '/me/export',
   requireAuth,
@@ -809,11 +828,15 @@ authRouter.get(
 authRouter.delete(
   '/me',
   requireAuth,
+  reauthLimiter,
   validate(deleteAccountSchema),
   asyncHandler(async (req, res) => {
     const { password } = req.body;
 
     const userId = req.auth.sub;
+    // Admin accounts are removed by another admin, not erased from the app.
+    if (req.auth.role === 'admin') throw new ApiError(403, 'Admin accounts cannot be deleted from the app');
+
     const user = await User.findById(userId).select('+passwordHash');
     if (!user?.passwordHash) throw new ApiError(404, 'User not found');
 
@@ -828,16 +851,33 @@ authRouter.delete(
       throw new ApiError(400, 'Incorrect password');
     }
 
-    const { deletedAt } = await deleteAccount(user);
+    let deletedAt;
+    try {
+      ({ deletedAt } = await deleteAccount(user));
+    } catch (error) {
+      // Before access is cut nothing is promised: let it surface as a 500.
+      if (!error.accountClosed) throw error;
+      logger.error({ err: error.message, userId }, 'Account deletion did not finish');
+    }
+    const status = deletedAt ? 'completed' : 'pending';
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.ACCOUNT_DELETE,
       resourceType: AUDIT_RESOURCE_TYPES.USER,
       resourceId: userId,
       outcome: 'success',
-      metadata: { reason: 'user_request' },
+      metadata: { reason: 'user_request', status },
     });
 
-    res.json({ data: { message: 'Your account and personal data have been deleted.', deletedAt } });
+    if (status === 'pending') {
+      // The hourly completePendingDeletions run finishes the rest.
+      return res.status(202).json({
+        data: {
+          status,
+          message: 'Your account is closed. Removing the rest of your data is taking longer than usual and will finish automatically.',
+        },
+      });
+    }
+    res.json({ data: { message: 'Your account and personal data have been deleted.', deletedAt, status } });
   }),
 );

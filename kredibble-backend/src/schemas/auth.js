@@ -65,6 +65,7 @@ export const refreshSchema = z.object({
     refreshToken: z.string().min(1, 'Refresh token is required'),
   }),
 });
+
 export const forgotPasswordSchema = z.object({
   body: z.object({
     email: z.string().email('Invalid email format'),
