@@ -282,3 +282,20 @@ export const emailVerificationLimiter = createRateLimiter({
   message: { error: { message: 'Too many verification attempts for this email, please try again after an hour' } },
   keyGenerator: (req) => String(req.body?.email || '').trim().toLowerCase() || 'unknown',
 });
+
+/** SEC-083: reset-code requests — 5 per hour per IP. */
+export const forgotPasswordLimiter = createRateLimiter({
+  prefix: 'forgot-password',
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  message: { error: { message: 'Too many password reset requests, please try again after an hour' } },
+});
+
+/** SEC-083: reset-code guesses — 10 per hour per target email, on top of the 5-attempt cap per code. */
+export const passwordResetAttemptLimiter = createRateLimiter({
+  prefix: 'password-reset-attempt',
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  message: { error: { message: 'Too many password reset attempts for this email, please try again after an hour' } },
+  keyGenerator: (req) => String(req.body?.email || '').trim().toLowerCase() || 'unknown',
+});

@@ -1,21 +1,23 @@
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 
 const DUMMY_HASH = '$2a$12$bRWsa/PC32qEk5cFCdQ/n.DrtmNZZeIr7Fc15SfH6SoezqktcAbCO';
 import { Router } from 'express';
 import { requireAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { loginSchema, registerSchema, refreshSchema } from '../schemas/auth.js';
+import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
-import { User, RevokedRefreshToken, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode } from '../models/User.js';
+import { User, RevokedRefreshToken, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode, PasswordResetCode } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 import { Applicant, EventAttendee, GrantApplication, CompanyVerification, VerificationDoc } from '../models/Platform.js';
 import { ChannelPost, Report } from '../models/Community.js';
 import { Notification } from '../models/Content.js';
 import { SavedItem } from '../models/User.js';
-import { createVerificationCode, hashVerificationCode, sendVerificationEmail } from '../lib/email.js';
+import { createVerificationCode, hashVerificationCode, sendVerificationEmail, sendPasswordResetEmail } from '../lib/email.js';
 import { env } from '../config/env.js';
 import { AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
-import { registrationLimiter, passwordResetLimiter, authLimiter, emailVerificationLimiter } from '../lib/rate-limiters.js';
+import { registrationLimiter, passwordResetLimiter, authLimiter, emailVerificationLimiter, forgotPasswordLimiter, passwordResetAttemptLimiter } from '../lib/rate-limiters.js';
+import logger from '../lib/logger.js';
 
 export const authRouter = Router();
 
@@ -545,6 +547,128 @@ authRouter.post(
     });
 
     itemResponse(res, { email: normalizedEmail, verified: true });
+  }),
+);
+
+const PASSWORD_RESET_TTL_MINUTES = 10;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+/**
+ * Sign out every device: access tokens fail the tokenVersion check and refresh
+ * tokens are gone. The caller saves `user`.
+ */
+const revokeAllSessions = async (user) => {
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  user.refreshTokenHash = null;
+  await RefreshToken.deleteMany({ userId: user._id });
+};
+
+/** Constant-time comparison of two hex digests. */
+const hashesMatch = (a, b) => {
+  const left = Buffer.from(a, 'hex');
+  const right = Buffer.from(b, 'hex');
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+};
+
+// SEC-083: request a reset code. Always 202 with the same body, so the response
+// never reveals whether the email is registered. Admin accounts are recovered
+// with scripts/create-admin.js, not by email.
+authRouter.post(
+  '/password/forgot',
+  forgotPasswordLimiter,
+  validate(forgotPasswordSchema),
+  asyncHandler(async (req, res) => {
+    const user = await User.findOne({
+      emailNormalized: normalizeEmail(req.body.email),
+      role: { $in: PUBLIC_ROLES },
+    });
+
+    if (user) {
+      const code = createVerificationCode();
+      await PasswordResetCode.deleteMany({ userId: user._id });
+      await PasswordResetCode.create({
+        userId: user._id,
+        codeHash: hashVerificationCode(code),
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MINUTES * 60 * 1000),
+      });
+      // Not awaited: a slower response for registered emails would reveal which ones exist.
+      sendPasswordResetEmail(user.email, code, PASSWORD_RESET_TTL_MINUTES).catch((error) => {
+        logger.error({ err: error.message, userId: String(user._id) }, 'Password reset email failed');
+      });
+    }
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.PASSWORD_RESET_REQUEST,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user?._id,
+      outcome: user ? 'success' : 'failure',
+      metadata: user ? {} : { reason: 'unknown_email' },
+    });
+
+    res.status(202).json({
+      data: {
+        message: 'If that email is registered, a reset code is on its way.',
+        expiresInMinutes: PASSWORD_RESET_TTL_MINUTES,
+      },
+    });
+  }),
+);
+
+// SEC-083: set a new password with the emailed code. Every failure gives the
+// same message, including the attempt cap, so it can't be used to find accounts.
+authRouter.post(
+  '/password/reset',
+  passwordResetAttemptLimiter,
+  validate(resetPasswordSchema),
+  asyncHandler(async (req, res) => {
+    const { code, newPassword } = req.body;
+    const invalidCode = () => new ApiError(400, 'Invalid or expired reset code');
+
+    const user = await User.findOne({
+      emailNormalized: normalizeEmail(req.body.email),
+      role: { $in: PUBLIC_ROLES },
+    });
+    if (!user) throw invalidCode();
+
+    const record = await PasswordResetCode.findOneAndUpdate(
+      { userId: user._id, expiresAt: { $gt: new Date() } },
+      { $inc: { attempts: 1 } },
+      { returnDocument: 'after', sort: { createdAt: -1 } },
+    );
+    if (!record) throw invalidCode();
+
+    if (record.attempts > PASSWORD_RESET_MAX_ATTEMPTS) {
+      await PasswordResetCode.deleteMany({ userId: user._id });
+      throw invalidCode();
+    }
+
+    if (!hashesMatch(record.codeHash, hashVerificationCode(code))) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.PASSWORD_RESET,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        resourceId: user._id,
+        outcome: 'failure',
+        metadata: { reason: 'invalid_code', attempts: record.attempts },
+      });
+      throw invalidCode();
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    user.failedLoginAttempts = 0;
+    user.lockUntil = null;
+    user.lastFailedLogin = null;
+    await revokeAllSessions(user);
+    await user.save();
+    await PasswordResetCode.deleteMany({ userId: user._id });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.PASSWORD_RESET,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+    });
+
+    itemResponse(res, { message: 'Password updated. Sign in with your new password.' });
   }),
 );
 

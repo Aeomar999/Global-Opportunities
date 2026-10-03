@@ -46,3 +46,27 @@ export const sendVerificationEmail = async (email, code) => {
     throw new ApiError(502, 'Failed to send verification email');
   }
 };
+export const sendPasswordResetEmail = async (email, code, ttlMinutes) => {
+  if (!resend) {
+    logger.warn('Resend not configured, skipping password reset email');
+    return;
+  }
+
+  const result = await resend.emails.send({
+    from: env.resendFromEmail || 'noreply@kredibble.app',
+    to: email,
+    subject: 'Reset your Kredibble password',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1a1a1a;">Reset your password</h2>
+        <p>Enter this code in the Kredibble app to choose a new password:</p>
+        <div style="background: #f5f5f5; padding: 20px; text-align: center; font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #1a1a1a;">
+          ${code}
+        </div>
+        <p style="color: #666; font-size: 14px;">This code expires in ${ttlMinutes} minutes.</p>
+        <p style="color: #666; font-size: 14px;">If you didn't ask to reset your password, ignore this email. Your password won't change.</p>
+      </div>
+    `,
+  });
+  if (result?.error) throw new Error(result.error.message);
+};
