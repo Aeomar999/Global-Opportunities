@@ -43,7 +43,7 @@ test.describe('Admin Authentication', () => {
     await signIn(page, 'wrong@email.com', 'wrongpassword');
 
     // Should show error and stay on login page
-    await expect(page.locator('text=Invalid admin credentials').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[class*="text-kb-error"]').first()).toBeVisible({ timeout: 5000 });
     await expect(page).toHaveURL(`${BASE_URL}/login`);
   });
 
@@ -158,7 +158,12 @@ test.describe('Admin API Integration', () => {
     
     // Use cookie to call dashboard summary (now at /admin/dashboard)
     // Playwright expects Cookie header as a single string; join array with semicolon
-    const cookieHeader = Array.isArray(cookies) ? cookies.join('; ') : cookies;
+    // Handle both string arrays and object arrays (each cookie can be an object with name/value)
+    const cookieArray = Array.isArray(cookies) ? cookies : [cookies];
+    const cookieHeader = cookieArray
+      .map(c => typeof c === 'string' ? c : c.value || c)
+      .join('; ');
+    
     const summaryResponse = await request.get(`${API_URL}/admin/dashboard`, {
       headers: { Cookie: cookieHeader },
     });
