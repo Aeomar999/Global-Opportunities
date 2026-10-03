@@ -57,7 +57,37 @@ const defaultFetchOpts: RequestInit = {
   headers: { "Content-Type": "application/json" },
 };
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+let isRefreshing = false;
+let refreshPromise: Promise<AuthResponse> | null = null;
+
+async function refreshAdminSession(): Promise<AuthResponse> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    const response = await fetch(`${API_BASE_URL}/auth/admin/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      clearAdminSession();
+      throw new Error(payload?.error?.message || "Session expired");
+    }
+    saveAdminUser(payload.data.user);
+    return payload.data as AuthResponse;
+  })();
+  try {
+    return await refreshPromise;
+  } finally {
+    isRefreshing = false;
+    refreshPromise = null;
+  }
+}
+
+export async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...defaultFetchOpts,
     ...init,
@@ -71,11 +101,33 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const errorMsg = payload?.error?.message || `Request failed with status ${response.status}`;
+    // On 401, try to refresh once and retry
+    if (response.status === 401 && !retried) {
+      try {
+        await refreshAdminSession();
+        // Retry the original request
+        return request<T>(path, init, true);
+      } catch {
+        clearAdminSession();
+        throw new Error("Session expired, please log in again");
+      }
+    }
     throw new Error(errorMsg);
   }
 
   return payload.data as T;
 }
+
+export const checkAdminSession = async (): Promise<AuthUser | null> => {
+  try {
+    const data = await request<AuthUser>("/auth/admin/me");
+    saveAdminUser(data);
+    return data;
+  } catch {
+    clearAdminSession();
+    return null;
+  }
+};
 
 export const getDashboardSummary = async <T = Record<string, unknown>>() => {
   return request<T>("/admin/dashboard");

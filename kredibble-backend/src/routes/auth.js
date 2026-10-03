@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 
 const DUMMY_HASH = '$2a$12$bRWsa/PC32qEk5cFCdQ/n.DrtmNZZeIr7Fc15SfH6SoezqktcAbCO';
 import { Router } from 'express';
-import { requireAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken } from '../middleware/auth.js';
+import { requireAuth, requireAdminAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, setAdminRefreshCookie, clearAdminRefreshCookie, generateRefreshToken, hashRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, deleteAccountSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
@@ -429,9 +429,9 @@ authRouter.post(
     const adminToken = signAdminToken(user);
     setAdminCookie(res, adminToken);
 
-    // Also issue refresh token for admin (stored on user)
+    // Issue refresh token for admin (stored in httpOnly cookie)
     const refreshToken = generateRefreshToken();
-    const tokenHash = hashRefreshTokenUtil(refreshToken);
+    const tokenHash = hashRefreshToken(refreshToken);
     user.refreshTokenHash = tokenHash;
     await user.save();
     await RefreshToken.create({
@@ -441,6 +441,9 @@ authRouter.post(
       deviceLabel: req.headers['user-agent'] || 'Unknown Device'
     });
 
+    // Set refresh token as httpOnly cookie (path-scoped to /auth/admin)
+    setAdminRefreshCookie(res, refreshToken);
+
     await auditReq(req, {
       action: AUDIT_ACTIONS.LOGIN_SUCCESS,
       resourceType: AUDIT_RESOURCE_TYPES.USER,
@@ -449,19 +452,20 @@ authRouter.post(
       metadata: { role: 'admin', isAdminLogin: true },
     });
 
-    res.json({ data: { user: publicUser(user), refreshToken } });
+    res.json({ data: { user: publicUser(user) } });
   }),
 );
 
-// Admin logout — clears cookie, revokes refresh token
+// Admin logout — clears cookies, revokes refresh token
 authRouter.post(
   '/admin/logout',
   asyncHandler(async (req, res) => {
     clearAdminCookie(res);
-    // If refresh token sent in body, revoke it
-    const { refreshToken } = req.body;
+    clearAdminRefreshCookie(res);
+    // Revoke refresh token from cookie
+    const refreshToken = req.cookies?.kredibble_admin_refresh;
     if (refreshToken) {
-      const tokenHash = hashRefreshTokenUtil(refreshToken);
+      const tokenHash = hashRefreshToken(refreshToken);
       await RefreshToken.findOneAndUpdate(
         { tokenHash, revokedAt: null },
         { $set: { revokedAt: new Date() } }
@@ -476,6 +480,109 @@ authRouter.post(
     });
 
     res.json({ data: { message: 'Logged out' } });
+  }),
+);
+
+// Admin refresh — rotates refresh token from cookie, sets new cookies
+authRouter.post(
+  '/admin/refresh',
+  asyncHandler(async (req, res) => {
+    const refreshToken = req.cookies?.kredibble_admin_refresh;
+    if (!refreshToken) {
+      return res.status(401).json({ error: { message: 'Refresh token required' } });
+    }
+    const tokenHash = hashRefreshToken(refreshToken);
+
+    const tokenDoc = await RefreshToken.findOne({ tokenHash }).populate('userId');
+    if (!tokenDoc) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.REFRESH_TOKEN,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        outcome: 'failure',
+        metadata: { reason: 'invalid_token', isAdminRefresh: true },
+      });
+      clearAdminCookie(res);
+      clearAdminRefreshCookie(res);
+      return res.status(401).json({ error: { message: 'Invalid refresh token' } });
+    }
+
+    // Reuse detection
+    if (tokenDoc.revokedAt || tokenDoc.replacedBy) {
+      await RefreshToken.updateMany(
+        { userId: tokenDoc.userId._id, revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      );
+      
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.REFRESH_TOKEN,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        resourceId: tokenDoc.userId._id,
+        outcome: 'failure',
+        metadata: { reason: 'token_reused_revoked_family', isAdminRefresh: true },
+      });
+      clearAdminCookie(res);
+      clearAdminRefreshCookie(res);
+      return res.status(401).json({ error: { message: 'Refresh token revoked, please login again' } });
+    }
+
+    if (tokenDoc.expiresAt < new Date()) {
+      clearAdminCookie(res);
+      clearAdminRefreshCookie(res);
+      return res.status(401).json({ error: { message: 'Refresh token expired' } });
+    }
+
+    const user = tokenDoc.userId;
+    if (!user || user.role !== 'admin' || user.role === 'deleted') {
+      clearAdminCookie(res);
+      clearAdminRefreshCookie(res);
+      return res.status(401).json({ error: { message: 'Invalid admin session' } });
+    }
+
+    // Rotate: generate new tokens
+    const adminToken = signAdminToken(user);
+    const newRefreshToken = generateRefreshToken();
+    const newTokenHash = hashRefreshToken(newRefreshToken);
+    
+    tokenDoc.revokedAt = new Date();
+    tokenDoc.replacedBy = newTokenHash;
+    await tokenDoc.save();
+    
+    user.refreshTokenHash = newTokenHash;
+    await user.save();
+    
+    await RefreshToken.create({
+      userId: user._id,
+      tokenHash: newTokenHash,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      deviceLabel: req.headers['user-agent'] || 'Unknown Device'
+    });
+
+    // Set new cookies
+    setAdminCookie(res, adminToken);
+    setAdminRefreshCookie(res, newRefreshToken);
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.REFRESH_TOKEN,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+      metadata: { role: 'admin', isAdminRefresh: true },
+    });
+
+    res.json({ data: { user: publicUser(user) } });
+  }),
+);
+
+// Admin session check — validates admin cookie and returns user
+authRouter.get(
+  '/admin/me',
+  requireAdminAuth,
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.auth.sub).select('-passwordHash -refreshTokenHash -tokenVersion').lean();
+    if (!user || user.role !== 'admin' || user.role === 'deleted') {
+      return res.status(401).json({ error: { message: 'Invalid admin session' } });
+    }
+    res.json({ data: publicUser(user) });
   }),
 );
 

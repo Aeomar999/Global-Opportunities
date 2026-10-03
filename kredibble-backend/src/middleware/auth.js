@@ -27,6 +27,7 @@ export const generateRefreshToken = () => crypto.randomBytes(32).toString('hex')
 export const hashRefreshToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 const COOKIE_NAME = 'kredibble_admin_token';
+const REFRESH_COOKIE_NAME = 'kredibble_admin_refresh';
 
 export const setAdminCookie = (res, token) => {
   res.cookie(COOKIE_NAME, token, {
@@ -38,12 +39,31 @@ export const setAdminCookie = (res, token) => {
   });
 };
 
+export const setAdminRefreshCookie = (res, token) => {
+  res.cookie(REFRESH_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: env.isProduction,
+    sameSite: 'strict',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    path: '/auth/admin',
+  });
+};
+
 export const clearAdminCookie = (res) => {
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
     secure: env.isProduction,
     sameSite: 'strict',
     path: '/',
+  });
+};
+
+export const clearAdminRefreshCookie = (res) => {
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: env.isProduction,
+    sameSite: 'strict',
+    path: '/auth/admin',
   });
 };
 
