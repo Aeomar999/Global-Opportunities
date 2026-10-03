@@ -102,7 +102,7 @@ export const deleteUserMedia = async (userId) => {
 
   for (const prefix of [`kredibble/kredibble/${userId}/`, `kredibble/${userId}/`]) {
     for (const resourceType of ['image', 'raw', 'video']) {
-      await cloudinary.api.delete_resources_by_prefix(prefix, { resource_type: resourceType });
+      await cloudinary.api.delete_resources_by_prefix(prefix, { resource_type: resourceType, invalidate: true });
     }
   }
 };

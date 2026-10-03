@@ -5,6 +5,7 @@ import {
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 import { Applicant, EventAttendee, CompanyVerification, VerificationDoc, Opportunity } from '../models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership } from '../models/Community.js';
+import { Testimonial } from '../models/AdminPortal.js';
 import { deleteUserMedia } from './cloudinary.js';
 import logger from './logger.js';
 
@@ -39,6 +40,7 @@ export async function userDataFilters(user) {
     hirerAccount: { userId },
     applications: { seekerId: userId },
     eventBookings: { email },
+    testimonials: { email },
     companyVerifications: { hirerId: { $in: companyIds } },
     verificationDocs: { companyId: { $in: companyIds } },
     savedItems: { userId },
@@ -64,6 +66,7 @@ export async function purgeUserData(user, { deleteMedia = deleteUserMedia } = {}
     SeekerProfile.deleteMany(where.seekerProfile),
     Applicant.deleteMany(where.applications),
     EventAttendee.deleteMany(where.eventBookings),
+    Testimonial.deleteMany(where.testimonials),
     CompanyVerification.deleteMany(where.companyVerifications),
     VerificationDoc.deleteMany(where.verificationDocs),
     SavedItem.deleteMany(where.savedItems),

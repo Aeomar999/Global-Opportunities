@@ -5,7 +5,7 @@ const DUMMY_HASH = '$2a$12$bRWsa/PC32qEk5cFCdQ/n.DrtmNZZeIr7Fc15SfH6SoezqktcAbCO
 import { Router } from 'express';
 import { requireAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from '../schemas/auth.js';
+import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, deleteAccountSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
 import { User, RevokedRefreshToken, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode, PasswordResetCode } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
@@ -164,7 +164,9 @@ authRouter.post(
       const hashToCompare = user?.passwordHash || DUMMY_HASH;
       const valid = await bcrypt.compare(password, hashToCompare);
 
-      if (!user?.passwordHash) {
+      // SEC-065: an erased account (role 'deleted') is treated as unknown, even if
+      // a failed purge left its password hash behind.
+      if (!user?.passwordHash || user.role === 'deleted') {
         await auditReq(req, {
           action: AUDIT_ACTIONS.LOGIN_FAILURE,
           resourceType: AUDIT_RESOURCE_TYPES.USER,
@@ -814,14 +816,9 @@ authRouter.get(
 authRouter.delete(
   '/me',
   requireAuth,
+  validate(deleteAccountSchema),
   asyncHandler(async (req, res) => {
-    const { password, confirmation } = req.body;
-    if (confirmation !== 'DELETE MY ACCOUNT') {
-      throw new ApiError(400, 'Please type "DELETE MY ACCOUNT" to confirm');
-    }
-    if (!password) {
-      throw new ApiError(400, 'Password confirmation required for account deletion');
-    }
+    const { password } = req.body;
 
     const userId = req.auth.sub;
     const user = await User.findById(userId).select('+passwordHash');

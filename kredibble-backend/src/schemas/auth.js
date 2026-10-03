@@ -85,3 +85,17 @@ export const changePasswordSchema = z.object({
     newPassword: passwordSchema,
   }),
 });
+
+// SEC-065: deleting an account needs the password and a typed confirmation.
+// Strings only, so a numeric password can't reach bcrypt.compare.
+const DELETE_PASSWORD_MESSAGE = 'Password confirmation required for account deletion';
+const DELETE_CONFIRMATION_MESSAGE = 'Please type "DELETE MY ACCOUNT" to confirm';
+
+export const deleteAccountSchema = z.object({
+  body: z.object({
+    password: z.string({ error: DELETE_PASSWORD_MESSAGE })
+      .min(1, DELETE_PASSWORD_MESSAGE)
+      .max(128, DELETE_PASSWORD_MESSAGE),
+    confirmation: z.literal('DELETE MY ACCOUNT', { error: DELETE_CONFIRMATION_MESSAGE }),
+  }),
+});

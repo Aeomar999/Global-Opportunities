@@ -19,23 +19,34 @@ const run = async () => {
     deletedAt: { $lt: new Date(Date.now() - MIN_AGE_MS) },
   });
 
+  let failed = 0;
   for (const tombstone of tombstones) {
-    const user = await User.findById(tombstone.userId);
-    if (!user) continue;
-    const { mediaDeleted } = await purgeUserData(user);
-    tombstone.set({ status: 'completed', completedAt: new Date(), mediaDeleted });
-    await tombstone.save();
-    logger.info({ userId: String(user._id), mediaDeleted }, 'Account deletion completed');
+    const userId = String(tombstone.userId);
+    // One broken account must not stop the rest from being finished.
+    try {
+      const user = await User.findById(tombstone.userId);
+      if (!user) {
+        logger.warn({ userId }, 'Tombstone has no user document; skipping');
+        continue;
+      }
+      const { mediaDeleted } = await purgeUserData(user);
+      tombstone.set({ status: 'completed', completedAt: new Date(), mediaDeleted });
+      await tombstone.save();
+      logger.info({ userId, mediaDeleted }, 'Account deletion completed');
+    } catch (error) {
+      failed += 1;
+      logger.error({ err: error.message, userId }, 'Completing account deletion failed');
+    }
   }
-  return tombstones.length;
+  return { count: tombstones.length, failed };
 };
 
 run()
-  .then((count) => {
-    logger.info({ count }, 'Unfinished account deletions processed');
-    return mongoose.disconnect();
+  .then(async ({ count, failed }) => {
+    logger.info({ count, failed }, 'Unfinished account deletions processed');
+    await mongoose.disconnect();
+    process.exit(failed > 0 ? 1 : 0);
   })
-  .then(() => process.exit(0))
   .catch((error) => {
     logger.error({ err: error.message }, 'Completing account deletions failed');
     process.exit(1);

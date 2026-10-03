@@ -7,7 +7,8 @@ import { User, SavedItem, AuditLog, UserTombstone } from '../src/models/User.js'
 import { SeekerProfile, HirerAccount } from '../src/models/Profiles.js';
 import { Opportunity, Applicant, Event, EventAttendee, CompanyVerification, VerificationDoc } from '../src/models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership } from '../src/models/Community.js';
-import { deleteAccount } from '../src/lib/account-deletion.js';
+import { Testimonial } from '../src/models/AdminPortal.js';
+import { deleteAccount, purgeUserData } from '../src/lib/account-deletion.js';
 
 const PASSWORD = 'DeleteMe-Passw0rd';
 const EMAIL = 'Ama.Mensah@Example.com';
@@ -34,6 +35,7 @@ const seedSeeker = async () => {
   await ChannelPost.create({ channelId: channel._id, authorId: user._id, authorName: NAME, body: 'Hello' });
   await CommunityMembership.create({ channelId: channel._id, userId: user._id, status: 'active' });
   await SavedItem.create({ userId: user._id, itemId: opportunity._id, itemType: 'opportunities' });
+  await Testimonial.create({ name: NAME, email: EMAIL, comment: 'Kredibble helped me find work.', status: 'approved' });
   await AuditLog.create({ action: 'auth.login.failure', outcome: 'failure', metadata: { email: EMAIL, reason: 'invalid_password' } });
   return { user, opportunity, channel };
 };
@@ -71,6 +73,9 @@ describe('SEC-065: account deletion', () => {
     expect(post).toMatchObject({ authorName: 'Deleted User', authorId: null, body: 'Hello' });
     expect(await Channel.countDocuments({ _id: channel._id })).toBe(1);
     expect(await Opportunity.countDocuments({ _id: opportunity._id })).toBe(1);
+    // Someone else's posting is not touched.
+    expect((await Opportunity.findById(opportunity._id).lean()).moderationStatus).toBe('published');
+    expect(await Testimonial.countDocuments()).toBe(0);
 
     expect((await request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${session.body.data.token}`)).status).toBe(401);
     expect((await request(app).post('/api/v1/auth/refresh').send({ refreshToken: session.body.data.refreshToken })).status).toBe(401);
@@ -103,6 +108,58 @@ describe('SEC-065: account deletion', () => {
     expect(res.status).toBe(400);
     expect(await SeekerProfile.countDocuments({ userId: user._id })).toBe(1);
     expect(await UserTombstone.countDocuments()).toBe(0);
+  });
+
+  it('rejects a non-string password with 400 instead of crashing, and deletes nothing', async () => {
+    const { user } = await seedSeeker();
+    const session = await login(EMAIL, PASSWORD);
+
+    for (const password of [12345678, null, { $ne: '' }, '']) {
+      const res = await deleteMe(session.body.data.token, { password, confirmation: CONFIRMATION });
+      expect(res.status).toBe(400);
+    }
+
+    expect(await SeekerProfile.countDocuments({ userId: user._id })).toBe(1);
+    expect(await UserTombstone.countDocuments()).toBe(0);
+  });
+
+  it('rejects a missing or wrong confirmation with 400 and deletes nothing', async () => {
+    const { user } = await seedSeeker();
+    const session = await login(EMAIL, PASSWORD);
+
+    for (const body of [
+      { password: PASSWORD },
+      { password: PASSWORD, confirmation: 'delete my account' },
+      { password: PASSWORD, confirmation: true },
+    ]) {
+      const res = await deleteMe(session.body.data.token, body);
+      expect(res.status).toBe(400);
+      expect(res.text).toContain('DELETE MY ACCOUNT');
+    }
+
+    expect(await SeekerProfile.countDocuments({ userId: user._id })).toBe(1);
+    expect(await UserTombstone.countDocuments()).toBe(0);
+  });
+
+  it('refuses to sign in to a deleted account, even one a failed purge left a password on', async () => {
+    await User.create({ name: 'Half Erased', email: 'half.erased@example.com', role: 'deleted', passwordHash: await bcrypt.hash(PASSWORD, 12) });
+
+    const res = await login('half.erased@example.com', PASSWORD);
+    const unknown = await login('nobody@example.com', PASSWORD);
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual(unknown.body);
+  });
+
+  it('can be run twice: the second purge neither throws nor finds anything left', async () => {
+    const { user, opportunity } = await seedSeeker();
+    const deleteMedia = jest.fn().mockResolvedValue(undefined);
+
+    await deleteAccount(await User.findById(user._id), { deleteMedia });
+    await expect(purgeUserData(await User.findById(user._id), { deleteMedia })).resolves.toEqual({ mediaDeleted: true });
+
+    expect(await findPersonalData()).toEqual([]);
+    expect((await Opportunity.findById(opportunity._id).lean()).moderationStatus).toBe('published');
   });
 
   it('asks Cloudinary to delete the user\'s files and finishes even when that fails', async () => {
