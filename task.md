@@ -1127,7 +1127,7 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 **Evidence:** Every collection route uses `requireAuth` (Bearer header, user secret). Only `/dashboard/summary` uses `requireAdminAuth`, and `adminRouter` uses `requireAuth` too. Probe with the admin cookie: `GET /verification/companies` → 401 and `GET /opportunities` → 401. The admin UI therefore cannot load verifications or opportunities.
 **Fix:** Preferred: an `/api/v1/admin/*` namespace guarded only by `requireAdminAuth` (admin secret and audience), which becomes the only surface the admin app calls; this keeps SEC-040's audience separation meaningful. Alternative: a combined guard that accepts either a valid user Bearer token or a valid admin token and normalises both to `req.auth`.
 **Acceptance criteria:**
-- [ ] The admin app can list and approve verifications and moderate opportunities using only its cookie (tests)
+- [x] The admin app can list and approve verifications and moderate opportunities using only its cookie (tests)
 - [ ] A user Bearer token is rejected on `/api/v1/admin/*` (test)
 
 ### SEC-076 — The admin session has no refresh
