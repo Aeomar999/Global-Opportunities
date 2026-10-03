@@ -14,7 +14,7 @@ type AuthResponse = {
 
 const getApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (!envUrl) return "http://localhost:4000/api";
+  if (!envUrl) return "http://localhost:4000/api/v1";
 
   // Same-origin path (the API_PROXY_TARGET rewrite in next.config.ts): requests
   // go to the dashboard's own origin, so they inherit its HTTPS.

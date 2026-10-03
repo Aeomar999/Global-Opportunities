@@ -206,3 +206,32 @@ If any phase introduces regressions:
 2. Re-run `test-master` suite
 3. Re-run `security-audit` on reverted code
 4. Document lesson in `POSTMORTEM-<phase>.md`
+
+---
+
+## 📚 System Design Learning Journal
+
+This project participates in Jerry's system design learning program.
+
+**The learning journal lives at:**
+```
+C:\Users\Jerry\Desktop\PROJECT 2026\SYSTEM_DESIGN_LESSONS.md
+```
+
+Whenever you make — or help make — a decision that illustrates a system design concept, you MUST:
+
+1. **Append a lesson entry** to `SYSTEM_DESIGN_LESSONS.md` under `## Lessons Learned Per Project`.
+2. **Update the concepts table** at the bottom of that file if you introduce a concept not yet listed.
+3. Follow the exact format in the `<!-- AGENT INSTRUCTIONS -->` comment block inside that file.
+
+**What counts as a lesson-worthy decision:**
+- Choosing SQL vs. NoSQL and why
+- Adding a cache layer
+- Using a background job/queue instead of inline processing
+- Picking JWT vs. sessions for auth
+- Structuring an API (REST vs. webhook vs. WebSocket)
+- Deciding to split or keep a service together
+- Handling failure/retry scenarios
+- Adding rate limiting or scaling decisions
+
+**Tone:** Plain English. No jargon without a definition. Write as if Jerry is reading with fresh eyes.
