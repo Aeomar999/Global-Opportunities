@@ -161,7 +161,15 @@ test.describe('Admin API Integration', () => {
     // Handle both string arrays and object arrays (each cookie can be an object with name/value)
     const cookieArray = Array.isArray(cookies) ? cookies : [cookies];
     const cookieHeader = cookieArray
-      .map(c => typeof c === 'string' ? c : c.value || c)
+      .map(c => {
+        if (typeof c === 'string') {
+          // Extract just the name=value part before the first semicolon
+          return c.split(';')[0].trim();
+        }
+        // Handle object format: { name: '...', value: '...', ... }
+        return `${c.name}=${c.value}`;
+      })
+      .filter(Boolean)
       .join('; ');
     
     const summaryResponse = await request.get(`${API_URL}/admin/dashboard`, {
