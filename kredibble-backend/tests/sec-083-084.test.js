@@ -97,3 +97,43 @@ describe('SEC-083: forgot / reset password', () => {
     expect((await login('reset@example.com', PASSWORD)).status).toBe(200);
   });
 });
+
+const changePassword = (token, body) =>
+  request(app).post('/api/v1/auth/password').set('Authorization', `Bearer ${token}`).send(body);
+
+describe('SEC-084: change password', () => {
+  it('changes the password, signs out other devices and keeps this one signed in', async () => {
+    await createUser({ email: 'change@example.com' });
+    const thisDevice = await login('change@example.com', PASSWORD);
+    const otherDevice = await login('change@example.com', PASSWORD);
+
+    const res = await changePassword(thisDevice.body.data.token, { currentPassword: PASSWORD, newPassword: NEW_PASSWORD });
+
+    expect(res.status).toBe(200);
+    expect((await me(otherDevice.body.data.token)).status).toBe(401);
+    expect((await refresh(otherDevice.body.data.refreshToken)).status).toBe(401);
+    expect((await me(res.body.data.token)).status).toBe(200);
+    expect((await refresh(res.body.data.refreshToken)).status).toBe(200);
+    expect((await login('change@example.com', NEW_PASSWORD)).status).toBe(200);
+  });
+
+  it('rejects a wrong current password with 400 and keeps the old password', async () => {
+    await createUser({ email: 'change@example.com' });
+    const session = await login('change@example.com', PASSWORD);
+
+    const res = await changePassword(session.body.data.token, { currentPassword: 'WrongPassw0rd-z', newPassword: NEW_PASSWORD });
+
+    expect(res.status).toBe(400);
+    expect((await me(session.body.data.token)).status).toBe(200);
+    expect((await login('change@example.com', PASSWORD)).status).toBe(200);
+  });
+
+  it('rejects reusing the current password', async () => {
+    await createUser({ email: 'change@example.com' });
+    const session = await login('change@example.com', PASSWORD);
+
+    const res = await changePassword(session.body.data.token, { currentPassword: PASSWORD, newPassword: PASSWORD });
+
+    expect(res.status).toBe(400);
+  });
+});

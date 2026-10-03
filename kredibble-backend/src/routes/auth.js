@@ -5,7 +5,7 @@ const DUMMY_HASH = '$2a$12$bRWsa/PC32qEk5cFCdQ/n.DrtmNZZeIr7Fc15SfH6SoezqktcAbCO
 import { Router } from 'express';
 import { requireAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, generateRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema } from '../schemas/auth.js';
+import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
 import { User, RevokedRefreshToken, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode, PasswordResetCode } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
@@ -42,6 +42,21 @@ const PUBLIC_ROLES = ['seeker', 'hirer'];
  * SEC-028: Email normalization to prevent case-variant duplicate accounts
  */
 const normalizeEmail = (email) => String(email).trim().toLowerCase();
+
+/** Mint a refresh token for this device and the access token to go with it. Saves `user`. */
+const issueSession = async (user, req) => {
+  const refreshToken = generateRefreshToken();
+  const tokenHash = hashRefreshTokenUtil(refreshToken);
+  user.refreshTokenHash = tokenHash;
+  await user.save();
+  await RefreshToken.create({
+    userId: user._id,
+    tokenHash,
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    deviceLabel: req.headers['user-agent'] || 'Unknown Device',
+  });
+  return { token: signToken(user), refreshToken };
+};
 
 authRouter.post(
   '/register',
@@ -229,16 +244,7 @@ authRouter.post(
     const finalUser = user.toObject();
     finalUser[user.role] = profile;
 
-    const refreshToken = generateRefreshToken();
-    const tokenHash = hashRefreshTokenUtil(refreshToken);
-    user.refreshTokenHash = tokenHash;
-    await user.save();
-    await RefreshToken.create({
-      userId: user._id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      deviceLabel: req.headers['user-agent'] || 'Unknown Device'
-    });
+    const { token, refreshToken } = await issueSession(user, req);
 
     await auditReq(req, {
       action: AUDIT_ACTIONS.LOGIN_SUCCESS,
@@ -249,7 +255,7 @@ authRouter.post(
     });
 
     res.json({
-      data: { user: publicUser(finalUser), token: signToken(user), refreshToken },
+      data: { user: publicUser(finalUser), token, refreshToken },
     });
   }),
 );
@@ -669,6 +675,47 @@ authRouter.post(
     });
 
     itemResponse(res, { message: 'Password updated. Sign in with your new password.' });
+  }),
+);
+
+// SEC-084: change the password while signed in. Signs out every other device and
+// hands this one a fresh session. A wrong current password is 400, not 401: the
+// mobile client reads 401 as an expired session and signs the user out.
+authRouter.post(
+  '/password',
+  requireAuth,
+  validate(changePasswordSchema),
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.auth.sub);
+    if (!user?.passwordHash) throw new ApiError(404, 'User not found');
+
+    if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.PASSWORD_CHANGE,
+        resourceType: AUDIT_RESOURCE_TYPES.USER,
+        resourceId: user._id,
+        outcome: 'failure',
+        metadata: { reason: 'invalid_current_password' },
+      });
+      throw new ApiError(400, 'Current password is incorrect');
+    }
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw new ApiError(400, 'New password must be different from the current one');
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    await revokeAllSessions(user);
+    const session = await issueSession(user, req);
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.PASSWORD_CHANGE,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+    });
+
+    itemResponse(res, session);
   }),
 );
 
