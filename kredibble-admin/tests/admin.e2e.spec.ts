@@ -178,6 +178,7 @@ test.describe('Admin API Integration', () => {
     
     expect(summaryResponse.ok()).toBeTruthy();
     const data = await summaryResponse.json();
+    console.log('Dashboard summary response:', JSON.stringify(data, null, 2));
     expect(data.data).toBeDefined();
     expect(data.data.totalUsers).toBeDefined();
     expect(data.data.totalOpportunities).toBeDefined();
