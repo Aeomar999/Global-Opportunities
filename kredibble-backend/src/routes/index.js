@@ -1030,7 +1030,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   // Provide basic CRUD for these nested resources so they can be read, updated, or deleted directly by ID
   // SEC-056: Explicit applicant routes with ownership checks (Seeker owns applicant, Hirer owns opportunity)
-  const verifyApplicantAccess = async (req, applicantId, action) => {
+  const verifyApplicantAccess = async (req, applicantId) => {
     const applicant = await Applicant.findById(applicantId);
     if (!applicant) throw notFound('Applicant');
     if (req.auth.role === ADMIN) return applicant;
@@ -1045,12 +1045,12 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   };
 
   router.get('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
-    const applicant = await verifyApplicantAccess(req, req.params.id, 'read');
+    const applicant = await verifyApplicantAccess(req, req.params.id);
     itemResponse(res, toClientObject(applicant));
   }));
 
   router.patch('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
-    const applicant = await verifyApplicantAccess(req, req.params.id, 'update');
+    const applicant = await verifyApplicantAccess(req, req.params.id);
     // SEC-056: Hirers can update status; Seekers can't update status, but can update resume
     const updates = buildUpdatePayload(RESOURCE_POLICIES.applicants, req.body, req.auth.role);
     Object.assign(applicant, updates);
@@ -1059,7 +1059,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.delete('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
-    const applicant = await verifyApplicantAccess(req, req.params.id, 'delete');
+    const applicant = await verifyApplicantAccess(req, req.params.id);
     await applicant.deleteOne();
     await Opportunity.findByIdAndUpdate(applicant.opportunityId, { $inc: { applicantsCount: -1 } });
     res.status(204).end();
