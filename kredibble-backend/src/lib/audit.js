@@ -10,6 +10,8 @@ export const AUDIT_ACTIONS = {
   REFRESH_TOKEN: 'auth.refresh',
   REGISTER: 'auth.register',
   PASSWORD_CHANGE: 'auth.password.change',
+  PASSWORD_RESET_REQUEST: 'auth.password.reset_request',
+  PASSWORD_RESET: 'auth.password.reset',
   ROLE_CHANGE: 'auth.role.change',
   EMAIL_VERIFY: 'auth.email.verify',
 

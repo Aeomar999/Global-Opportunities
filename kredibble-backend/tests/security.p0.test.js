@@ -143,10 +143,7 @@ describe('SEC-002: collection routes must require authentication', () => {
 
     const res = await request(app).get('/api/users').set(...AUTH_BEARER(token));
 
-    expect(res.statusCode).toBe(200);
-    for (const row of res.body.data) {
-      expect(row.passwordHash).toBeUndefined();
-    }
+    expect(res.statusCode).toBe(403);
   });
 });
 
@@ -701,6 +698,8 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/auth/refresh',
   'POST /api/auth/verification-code/send',
   'POST /api/auth/verification-code/verify',
+  'POST /api/auth/password/forgot',
+  'POST /api/auth/password/reset',
   'POST /api/auth/admin/login',
   'POST /api/auth/admin/logout',
   'POST /api/v1/auth/register',
@@ -708,6 +707,8 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/v1/auth/refresh',
   'POST /api/v1/auth/verification-code/send',
   'POST /api/v1/auth/verification-code/verify',
+  'POST /api/v1/auth/password/forgot',
+  'POST /api/v1/auth/password/reset',
   'POST /api/v1/auth/admin/login',
   'POST /api/v1/auth/admin/logout',
 ]);

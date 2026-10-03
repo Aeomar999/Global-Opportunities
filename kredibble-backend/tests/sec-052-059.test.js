@@ -14,14 +14,13 @@ const makeUser = async ({ role = 'seeker', email = `user-${Date.now()}@example.c
 };
 
 describe('Phase 2 P1 Security Fixes (SEC-052 - SEC-057)', () => {
-  let seeker1, seeker2, hirer1, hirer2, admin;
+  let seeker1, seeker2, hirer1, hirer2;
 
   beforeEach(async () => {
     seeker1 = await makeUser({ role: 'seeker', email: 's1@example.com' });
     seeker2 = await makeUser({ role: 'seeker', email: 's2@example.com' });
     hirer1 = await makeUser({ role: 'hirer', email: 'h1@example.com' });
     hirer2 = await makeUser({ role: 'hirer', email: 'h2@example.com' });
-    admin = await makeUser({ role: 'admin', email: 'a1@example.com' });
   });
 
   describe('SEC-052: Token revocation', () => {

@@ -97,7 +97,11 @@ const assertPolicy = (policy, action, req, label = 'resource') => {
  * first so an anonymous caller receives 401 (not 403) and cannot probe which
  * resources exist.
  */
-const guard = (policyKey, action, label = 'resource') => [
+const guard = (policyKey, action, label = 'resource') => {
+  if (!RESOURCE_POLICIES[policyKey]) {
+    throw new Error(`Missing authorization policy for "${policyKey}"`);
+  }
+  return [
   requireAuth,
   (req, res, next) => {
     try {
@@ -108,6 +112,7 @@ const guard = (policyKey, action, label = 'resource') => [
     }
   },
 ];
+};
 
 /** Reduce a hand-written route's body to its policy allowlist (SEC-007). */
 const writableBody = (policyKey, req) => buildCreatePayload(RESOURCE_POLICIES[policyKey], req.body);
@@ -199,6 +204,11 @@ const collectionRoutes = ({
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'read', req, resourceName);
       const { status, type, q } = req.query;
+      
+      // SEC-061: Reject object-valued query params to prevent NoSQL operator injection
+      if (typeof status === 'object' || typeof type === 'object' || typeof q === 'object') {
+        throw new ApiError(400, 'Invalid query parameters');
+      }
       const { page, limit, skip } = parsePagination(req.query);
       const filter = {};
 
@@ -383,6 +393,11 @@ const findReferringAmbassador = async (rawCode) => {
 
 const toId = (value) => value?.toString();
 
+// A channel whose creator was deleted has `createdBy: null`; without the guards an
+// anonymous caller (no `sub`) would match it as `undefined === undefined`.
+const isChannelCreator = (channel, user) =>
+  Boolean(user?.sub && channel.createdBy && toId(channel.createdBy) === user.sub);
+
 const getChannelOrThrow = async (channelId) => {
   const channel = await Channel.findById(channelId);
   if (!channel) throw notFound('Channel');
@@ -403,13 +418,13 @@ const isLegacyMember = (channel, userId) =>
   (channel.memberIds || []).some((memberId) => toId(memberId) === userId);
 
 const canAccessChannel = async (channel, user) => {
-  if (channel.visibility === 'public' || user?.role === ADMIN || toId(channel.createdBy) === user?.sub) return true;
+  if (channel.visibility === 'public' || user?.role === ADMIN || isChannelCreator(channel, user)) return true;
   const membership = await getMembership(channel._id, user?.sub);
   return membership?.status === 'active' || isLegacyMember(channel, user?.sub);
 };
 
 const canManageChannel = async (channel, user) => {
-  if (user?.role === ADMIN || toId(channel.createdBy) === user?.sub) return true;
+  if (user?.role === ADMIN || isChannelCreator(channel, user)) return true;
   const membership = await getMembership(channel._id, user?.sub);
   return membership?.status === 'active' && membership.role === 'admin';
 };
@@ -1020,7 +1035,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   // Provide basic CRUD for these nested resources so they can be read, updated, or deleted directly by ID
   // SEC-056: Explicit applicant routes with ownership checks (Seeker owns applicant, Hirer owns opportunity)
-  const verifyApplicantAccess = async (req, applicantId, action) => {
+  const verifyApplicantAccess = async (req, applicantId) => {
     const applicant = await Applicant.findById(applicantId);
     if (!applicant) throw notFound('Applicant');
     if (req.auth.role === ADMIN) return applicant;
@@ -1035,12 +1050,12 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   };
 
   router.get('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
-    const applicant = await verifyApplicantAccess(req, req.params.id, 'read');
+    const applicant = await verifyApplicantAccess(req, req.params.id);
     itemResponse(res, toClientObject(applicant));
   }));
 
   router.patch('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
-    const applicant = await verifyApplicantAccess(req, req.params.id, 'update');
+    const applicant = await verifyApplicantAccess(req, req.params.id);
     // SEC-056: Hirers can update status; Seekers can't update status, but can update resume
     const updates = buildUpdatePayload(RESOURCE_POLICIES.applicants, req.body, req.auth.role);
     Object.assign(applicant, updates);
@@ -1049,7 +1064,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.delete('/applicants/:id', requireAuth, asyncHandler(async (req, res) => {
-    const applicant = await verifyApplicantAccess(req, req.params.id, 'delete');
+    const applicant = await verifyApplicantAccess(req, req.params.id);
     await applicant.deleteOne();
     await Opportunity.findByIdAndUpdate(applicant.opportunityId, { $inc: { applicantsCount: -1 } });
     res.status(204).end();

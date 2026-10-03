@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema({
       return this.email ? normalizeEmail(this.email) : undefined;
     }
   },
-  role: { type: String, required: true, enum: ['seeker', 'hirer', 'admin'] },
+  role: { type: String, required: true, enum: ['seeker', 'hirer', 'admin', 'deleted'] },
   passwordHash: { type: String },
   avatarUrl: { type: String },
   // SEC-009: token version for refresh rotation & forced logout
@@ -82,6 +82,29 @@ const emailVerificationCodeSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const EmailVerificationCode = mongoose.model('EmailVerificationCode', emailVerificationCodeSchema);
+
+// SEC-083: one-time password-reset codes, stored hashed, 10-minute TTL, attempt-capped
+const passwordResetCodeSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  codeHash: { type: String, required: true },
+  attempts: { type: Number, default: 0, min: 0 },
+  expiresAt: { type: Date, required: true, index: { expires: 0 } },
+}, { timestamps: true });
+
+export const PasswordResetCode = mongoose.model('PasswordResetCode', passwordResetCodeSchema);
+
+// SEC-065: record that an account was erased. Holds a hash of the email, never the email.
+const userTombstoneSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, required: true, unique: true },
+  emailHash: { type: String, required: true, index: true },
+  status: { type: String, enum: ['pending', 'completed'], default: 'pending', index: true },
+  mediaDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date, required: true },
+  completedAt: { type: Date },
+  retentionUntil: { type: Date, required: true, index: { expires: 0 } },
+}, { timestamps: true });
+
+export const UserTombstone = mongoose.model('UserTombstone', userTombstoneSchema);
 
 const savedItemSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },

@@ -208,17 +208,17 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-058 | Verification documents scoped to owner (companyId) | P1 | Backend routes | ✅ Done |
 | SEC-059 | Event capacity unenforced; attendee emails exposed to hirers | P1 | Backend routes | ✅ Done |
 | SEC-060 | Grant allocation not implemented; applications carry no identity | P2 | Backend | Open — needs decision (Q4) |
-| SEC-061 | NoSQL operator injection via query params | P2 | Backend routes | Open |
-| SEC-062 | Email verification code: weak RNG, no attempt cap | P2 | Backend auth | Open |
-| SEC-063 | Authorization fails open for missing policy actions | P2 | Backend | Open |
-| SEC-064 | 5xx responses leak internal error messages | P2 | Backend app | Open |
-| SEC-065 | GDPR deletion incomplete (tombstone, media, owned content) | P1 | Backend | Open |
+| SEC-061 | NoSQL operator injection via query params | P2 | Backend routes | ✅ Done |
+| SEC-062 | Email verification code: weak RNG, no attempt cap | P2 | Backend auth | ✅ Done |
+| SEC-063 | Authorization fails open for missing policy actions | P2 | Backend | ✅ Done |
+| SEC-064 | 5xx responses leak internal error messages | P2 | Backend app | ✅ Done |
+| SEC-065 | GDPR deletion incomplete (tombstone, media, owned content) | P1 | Backend | ✅ Done |
 | SEC-066 | Backend `package-lock.json` out of sync — `npm ci` fails | P0 | CI/CD | ✅ Done |
 | SEC-067 | Admin `next build` fails on type error | P0 | Admin / CI | ✅ Done |
 | SEC-068 | Production boot requires AI + Resend keys missing from `render.yaml` | P0 | Backend config | ✅ Done |
 | SEC-069 | Two divergent backend deployments; free tier sleeps; Swagger public | P1 | Deployment | Open — needs decision (Q7) |
 | SEC-070 | CI does not gate lint / typecheck / build / e2e | P1 | CI/CD | Open |
-| SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | Open |
+| SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | ✅ Done (153/153 locally; CI to confirm on the PR) |
 | SEC-072 | Seekers cannot list their own applications | P1 | Backend + App | Open |
 | SEC-073 | Admin CSP `connect-src 'self'` blocks every API call | P1 | Admin app | Open |
 | SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ✅ Done |
@@ -227,13 +227,13 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | Open |
 | SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | Open |
 | SEC-079 | Admin CSP allows `'unsafe-inline' 'unsafe-eval'` | P2 | Admin app | Open |
-| SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | ✅ Done |
+| SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | ⚠️ Reopened — refresh only fires on message 'jwt expired', which the API never sends |
 | SEC-081 | Mobile detail screens hardcoded; Apply not wired; fake fallback data | P1 | Mobile app | Open |
 | SEC-082 | Mobile AI assistant returns canned replies | P2 | Mobile app | Open — needs scope decision (Q8) |
-| SEC-083 | Forgot-password flow is UI-only (no backend) | P1 | Mobile + Backend | Open |
-| SEC-084 | Change password and delete account not wired (store requirement) | P1 | Mobile + Backend | Open |
+| SEC-083 | Forgot-password flow is UI-only (no backend) | P1 | Mobile + Backend | 🟡 Backend done; screen in Plan 3 |
+| SEC-084 | Change password and delete account not wired (store requirement) | P1 | Mobile + Backend | 🟡 Backend done; screens in Plan 3 |
 | SEC-085 | Notifications/saved/applications/hirer screens on mock data | P2 | Mobile app | Open |
-| SEC-086 | Mobile `tsc` 5 errors, `expo lint` 45 errors | P2 | Mobile app | Open |
+| SEC-086 | Mobile `tsc` 5 errors, `expo lint` 45 errors | P2 | Mobile app | ✅ Done (verified 2026-10-03: tsc clean, expo lint 0 errors / 125 warnings) |
 | SEC-087 | App-store readiness: identity, iOS bundle id, policy links | P1 | Mobile app | Open |
 | SEC-088 | Mobile `npm audit`: 4 high, 12 moderate | P2 | Mobile deps | Open |
 | SEC-089 | Shared Redis configured via render.yaml for rate limits | P1 | Operations | ✅ Done |
@@ -243,6 +243,14 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-093 | No load test or external pen test | P2 | Operations | Open |
 | SEC-094 | README and `AGENTS.md` baseline are stale | P3 | Docs | Open |
 | SEC-095 | Request logging noise; moving `Sunset`; dead duplicate code | P3 | Backend | Open |
+| SEC-096 | Private channel readable anonymously once its creator is deleted (creator check fails open on `undefined === undefined`) | P0 | Backend routes | ✅ Done (found and fixed before merge, 11e894c) |
+| SEC-097 | Private-channel posts readable by any signed-in user via `GET /community/posts` (no read scope) | P1 | Backend routes | Open |
+| SEC-098 | Sockets ignore account deletion and session revocation (handshake checks signature only; open sockets never evicted) | P1 | Backend realtime | Open |
+| SEC-099 | No user logout route — refresh tokens stay valid for 30 days after sign-out | P1 | Backend auth | Open |
+| SEC-100 | Applicant access checks `Opportunity.createdBy`; hirers get 403 on postings they created through the API (root cause SEC-047) | P1 | Backend routes | Open |
+| SEC-101 | Deletion follow-ups: counters not decremented; kept public content can point at deleted media; `Ambassador`/`Beneficiary` PII untouched; testimonials matched on a typed email; tombstone `emailHash` and reset-code hashes are unkeyed SHA-256 | P2 | Backend | Open |
+| SEC-102 | `registerSchema` uses the Zod 3 `errorMap`, which Zod 4.6.5 ignores (custom role error message lost) | P3 | Backend | Open |
+| SEC-103 | Account-security polish: deletion scheduler has no backoff or in-flight guard; a 500 after the tombstone write can still lead to a scheduled erasure; self-delete admin check reads the JWT role claim; latent fail-open in `isLegacyMember` | P3 | Backend | Open |
 
 ---
 
@@ -940,6 +948,7 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 ---
 
 ### SEC-080 — Mobile app never refreshes tokens; sessions die after 15 minutes
+**Reopened 2026-10-03:** `kredibble-app/src/lib/api.ts:109` refreshes only when `payload.error.message === 'jwt expired'`, but the API's 401 message is "Authentication token is invalid or expired" (`middleware/auth.js`), so the refresh never fires. Fix in Plan 3: refresh on any 401 from an authenticated request (once), or have the API send a stable error code.
 
 **Priority:** P0
 **Evidence:** Backend access tokens last 15 min (SEC-009). `kredibble-app/src/lib/api.ts:48-55` stores only `token` and `user` and discards `refreshToken`. Nothing calls `/auth/refresh`. `request()` (`api.ts:74-93`) throws on 401 with no recovery. `src/lib/socket.ts` reuses the same handshake token on every reconnect.
@@ -1054,8 +1063,8 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 **Evidence:** `routes/auth.js:550-673` builds a `tombstone` object that is never saved, yet the response claims a tombstone was retained. Cloudinary assets under `kredibble/<userId>/` aren't deleted. Opportunities, channels and verification cases the user created remain. Grant applications are deleted by `applicantEmail`, a field the schema doesn't have. The steps run in `Promise.all` with no transaction, and the access token keeps working (SEC-052).
 **Fix:** Persist a `UserTombstone { userId, emailHash, deletedAt, retentionUntil }`. Delete the user's Cloudinary folder. Decide whether owned content is deleted or anonymised, and implement that. Key cascades on ids, not emails. Run inside a transaction. Bump `tokenVersion`. Add an end-to-end test proving no PII remains.
 **Acceptance criteria:**
-- [ ] E2E: after deletion, no collection holds the user's email, phone or name; tombstone persisted; media deletion called (mocked)
-- [ ] The deleted user's tokens are rejected
+- [x] E2E: after deletion, no collection holds the user's email, phone or name; tombstone persisted; media deletion called (mocked)
+- [x] The deleted user's tokens are rejected
 
 ### SEC-069 — Two divergent backend deployments; free tier sleeps; Swagger public
 **Evidence:**
@@ -1154,14 +1163,14 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 - Backend `POST /auth/password/reset` (code + new password): CSPRNG code, 5-attempt cap, 10-min TTL; it bumps `tokenVersion`, revokes refresh tokens and is audit-logged.
 - Wire the sheet to both.
 **Acceptance criteria:**
-- [ ] End-to-end reset test passes; the old password and old sessions stop working
-- [ ] The response doesn't reveal whether the email exists
+- [x] End-to-end reset test passes; the old password and old sessions stop working
+- [x] The response doesn't reveal whether the email exists
 
 ### SEC-084 — Change password and delete account are not wired
 **Evidence:** `profile/security.tsx` and `hirer-profile/security.tsx` render forms with no API calls. There's no `POST /auth/password` route. `DELETE /auth/me` exists, but no screen calls it. Apple App Store Guideline 5.1.1(v) and Google Play both require in-app account deletion for apps that let users create accounts.
 **Fix:** Add `POST /api/v1/auth/password` (current + new password, policy-checked, bumps `tokenVersion`, revokes refresh tokens) and wire both screens. Account deletion asks for the password, calls `DELETE /auth/me`, clears SecureStore and returns to the welcome screen.
 **Acceptance criteria:**
-- [ ] Changing the password works and signs out other sessions (test)
+- [x] Changing the password works and signs out other sessions (test)
 - [ ] Account deletion is reachable from Profile in three taps or fewer
 
 ### SEC-087 — App-store readiness
@@ -1207,12 +1216,15 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 
 ### SEC-061 — NoSQL operator injection via query params
 `routes/index.js:183-189` puts `req.query.status`/`type` straight into the Mongo filter; `?status[$ne]=approved` gets through (probe: 200). Coerce scalar query params to strings (or `mongoose.set('sanitizeFilter', true)`) and validate list queries with Zod. **Done when:** object-valued query params → 400 (test).
+**Status:** ✅ Done. Object-valued query parameters in collection filters now throw 400.
 
 ### SEC-062 — Email verification code: weak RNG, no attempt cap
 `lib/email.js:11` generates codes with `Math.random()`. `EmailVerificationCode.attempts` is never incremented (`routes/auth.js:429-457`), so a 6-digit code can be brute-forced within its TTL; only the broken limiter stood in the way. Use `crypto.randomInt(0, 1_000_000)`, zero-padded; increment attempts atomically and invalidate the code after 5; rate-limit `/verification-code/verify` per email. `emailVerified` is never enforced anywhere, so decide which actions require it (Open Question 9). **Done when:** a 6th wrong code invalidates the code (test).
+**Status:** ✅ Done. verification codes now use crypto.randomInt, increment attempts atomically, invalidate after 5 attempts, and are rate limited.
 
 ### SEC-063 — Authorization fails open for missing policy actions
 `policies.js:291-295`: `allowedRoles` returns `AUTHENTICATED` when a policy or action is missing. `guard('saved-items', …)` has no policy entry and passes by default. Fail closed: throw at startup for unknown policy keys, deny missing actions, and add an explicit `saved-items` policy. **Done when:** a route that references an unknown policy fails the test suite.
+**Status:** ✅ Done. `guard` now throws on missing policy keys during route definition, missing actions fail closed returning empty allowed roles, and `saved-items` explicitly added.
 
 ### SEC-064 — 5xx responses leak internal messages
 The `app.js` error handler sends `err.message` for every status, e.g. `logger is not defined` or crypto TypeErrors. The DB-connection middleware in `app.js` returns `Database connection failed. ${error.message}`, which can include hostnames. For status ≥ 500, return a generic message plus the `X-Request-Id` and log the details server-side. Reduce Mongoose cast/validation details to field names in production. **Done when:** a forced 500 in production mode returns no internal text (test).
@@ -1237,6 +1249,50 @@ Verification codes (and SEC-083 reset codes) are sent from `RESEND_FROM_EMAIL`, 
 
 ### SEC-093 — No load test or external penetration test
 The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 500 ms and an OWASP Top 10 pen test; neither has been run. Run k6 or Artillery against staging once SEC-089 is done, then commission an external pen test after the P0/P1 backlog closes. **Done when:** results are recorded and any findings are tracked here.
+
+### SEC-096 — Private channel readable anonymously once its creator is deleted (fixed)
+**Evidence:** `canAccessChannel` / `canManageChannel` compared `toId(channel.createdBy) === user?.sub`; with `createdBy: null` (set by account deletion) and an anonymous caller both sides are `undefined`. Probe: anonymous `GET /api/v1/community/channels/:id/posts` on a private channel went 403 → 200 after the creator deleted their account.
+**Fix (11e894c):** `isChannelCreator(channel, user)` requires both ids to be present. Regression test in `tests/sec-065.test.js` (anonymous, deleted user's token and non-member get 403; member and admin get 200).
+
+### SEC-097 — Private-channel posts readable through `/community/posts`
+**Evidence:** `collectionRoutes` for `community/posts` (`routes/index.js` ~1075) has `read: AUTHENTICATED` and no `readScope`, so any signed-in non-member can list or read posts from private channels. The channel-scoped route is guarded; this one isn't.
+**Fix:** add a `readScope` limited to public channels plus channels where the caller is creator or active member (admins unrestricted), or remove the generic read route if no client uses it.
+**Acceptance criteria:**
+- [ ] A signed-in non-member gets no private-channel posts from `GET /api/v1/community/posts` or `/:id` (test)
+
+### SEC-098 — Sockets ignore account deletion and session revocation
+**Evidence:** `socket.js` handshake verifies only the JWT signature, not `role: 'deleted'` or `tokenVersion`; open sockets are never evicted when sessions are revoked.
+**Fix:** check the user (role, `tokenVersion`) at handshake; on password change, reset or deletion, disconnect that user's sockets (`io.in(userRoom).disconnectSockets()`).
+**Acceptance criteria:**
+- [ ] A revoked or deleted user's token is refused at handshake, and their open sockets are disconnected (test)
+
+### SEC-099 — No user logout route
+**Evidence:** `routes/auth.js` has `/admin/logout` but no user logout; mobile sign-out only clears SecureStore, so the refresh token stays valid server-side for 30 days.
+**Fix:** `POST /auth/logout { refreshToken }` revokes that token (idempotent, 204); the mobile client calls it on sign-out.
+**Acceptance criteria:**
+- [ ] After logout, the refresh token is rejected (test)
+
+### SEC-100 — Hirers can't see applicants on their own API-created postings
+**Evidence:** applicant routes check `opportunity.createdBy` (`routes/index.js` ~971, ~1047), but `POST /opportunities` stores the owner in `hirerId` and never sets `createdBy` (same root cause as SEC-047). Fails closed: hirers get 403.
+**Fix:** resolve with the SEC-047 decision (Q10); until then check `createdBy` or `hirerId`.
+
+### SEC-101 — Account deletion follow-ups
+- `Event.attendeesCount` and `Opportunity.applicantsCount` keep deleted bookings and applications (capacity is used up for good).
+- Kept public content (channel avatars, post banners, posting logos) may point at files in the deleted user's Cloudinary folder.
+- `Ambassador` (`linkedUserId`) and `Beneficiary` hold name, email and phone that deletion doesn't touch (product call: are admin-run records in scope?).
+- Testimonials and event bookings are matched on a typed email, so deletion can miss a booking typed with another address, or remove someone else's.
+- Tombstone `emailHash` and reset-code hashes are unkeyed SHA-256: a 6-digit code is reversible by anyone with DB read access; use an HMAC with a server secret.
+- `delete_resources_by_prefix` ignores `next_cursor` (more than 1000 files per user).
+
+### SEC-102 — Zod 3 `errorMap` in `registerSchema`
+**Evidence:** `schemas/auth.js` passes `errorMap` to `z.enum`; Zod 4.6.5 ignores it, so the custom role message never appears. Use `{ error: ... }`.
+
+### SEC-103 — Account-security polish
+- The deletion scheduler (`server.js`) re-runs tombstones with `mediaDeleted: false` every hour on every instance, with no backoff or in-flight guard. `processed` also counts skipped orphans.
+- If the tombstone write succeeds but the role update fails, the route answers 500, yet the scheduler erases the account later. Delete the pending tombstone on that failure, or answer 202.
+- The self-delete admin check reads the JWT `role` claim instead of the loaded user's role.
+- `isLegacyMember` compares against a possibly-`undefined` user id (not reachable today).
+- The `/refresh` deleted/missing-user branch writes no audit row.
 
 ## P3 — Docs & code health (new)
 
@@ -1438,6 +1494,12 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-02 | Correction: PR #18 entry above | 3ffc51d | Inaccurate | "All 90 backend tests pass" — the suite on `3ffc51d` is 92/102 with 10 failures. "Vercel deployment SUCCESS" — the Vercel backend serves a pre-`/api/v1` build (SEC-041). |
 | 2026-10-02 | Correction: SEC-009 / 024 / 025 / 029 / 036 / 037 entries above | 3ffc51d | Inaccurate | SEC-009: `requireAuth` `tokenVersion` check is dead code. SEC-024 (both entries): key generator wrong, so no limit applies; tests skip limiters. SEC-025: `lockUntil` never saved. SEC-029: tombstone never persisted. SEC-036: no `findOneAndUpdate`/`$expr` allocation exists in either router. SEC-037: models still `String`, helpers not removed. See the Reopened table. |
 | 2026-10-02 | Environment note | — | Info | During the audit, uncommitted work on `devops/ci-cd-green` removed the root npm workspace and root `package-lock.json` and edited every app's `package.json`/lockfile. The audit made no changes to those files; `task.md` and `PRODUCTION-READINESS-AUDIT.md` are the only files it touched. |
+| 2026-10-03 | CI lint | 4476654 | Done | Cleared the 3 backend lint errors that blocked CI's test step and the Render deploy. |
+| 2026-10-03 | SEC-083 (backend) | e8fddb3, 11e894c | Done | `POST /auth/password/forgot` (always 202; per-IP and per-email limits; no admin resets) and `POST /auth/password/reset` (CSPRNG code, 10-min TTL, 5 attempts, code consumed atomically, same error for every failure, revokes all sessions). |
+| 2026-10-03 | SEC-084 (backend) | a9cd277, 11e894c | Done | `POST /auth/password`: signs out other devices, returns a fresh session; per-user re-auth limit; wrong password is 400 so the mobile client doesn't sign the user out. `issueSession` extracted from `/login`. |
+| 2026-10-03 | SEC-065, SEC-029 | 34132c9, 6d58952, aac49c5, 11e894c | Done | Deletion per the 2026-10-03 decision: private data and testimonials deleted, public content anonymised, live postings closed (matched on `createdBy` or `hirerId`), Cloudinary folder cleared with CDN invalidation, `UserTombstone` persisted, access cut first. Ordered and idempotent instead of a transaction; unfinished deletions complete automatically (hourly in `server.js`; `npm run accounts:complete-deletions` by hand). Export uses the same data map. Login and `/refresh` reject deleted users; admins can't self-delete. |
+| 2026-10-03 | SEC-096 | 11e894c | Done | Found in the final branch review: deleting a channel creator made a private channel readable anonymously. Fixed with a creator check that requires both ids. |
+| 2026-10-03 | Verification | 11e894c | Green | Backend `npm run lint` clean; `npm test` 153/153 (12 suites). New findings filed: SEC-097…SEC-103; SEC-080 reopened. |
 
 ---
 
@@ -1454,4 +1516,4 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 8. **v1 scope (SEC-045, SEC-082)** — ship or cut for launch: (a) the admin portal API (`routes/admin.js`: partners, ambassadors, beneficiaries, targets, scorecards, testimonials, WordPress sync), (b) the AI assistant, (c) the news feed. Each unmounted feature either gets mounted with tests or deleted along with its env requirements.
 9. **Email verification (SEC-062)** — must a user verify their email before applying, posting, or creating a company? `emailVerified` is stored but never enforced.
 10. **`hirerId` semantics (SEC-047)** — confirm `createdBy` (User) for ownership and `hirerId` (HirerAccount) for display, and approve a migration of existing opportunities/verification records.
-11. **Data retention (SEC-065, SEC-092)** — how long to keep tombstones, audit logs (currently 1 year), CVs of rejected applicants, and verification documents after approval.
+11. **Data retention (SEC-065, SEC-092)** — how long to keep tombstones, audit logs (currently 1 year), CVs of rejected applicants, and verification documents after approval. **2026-10-03 decision:** on deletion, private data is deleted and public content anonymised; live postings close; testimonials are deleted. Tombstone retention stays 7 years pending legal review (it holds an email hash, see SEC-101). Audit logs keep their 1-year TTL with emails removed.

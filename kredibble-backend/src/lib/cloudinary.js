@@ -88,3 +88,21 @@ export const uploadToCloudinary = async (fileContent, folder) => {
     throw new Error('Failed to upload file to cloud storage');
   }
 };
+
+/**
+ * SEC-065: delete every file a user uploaded. The upload route builds
+ * `kredibble/<userId>/<purpose>` and the upload helpers prefix `kredibble/`
+ * again, so files live under `kredibble/kredibble/<userId>/`. Clear both forms.
+ */
+export const deleteUserMedia = async (userId) => {
+  if (isTest) return;
+  if (![process.env.CLOUDINARY_CLOUD_NAME, process.env.CLOUDINARY_API_KEY, process.env.CLOUDINARY_API_SECRET].every(Boolean)) {
+    throw new Error('Cloudinary is not configured');
+  }
+
+  for (const prefix of [`kredibble/kredibble/${userId}/`, `kredibble/${userId}/`]) {
+    for (const resourceType of ['image', 'raw', 'video']) {
+      await cloudinary.api.delete_resources_by_prefix(prefix, { resource_type: resourceType, invalidate: true });
+    }
+  }
+};

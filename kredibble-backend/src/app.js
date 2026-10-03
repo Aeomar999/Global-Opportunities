@@ -140,9 +140,14 @@ app.use((err, req, res, next) => {
     err.name === 'StrictModeError';
 
   const status = isBadRequest ? 400 : err.status || 500;
+  // SEC-064: Hide internal error messages for 5xx responses in production
+  const message = (status >= 500 && !env.isDevelopment)
+    ? 'Internal server error'
+    : (err.message || 'Internal server error');
+
   res.status(status).json({
     error: {
-      message: err.message || 'Internal server error',
+      message,
       stack: env.isDevelopment ? err.stack : undefined,
     },
   });
