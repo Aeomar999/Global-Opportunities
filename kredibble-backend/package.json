@@ -12,6 +12,7 @@
         "db:init": "node scripts/init-db.js",
         "db:seed:test": "node scripts/seed-test-credentials.js",
         "user:create-admin": "node scripts/create-admin.js",
+        "accounts:complete-deletions": "node scripts/complete-account-deletions.js",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "lint": "eslint .",
         "e2e:server": "node scripts/e2e-server.js"

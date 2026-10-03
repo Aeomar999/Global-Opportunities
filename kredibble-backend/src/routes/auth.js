@@ -18,6 +18,7 @@ import { env } from '../config/env.js';
 import { AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
 import { registrationLimiter, passwordResetLimiter, authLimiter, emailVerificationLimiter, forgotPasswordLimiter, passwordResetAttemptLimiter } from '../lib/rate-limiters.js';
 import logger from '../lib/logger.js';
+import { deleteAccount } from '../lib/account-deletion.js';
 
 export const authRouter = Router();
 
@@ -807,21 +808,17 @@ authRouter.get(
   }),
 );
 
-// SEC-029: GDPR/CCPA Account Deletion
-// Requires recent re-authentication (password confirmation)
-// Creates tombstone for legal retention
+// SEC-065: erase the account. Needs the password and a typed confirmation.
+// A wrong password is 400, not 401: the mobile client reads 401 as an expired
+// session and would sign the user out.
 authRouter.delete(
   '/me',
   requireAuth,
   asyncHandler(async (req, res) => {
     const { password, confirmation } = req.body;
-    
-    // Require confirmation
     if (confirmation !== 'DELETE MY ACCOUNT') {
       throw new ApiError(400, 'Please type "DELETE MY ACCOUNT" to confirm');
     }
-
-    // Require recent re-authentication (password confirmation)
     if (!password) {
       throw new ApiError(400, 'Password confirmation required for account deletion');
     }
@@ -830,108 +827,27 @@ authRouter.delete(
     const user = await User.findById(userId).select('+passwordHash');
     if (!user?.passwordHash) throw new ApiError(404, 'User not found');
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
+    if (!(await bcrypt.compare(password, user.passwordHash))) {
       await auditReq(req, {
-        action: 'auth.account.delete.failed',
+        action: AUDIT_ACTIONS.ACCOUNT_DELETE,
         resourceType: AUDIT_RESOURCE_TYPES.USER,
         resourceId: userId,
         outcome: 'failure',
         metadata: { reason: 'invalid_password' },
       });
-      throw new ApiError(401, 'Invalid password');
+      throw new ApiError(400, 'Incorrect password');
     }
 
-    // Soft delete: create tombstone, anonymize data, revoke tokens
-    const tombstone = {
-      userId,
-      email: user.email,
-      emailNormalized: user.emailNormalized,
-      deletedAt: new Date(),
-      reason: 'gdpr_deletion_request',
-      // Keep minimal info for legal retention
-      retentionUntil: new Date(Date.now() + 7 * 365 * 24 * 60 * 60 * 1000), // 7 years
-    };
-
-    // Anonymize user data (keep tombstone for legal retention)
-    await User.findByIdAndUpdate(userId, {
-      email: `deleted_${userId}@kredibble.local`,
-      emailNormalized: `deleted_${userId}@kredibble.local`,
-      name: 'Deleted User',
-      passwordHash: null,
-      role: 'deleted',
-      avatarUrl: null,
-      tokenVersion: (user.tokenVersion || 0) + 1, // Invalidate all tokens
-      refreshTokenHash: null,
-      emailVerified: false,
-    });
-
-    // Create tombstone record (could be a separate collection in production)
-    // For now, we'll use a simple approach with a deleted flag
-    // In production, consider a separate UserTombstone collection
-
-    // Cascade delete/anonymize related data
-    await Promise.all([
-      // Delete seeker/hirer profiles
-      SeekerProfile.findOneAndDelete({ userId }),
-      HirerAccount.findOneAndDelete({ userId }),
-      
-      // Delete applications (where user is seeker)
-      Applicant.deleteMany({ seekerId: userId }),
-      
-      // Delete event attendees
-      EventAttendee.deleteMany({ email: user.email }),
-      
-      // Delete grant applications
-      GrantApplication.deleteMany({ applicantEmail: user.email }),
-      
-      // Delete verifications
-      CompanyVerification.findOneAndDelete({ userId }),
-      VerificationDoc.deleteMany({ userId }),
-      
-      // Delete saved items
-      SavedItem.deleteMany({ userId }),
-      
-      // Delete notifications
-      Notification.deleteMany({ userId }),
-      
-      // Delete community posts (anonymize instead of delete)
-      ChannelPost.updateMany(
-        { authorEmail: user.email },
-        { authorEmail: 'deleted@kredibble.local', authorName: 'Deleted User' }
-      ),
-      
-      // Delete reports (anonymize)
-      Report.updateMany(
-        { reporterEmail: user.email },
-        { reporterEmail: 'deleted@kredibble.local', reporterName: 'Deleted User' }
-      ),
-      
-      // Revoke all refresh tokens
-      RevokedRefreshToken.deleteMany({ userId }),
-    ]);
-
-    // Revoke current refresh token
-    if (user.refreshTokenHash) {
-      await RevokedRefreshToken.create({
-        tokenHash: user.refreshTokenHash,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      });
-    }
+    const { deletedAt } = await deleteAccount(user);
 
     await auditReq(req, {
-      action: 'auth.account.delete',
+      action: AUDIT_ACTIONS.ACCOUNT_DELETE,
       resourceType: AUDIT_RESOURCE_TYPES.USER,
       resourceId: userId,
       outcome: 'success',
-      metadata: { reason: 'gdpr_deletion_request', tombstone: true },
+      metadata: { reason: 'user_request' },
     });
 
-    res.json({ 
-      data: { 
-        message: 'Account deleted successfully. Your data has been anonymized and a tombstone retained for legal compliance.',
-        deletedAt: tombstone.deletedAt,
-      } 
-    });
+    res.json({ data: { message: 'Your account and personal data have been deleted.', deletedAt } });
   }),
 );
