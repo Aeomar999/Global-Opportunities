@@ -13,6 +13,7 @@
         "db:seed:test": "node scripts/seed-test-credentials.js",
         "user:create-admin": "node scripts/create-admin.js",
         "accounts:complete-deletions": "node scripts/complete-account-deletions.js",
+        "retention:cleanup": "node -e \"import('./src/lib/data-retention.js').then(m => m.runDataRetentionSweep())\",",
         "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
         "lint": "eslint .",
         "e2e:server": "node scripts/e2e-server.js"

@@ -708,6 +708,10 @@ const PUBLIC_CONTENT_ROUTES = [
   'GET /community/channels',
   'GET /community/channels/64b7f1c2a1b2c3d4e5f60718',
   'GET /community/channels/64b7f1c2a1b2c3d4e5f60718/posts',
+  'GET /events',
+  'GET /events/64b7f1c2a1b2c3d4e5f60718',
+  'GET /articles',
+  'GET /articles/64b7f1c2a1b2c3d4e5f60718',
 ];
 
 const PUBLIC_ROUTES = new Set([

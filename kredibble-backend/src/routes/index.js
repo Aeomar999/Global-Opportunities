@@ -6,7 +6,8 @@ import { assistantRouter } from './assistant.js';
 import { newsRouter } from './news.js';
 import { adminApiRouter } from './admin-api.js';
 import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination } from '../utils/http.js';
-import { requireAuth, requireAdminAuth, optionalAuth } from '../middleware/auth.js';
+import { requireAuth, requireAdminAuth, optionalAuth, requireEmailVerified } from '../middleware/auth.js';
+import { env } from '../config/env.js';
 import { validate } from '../middleware/validate.js';
 import { staffInviteSchema } from '../schemas/admin.js';
 import {
@@ -291,7 +292,7 @@ const collectionRoutes = ({
     '/',
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'create', req, resourceName);
-      assertWritable(req.body, req);
+      await assertWritable(req.body, req);
       // SEC-007: the body is reduced to an explicit allowlist before it reaches the model.
       const allowed = buildCreatePayload(policy, req.body);
       // SEC-002: the owner is derived from the token, never from the body. Otherwise
@@ -334,7 +335,7 @@ const collectionRoutes = ({
       const existing = await Model.findById(req.params.id);
       if (!existing) throw notFound(resourceName);
       assertOwnership(existing, ownerField, req, resourceName);
-      assertWritable(req.body, req);
+      await assertWritable(req.body, req);
 
       // SEC-007: unknown keys are dropped, admin-only keys only for admins.
       const allowed = buildUpdatePayload(policy, req.body, req.auth?.role);
@@ -412,11 +413,49 @@ const redactOpportunity = (opportunity, req) => {
 };
 
 /** Vetting and publishing go through the admin opportunity API, never the standard one. */
-const assertOpportunityWritable = (body, req) => {
+const assertOpportunityWritable = async (body, req) => {
   if (req.auth?.role === ADMIN) return;
   if (body?.vetted === true || ['published', 'approved'].includes(body?.moderationStatus)) {
     throw new ApiError(403, 'Only the admin opportunity API can vet or publish an opportunity');
   }
+  // SEC-062 / Q9: Enforce email verification on opportunity creation
+  if (req.method === 'POST' && (!env.isTest || process.env.REQUIRE_EMAIL_VERIFICATION === 'true')) {
+    const user = await User.findById(req.auth?.sub).select('emailVerified').lean();
+    if (!user?.emailVerified) {
+      const error = new ApiError(403, 'Email verification is required to create an opportunity');
+      error.code = 'EMAIL_VERIFICATION_REQUIRED';
+      throw error;
+    }
+  }
+};
+
+/** SEC-062 / Q9: Enforce email verification on company verification registration */
+const assertVerificationCompanyWritable = async (body, req) => {
+  if (req.auth?.role === ADMIN) return;
+  if (req.method === 'POST' && (!env.isTest || process.env.REQUIRE_EMAIL_VERIFICATION === 'true')) {
+    const user = await User.findById(req.auth?.sub).select('emailVerified').lean();
+    if (!user?.emailVerified) {
+      const error = new ApiError(403, 'Email verification is required to register a company verification');
+      error.code = 'EMAIL_VERIFICATION_REQUIRED';
+      throw error;
+    }
+  }
+};
+
+/**
+ * Q3: Events public read scope — non-admins see non-cancelled events.
+ */
+const eventReadScope = (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  return { status: { $ne: 'cancelled' } };
+};
+
+/**
+ * Q3: Articles public read scope — non-admins see published articles.
+ */
+const articleReadScope = (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  return { status: 'published' };
 };
 
 const findReferringAmbassador = async (rawCode) => {
@@ -1232,14 +1271,39 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
   router.use('/community/channels', collectionRoutes({ Model: Channel, resourceName: 'Channel', policyKey: 'community/channels', searchFields: ['name', 'category'], ownerField: 'createdBy', enablePopulate }));
   router.use('/reports', collectionRoutes({ Model: Report, resourceName: 'Report', policyKey: 'reports', searchFields: ['reason', 'details'], enablePopulate }));
-  router.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'], ownerField: 'createdBy', enablePopulate }));
+  router.use('/events', collectionRoutes({
+    Model: Event,
+    resourceName: 'Event',
+    policyKey: 'events',
+    searchFields: ['title', 'location'],
+    ownerField: 'createdBy',
+    enablePopulate,
+    publicRead: true,
+    readScope: eventReadScope,
+  }));
   router.use('/grants', collectionRoutes({ Model: Grant, resourceName: 'Grant', policyKey: 'grants', searchFields: ['title', 'sector'], enablePopulate }));
-  router.use('/articles', collectionRoutes({ Model: Article, resourceName: 'Article', policyKey: 'articles', searchFields: ['title', 'category'], enablePopulate }));
+  router.use('/articles', collectionRoutes({
+    Model: Article,
+    resourceName: 'Article',
+    policyKey: 'articles',
+    searchFields: ['title', 'category'],
+    enablePopulate,
+    publicRead: true,
+    readScope: articleReadScope,
+  }));
   router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate, readScope: notificationReadScope }));
-  router.use('/verification/companies', collectionRoutes({ Model: CompanyVerification, resourceName: 'Company verification', policyKey: 'verification/companies', searchFields: ['name', 'industry'], ownerField: 'hirerId', enablePopulate }));
+  router.use('/verification/companies', collectionRoutes({
+    Model: CompanyVerification,
+    resourceName: 'Company verification',
+    policyKey: 'verification/companies',
+    searchFields: ['name', 'industry'],
+    ownerField: 'hirerId',
+    enablePopulate,
+    assertWritable: assertVerificationCompanyWritable,
+  }));
 
   // Special nested routes
-  router.post('/opportunities/:opportunityId/applicants', ...guard('applicants', 'create', 'applicant'), asyncHandler(async (req, res) => {
+  router.post('/opportunities/:opportunityId/applicants', ...guard('applicants', 'create', 'applicant'), requireEmailVerified, asyncHandler(async (req, res) => {
     // Applications are only accepted for listings this caller can see.
     const opportunity = await Opportunity.findOne(withScope({ _id: req.params.opportunityId }, opportunityReadScope(req)));
     if (!opportunity) throw notFound('Opportunity');
@@ -1299,7 +1363,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     listResponse(res, data.map(toClientObject), total, page, limit);
   }));
 
-  router.post('/grants/:grantId/applications', ...guard('grant-applications', 'create', 'grantApplication'), asyncHandler(async (req, res) => {
+  router.post('/grants/:grantId/applications', ...guard('grant-applications', 'create', 'grantApplication'), requireEmailVerified, asyncHandler(async (req, res) => {
     const grantId = req.params.grantId;
     const grant = await Grant.findById(grantId);
     if (!grant) throw notFound('Grant');
@@ -1356,7 +1420,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     listResponse(res, data.map(toClientObject), total, page, limit);
   }));
 
-  router.post('/verification/companies/:companyId/documents', ...guard('verification/documents', 'create', 'document'), asyncHandler(async (req, res) => {
+  router.post('/verification/companies/:companyId/documents', ...guard('verification/documents', 'create', 'document'), requireEmailVerified, asyncHandler(async (req, res) => {
     // SEC-058: Verify companyId belongs to the caller
     if (req.auth.role !== ADMIN && String(req.params.companyId) !== req.auth.sub) {
       throw new ApiError(403, 'You do not have permission to attach documents to this company');

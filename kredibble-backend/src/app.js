@@ -147,6 +147,7 @@ app.use((err, req, res, next) => {
   res.status(status).json({
     error: {
       message,
+      code: err.code,
       stack: env.isDevelopment ? err.stack : undefined,
     },
   });

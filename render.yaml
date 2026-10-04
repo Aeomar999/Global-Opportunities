@@ -4,7 +4,7 @@ services:
     env: docker
     region: oregon
     rootDir: kredibble-backend
-    plan: free
+    plan: starter
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -16,7 +16,7 @@ services:
       - key: ADMIN_JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: https://admin.kredibble.com,https://app.kredibble.com,https://kredibble-admin-jerry-amoahs-projects.vercel.app
+        value: https://admin.kredibble.app,https://kredibble.app,https://admin.kredibble.com,https://app.kredibble.com,https://kredibble-admin-jerry-amoahs-projects.vercel.app
       - key: REDIS_URL
         sync: false
       - key: PORT
@@ -40,7 +40,11 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM_EMAIL
-        value: verify@kredibble.com
+        value: noreply@kredibble.app
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "true"
+      - key: ENABLE_SWAGGER
+        value: "false"
       - key: WORDPRESS_SYNC_ENABLED
         value: "false"
       - key: WORDPRESS_SYNC_BASE_URL

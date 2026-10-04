@@ -141,7 +141,7 @@ const verificationDocSchema = new mongoose.Schema({
   label: String,
   fileName: String,
   status: { type: String, default: 'pending' },
-});
+}, { timestamps: true });
 
 export const Opportunity = mongoose.model('Opportunity', opportunitySchema);
 export const Applicant = mongoose.model('Applicant', applicantSchema);
