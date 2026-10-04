@@ -7,10 +7,155 @@ export type AuthUser = {
   role: AuthRole | string;
 };
 
-type AuthResponse = {
-  user: AuthUser;
-  // token is no longer returned in body — it's set as httpOnly cookie
+export type SeekerProfile = {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  profession?: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user?: { id: string; name: string; email: string; avatarUrl?: string; verified: boolean; emailVerified: boolean; createdAt: string };
+  applicationsCount?: number;
+  savedCount?: number;
 };
+
+export type HirerAccount = {
+  id: string;
+  userId: string;
+  companyName: string;
+  companyEmail: string;
+  industry?: string;
+  website?: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user?: { id: string; name: string; email: string; avatarUrl?: string; verified: boolean; emailVerified: boolean; createdAt: string };
+  postingsCount?: number;
+  location?: string;
+  recruiterName?: string;
+  recruiterEmail?: string;
+  overallStatus?: string;
+  linkedVerificationId?: string;
+};
+
+export type EventRecord = {
+  id: string;
+  title: string;
+  description?: string;
+  location?: string;
+  organizer?: string;
+  type?: string;
+  status?: string;
+  country?: string;
+  startAt: string;
+  endAt?: string;
+  capacity?: number;
+  attendeesCount?: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdByUser?: { id: string; name: string; email: string };
+  attendees?: { userId: { id: string; name: string; email: string } }[];
+};
+
+export type GrantRecord = {
+  id: string;
+  title: string;
+  description?: string;
+  sector?: string;
+  grantType?: string;
+  status?: string;
+  fundingPool?: number;
+  allocated?: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdByUser?: { id: string; name: string; email: string };
+};
+
+export type ArticleRecord = {
+  id: string;
+  title: string;
+  content?: string;
+  category?: string;
+  authorName?: string;
+  status?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StaffMember = {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChannelRecord = {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  status?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdByUser?: { id: string; name: string; email: string };
+  members?: { userId: { id: string; name: string; email: string } }[];
+};
+
+export type ChannelPost = {
+  id: string;
+  channelId: string;
+  content: string;
+  authorId?: string;
+  authorName?: string;
+  createdAt: string;
+  author?: { id: string; name: string; email: string; avatarUrl?: string };
+};
+
+export type CompanyVerification = {
+  id: string;
+  name: string;
+  email?: string;
+  industry?: string;
+  overallStatus?: string;
+  hirerId?: string;
+  createdAt: string;
+  updatedAt: string;
+  hirer?: { id: string; companyName: string; companyEmail: string };
+  documents?: VerificationDoc[];
+};
+
+export type VerificationDoc = {
+  id: string;
+  companyId: string;
+  documentType?: string;
+  fileUrl?: string;
+  status?: string;
+  uploadedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  company?: { id: string; name: string };
+};
+
+export type PaginatedResponse<T> = {
+  data: T[];
+  meta: { page: number; limit: number; total: number; pages: number };
+};
+
+export type AuthResponse = {
+  user: AuthUser;
+};
+
+type Paginated<T> = { data: T[]; meta: { page: number; limit: number; total: number; pages: number } };
 
 const getApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -167,6 +312,204 @@ export const loginAdmin = async (email: string, password: string) => {
 export const logoutAdmin = async () => {
   await request("/auth/admin/logout", { method: "POST" });
   clearAdminSession();
+};
+
+// Seekers
+export const getSeekers = async <T = Paginated<SeekerProfile>>(params?: { page?: number; limit?: number; q?: string; verified?: boolean }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.verified !== undefined) query.set("verified", String(params.verified));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/seekers${queryString}`);
+};
+
+export const getSeekerById = async <T = SeekerProfile>(id: string) => {
+  return request<T>(`/admin/seekers/${id}`);
+};
+
+// Hirers
+export const getHirers = async <T = Paginated<HirerAccount>>(params?: { page?: number; limit?: number; q?: string; verified?: boolean }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.verified !== undefined) query.set("verified", String(params.verified));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/hirers${queryString}`);
+};
+
+export const getHirerById = async <T = HirerAccount>(id: string) => {
+  return request<T>(`/admin/hirers/${id}`);
+};
+
+// Events
+export const getEvents = async <T = Paginated<EventRecord>>(params?: { page?: number; limit?: number; q?: string; type?: string; status?: string; country?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.type) query.set("type", params.type);
+  if (params?.status) query.set("status", params.status);
+  if (params?.country) query.set("country", params.country);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/events${queryString}`);
+};
+
+export const getEventById = async <T = EventRecord>(id: string) => {
+  return request<T>(`/admin/events/${id}`);
+};
+
+// Grants
+export const getGrants = async <T = Paginated<GrantRecord>>(params?: { page?: number; limit?: number; q?: string; status?: string; sector?: string; grantType?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.status) query.set("status", params.status);
+  if (params?.sector) query.set("sector", params.sector);
+  if (params?.grantType) query.set("grantType", params.grantType);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/grants${queryString}`);
+};
+
+export const getGrantById = async <T = GrantRecord>(id: string) => {
+  return request<T>(`/admin/grants/${id}`);
+};
+
+// Articles
+export const getArticles = async <T = Paginated<ArticleRecord>>(params?: { page?: number; limit?: number; q?: string; status?: string; category?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.status) query.set("status", params.status);
+  if (params?.category) query.set("category", params.category);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/articles${queryString}`);
+};
+
+export const getArticleById = async <T = ArticleRecord>(id: string) => {
+  return request<T>(`/admin/articles/${id}`);
+};
+
+// Staff
+export const getStaff = async <T = Paginated<StaffMember>>(params?: { page?: number; limit?: number; q?: string; role?: string; status?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.role) query.set("role", params.role);
+  if (params?.status) query.set("status", params.status);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/staff${queryString}`);
+};
+
+export const getStaffById = async <T = StaffMember>(id: string) => {
+  return request<T>(`/admin/staff/${id}`);
+};
+
+export const createStaff = async <T = StaffMember>(data: Partial<StaffMember>) => {
+  return request<T>(`/admin/staff`, { method: "POST", body: JSON.stringify(data) });
+};
+
+export const updateStaff = async <T = StaffMember>(id: string, data: Partial<StaffMember>) => {
+  return request<T>(`/admin/staff/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+export const deleteStaff = async (id: string) => {
+  return request<{ data: { id: string } }>(`/admin/staff/${id}`, { method: "DELETE" });
+};
+
+// Community Channels
+export const getCommunityChannels = async <T = Paginated<ChannelRecord>>(params?: { page?: number; limit?: number; q?: string; status?: string; category?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.status) query.set("status", params.status);
+  if (params?.category) query.set("category", params.category);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/community/channels${queryString}`);
+};
+
+export const getCommunityChannelById = async <T = ChannelRecord>(id: string) => {
+  return request<T>(`/admin/community/channels/${id}`);
+};
+
+export const createCommunityChannel = async <T = ChannelRecord>(data: Partial<ChannelRecord>) => {
+  return request<T>(`/admin/community/channels`, { method: "POST", body: JSON.stringify(data) });
+};
+
+export const updateCommunityChannel = async <T = ChannelRecord>(id: string, data: Partial<ChannelRecord>) => {
+  return request<T>(`/admin/community/channels/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+export const deleteCommunityChannel = async (id: string) => {
+  return request<{ data: { id: string } }>(`/admin/community/channels/${id}`, { method: "DELETE" });
+};
+
+// Community Posts
+export const getCommunityChannelPosts = async <T = Paginated<ChannelPost>>(channelId: string, params?: { page?: number; limit?: number }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/community/channels/${channelId}/posts${queryString}`);
+};
+
+// Verification Companies
+export const getVerificationCompanies = async <T = Paginated<CompanyVerification>>(params?: { page?: number; limit?: number; q?: string; overallStatus?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.overallStatus) query.set("overallStatus", params.overallStatus);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/verification/companies${queryString}`);
+};
+
+export const getVerificationCompanyById = async <T = CompanyVerification>(id: string) => {
+  return request<T>(`/admin/verification/companies/${id}`);
+};
+
+export const updateVerificationCompany = async <T = CompanyVerification>(id: string, data: Partial<CompanyVerification>) => {
+  return request<T>(`/admin/verification/companies/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+// Verification Documents
+export const getVerificationCompanyDocuments = async <T = Paginated<VerificationDoc>>(companyId: string, params?: { page?: number; limit?: number }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/verification/companies/${companyId}/documents${queryString}`);
+};
+
+export const getVerificationDocuments = async <T = Paginated<VerificationDoc>>(params?: { page?: number; limit?: number; status?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.status) query.set("status", params.status);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<T>(`/admin/verification/documents${queryString}`);
+};
+
+export const getVerificationDocumentById = async <T = VerificationDoc>(id: string) => {
+  return request<T>(`/admin/verification/documents/${id}`);
+};
+
+export const updateVerificationDocument = async <T = VerificationDoc>(id: string, data: Partial<VerificationDoc>) => {
+  return request<T>(`/admin/verification/documents/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+export const createVerificationDocument = async <T = VerificationDoc>(companyId: string, data: { documentType?: string; fileUrl?: string; status?: string }) => {
+  return request<T>(`/admin/verification/companies/${companyId}/documents`, { method: "POST", body: JSON.stringify(data) });
+};
+
+export const deleteVerificationDocument = async (id: string) => {
+  return request<{ data: { id: string } }>(`/admin/verification/documents/${id}`, { method: "DELETE" });
 };
 
 // There is deliberately no admin self-service signup. Public registration

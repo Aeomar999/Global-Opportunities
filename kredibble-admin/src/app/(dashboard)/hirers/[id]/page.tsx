@@ -1,42 +1,78 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Ban, RotateCcw, ShieldCheck } from "lucide-react";
-import { hirerAccounts, type HirerAccount, type VerificationSummary } from "@/lib/mock-hirers";
+import { ChevronLeft, Ban, RotateCcw, ShieldCheck, Loader2, AlertCircle } from "lucide-react";
+import { getHirerById, HirerAccount } from "@/lib/api";
 
-const VERIFICATION_STYLES: Record<VerificationSummary, { bg: string; text: string; label: string }> = {
+interface ExtendedHirerAccount extends HirerAccount {
+  industry?: string;
+  location?: string;
+  recruiterName?: string;
+  recruiterEmail?: string;
+  postingsCount?: number;
+  joinedDate?: string;
+  linkedVerificationId?: string;
+}
+
+const VERIFICATION_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   verified: { bg: "#F0FDF4", text: "#16A34A", label: "Verified" },
   pending: { bg: "#FFFBEB", text: "#B7791F", label: "Pending" },
   rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
+  unknown: { bg: "#F3F4F6", text: "#6B7280", label: "Unknown" },
 };
 
 export default function HirerDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const original = hirerAccounts.find((h) => h.id === params.id);
-  const [hirer, setHirer] = useState<HirerAccount | undefined>(original);
+  const [hirer, setHirer] = useState<ExtendedHirerAccount | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!hirer) {
+  useEffect(() => {
+    const fetchHirer = async () => {
+      setLoading(true);
+      try {
+        const data = await getHirerById<ExtendedHirerAccount>(params.id);
+        setHirer(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load hirer");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHirer();
+  }, [params.id]);
+
+  if (loading) {
     return (
-      <div>
-        <p className="text-sm text-kb-text-muted">Hirer not found.</p>
-        <Link href="/hirers" className="text-sm text-kb-primary font-semibold mt-2 inline-block">
-          Back to Hirers Directory
-        </Link>
+      <div className="flex items-center justify-center py-10">
+        <Loader2 size={24} className="animate-spin text-kb-primary" />
+        <span className="ml-2 text-sm text-kb-text-muted">Loading hirer...</span>
       </div>
     );
   }
 
-  const toggleStatus = () => {
-    setHirer((prev) =>
-      prev ? { ...prev, status: prev.status === "active" ? "suspended" : "active" } : prev
+  if (error || !hirer) {
+    return (
+      <div>
+        <div className="flex items-center justify-center py-10">
+          <AlertCircle size={24} className="text-kb-error mr-2" />
+          <div className="text-sm text-kb-text-body">
+            <p className="font-medium">Failed to load hirer</p>
+            <p className="text-xs text-kb-text-muted mt-1">{error || "Hirer not found"}</p>
+            <Link href="/hirers" className="mt-3 text-sm text-kb-primary font-semibold hover:underline inline-block">
+              Back to Hirers Directory
+            </Link>
+          </div>
+        </div>
+      </div>
     );
-  };
+  }
 
-  const isActive = hirer.status === "active";
-  const v = VERIFICATION_STYLES[hirer.verification];
+  const isActive = hirer.verified; // Using verified as active status
+  const v = VERIFICATION_STYLES[hirer.overallStatus || "unknown"];
 
   return (
     <div>
@@ -52,7 +88,7 @@ export default function HirerDetailPage() {
         <div>
           <h1 className="text-xl font-bold text-kb-text-body">{hirer.companyName}</h1>
           <p className="text-sm text-kb-text-muted mt-1">
-            {hirer.industry} · {hirer.location}
+            {hirer.industry || "—"} · {hirer.location || "—"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -68,17 +104,17 @@ export default function HirerDetailPage() {
               isActive ? { backgroundColor: "#F0FDF4", color: "#16A34A" } : { backgroundColor: "#FEF2F2", color: "#ED4C5C" }
             }
           >
-            {isActive ? "Active" : "Suspended"}
+            {isActive ? "Verified" : "Pending"}
           </span>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <InfoCard title="Company">
-          <InfoRow label="Recruiter" value={hirer.recruiterName} />
-          <InfoRow label="Recruiter Email" value={hirer.recruiterEmail} />
-          <InfoRow label="Joined" value={hirer.joinedDate} />
-          <InfoRow label="Active Postings" value={String(hirer.postingsCount)} />
+          <InfoRow label="Recruiter" value={hirer.recruiterName || "—"} />
+          <InfoRow label="Recruiter Email" value={hirer.recruiterEmail || "—"} />
+          <InfoRow label="Joined" value={new Date(hirer.createdAt).toLocaleDateString()} />
+          <InfoRow label="Active Postings" value={String(hirer.postingsCount || 0)} />
         </InfoCard>
 
         {hirer.linkedVerificationId && (
@@ -101,15 +137,17 @@ export default function HirerDetailPage() {
       </div>
 
       <button
-        onClick={toggleStatus}
+        onClick={() => {
+          setHirer((prev) => (prev ? { ...prev, verified: !prev.verified } : prev));
+        }}
         className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-          isActive
+          hirer.verified
             ? "bg-red-50 hover:bg-red-100 text-red-600"
             : "bg-green-50 hover:bg-green-100 text-green-700"
         }`}
       >
-        {isActive ? <Ban size={16} strokeWidth={2.5} /> : <RotateCcw size={16} strokeWidth={2.5} />}
-        {isActive ? "Suspend account" : "Reinstate account"}
+        {hirer.verified ? <Ban size={16} strokeWidth={2.5} /> : <RotateCcw size={16} strokeWidth={2.5} />}
+        {hirer.verified ? "Suspend account" : "Reinstate account"}
       </button>
     </div>
   );

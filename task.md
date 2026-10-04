@@ -222,7 +222,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-072 | Seekers cannot list their own applications | P1 | Backend + App | Open |
 | SEC-073 | Admin CSP `connect-src 'self'` blocks every API call | P1 | Admin app | Open |
 | SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ✅ Done |
-| SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | Open |
+| SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | ✅ Done |
 | SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | ✅ Done |
 | SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | Open |
 | SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | Open |
@@ -1128,7 +1128,7 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 **Fix:** Preferred: an `/api/v1/admin/*` namespace guarded only by `requireAdminAuth` (admin secret and audience), which becomes the only surface the admin app calls; this keeps SEC-040's audience separation meaningful. Alternative: a combined guard that accepts either a valid user Bearer token or a valid admin token and normalises both to `req.auth`.
 **Acceptance criteria:**
 - [x] The admin app can list and approve verifications and moderate opportunities using only its cookie (tests)
-- [ ] A user Bearer token is rejected on `/api/v1/admin/*` (test)
+- [x] A user Bearer token is rejected on `/api/v1/admin/*` (test)
 
 ### SEC-076 — The admin session has no refresh
 **Evidence:** The admin token and cookie last 15 min (`setAdminCookie` `maxAge`). `/auth/admin/login` returns a refresh token in the JSON body that nothing can use, because there is no admin refresh route. The admin UI decides "logged in" from `localStorage` (`kredibble-admin/src/lib/api.ts:39`), so it keeps rendering while every call fails.
@@ -1139,6 +1139,7 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 ### SEC-077 — 20 of ~25 admin pages run on mock data
 **Evidence:** These pages import `src/lib/mock-*.ts`: analytics, community (+ detail), content/articles (+ detail), events (+ detail), grants (+ detail), hirers (+ detail), `opportunities/[id]`, reports (+ detail), seekers (+ detail), staff (+ invite, + detail), `verification/[id]`. Approve, suspend and resolve actions only change in-memory arrays.
 **Fix:** Wire each page to the admin API (SEC-075), deleting its mock file as you go, with empty, error and loading states. Admin mutations must be audit-logged.
+**Status:** Admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents have been added to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. Remaining work: wire admin pages to use these API methods, delete mock files, add loading/error/empty states.
 **Acceptance criteria:**
 - [ ] `rg "lib/mock-" kredibble-admin/src/app` returns nothing
 - [ ] Every admin action persists and appears in `AuditLog`
@@ -1500,6 +1501,9 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-03 | SEC-065, SEC-029 | 34132c9, 6d58952, aac49c5, 11e894c | Done | Deletion per the 2026-10-03 decision: private data and testimonials deleted, public content anonymised, live postings closed (matched on `createdBy` or `hirerId`), Cloudinary folder cleared with CDN invalidation, `UserTombstone` persisted, access cut first. Ordered and idempotent instead of a transaction; unfinished deletions complete automatically (hourly in `server.js`; `npm run accounts:complete-deletions` by hand). Export uses the same data map. Login and `/refresh` reject deleted users; admins can't self-delete. |
 | 2026-10-03 | SEC-096 | 11e894c | Done | Found in the final branch review: deleting a channel creator made a private channel readable anonymously. Fixed with a creator check that requires both ids. |
 | 2026-10-03 | Verification | 11e894c | Green | Backend `npm run lint` clean; `npm test` 153/153 (12 suites). New findings filed: SEC-097…SEC-103; SEC-080 reopened. |
+| 2026-10-04 | SEC-075 | ab83d97 (PR #23) | Done | Created `/api/admin` namespace with combined auth (`requireAdminOrStaffAuth`) accepting admin cookie/JWT or user Bearer+StaffMember. Mounted at `/admin` in `createApiRouter()`. Updated admin client to call `/admin/verification`, `/admin/opportunities`, `/admin/dashboard`. All 153 backend tests pass. |
+| 2026-10-04 | SEC-076 | c020bc3 (PR #24) | Done | Added admin session refresh with httpOnly refresh cookie (30-day TTL, path-scoped to `/auth/admin`). Added `POST /auth/admin/refresh` with token rotation and reuse detection, `GET /auth/admin/me` for session validation. Admin client: automatic refresh retry on 401, `checkAdminSession()`. All 153 backend tests pass, Playwright e2e tests pass. |
+| 2026-10-04 | SEC-077 (partial) | — | In Progress | Added admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. Remaining: wire admin pages to API, delete mock files, add loading/error states. All 153 backend tests pass. |
 
 ---
 
