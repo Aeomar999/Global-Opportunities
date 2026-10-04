@@ -180,8 +180,14 @@ test.describe('Admin API Integration', () => {
     const data = await summaryResponse.json();
     console.log('Dashboard summary response:', JSON.stringify(data, null, 2));
     expect(data.data).toBeDefined();
-    expect(data.data.totalUsers).toBeDefined();
-    expect(data.data.totalOpportunities).toBeDefined();
+    // New /admin/dashboard returns { month, kpis, priorities, trend, pipeline, ... }
+    // Check that kpis array exists and contains expected metrics
+    expect(Array.isArray(data.data.kpis)).toBeTruthy();
+    expect(data.data.kpis.length).toBeGreaterThan(0);
+    // Verify some expected KPIs are present
+    const kpiMetrics = data.data.kpis.map((k: any) => k.metric);
+    expect(kpiMetrics).toContain('opportunitiesPublished');
+    expect(kpiMetrics).toContain('programsActive');
   });
 
   test('dashboard summary API rejects non-admin token', async ({ request }) => {
