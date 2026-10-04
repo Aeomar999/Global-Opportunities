@@ -18,6 +18,8 @@ const apiOrigin = (() => {
   }
 })();
 
+const wsOrigin = apiOrigin ? apiOrigin.replace(/^http/, "ws") : null;
+
 // Same-origin API proxy. The admin session cookie is SameSite=Strict, so the
 // browser only sends it to the dashboard's own site. When the dashboard and API
 // are on different sites (e.g. *.vercel.app and *.onrender.com), set
@@ -26,13 +28,17 @@ const apiOrigin = (() => {
 // cookie first-party. The API must still list the dashboard origin in CORS_ORIGIN.
 const apiProxyTarget = process.env.API_PROXY_TARGET?.replace(/\/$/, "");
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  isProduction
+    ? "script-src 'self' 'unsafe-inline'"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "font-src 'self' data:",
-  ["connect-src 'self'", apiOrigin].filter(Boolean).join(" "),
+  ["connect-src 'self'", apiOrigin, wsOrigin].filter(Boolean).join(" "),
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

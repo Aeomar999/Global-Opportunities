@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Ticket, CreditCard, ShieldCheck } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { EVENTS_DATA } from './index';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
-import { bookEvent } from '../../lib/api';
+import { bookEvent, getEventById, EventItem } from '../../lib/api';
 
 export default function TicketBookingScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const event = EVENTS_DATA.find(e => e.id === id) ?? EVENTS_DATA[0];
+  const [event, setEvent] = useState<EventItem | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const [quantity, setQuantity] = useState(1);
   const [fullName, setFullName] = useState('');
@@ -24,13 +24,34 @@ export default function TicketBookingScreen() {
   const [zipCode, setZipCode] = useState('');
   const [savePayment, setSavePayment] = useState(false);
 
+  useEffect(() => {
+    let isMounted = true;
+    if (!id) return;
+    getEventById(id)
+      .then((data) => {
+        if (!isMounted) return;
+        setEvent(data);
+      })
+      .catch((err) => {
+        console.warn('Failed to load event for booking:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  const priceNum = Number(event?.priceNum) || 0;
+  const isPaid = priceNum > 0;
+  const totalPrice = priceNum * quantity;
+
   const increment = () => setQuantity(prev => prev + 1);
   const decrement = () => setQuantity(prev => (prev > 1 ? prev - 1 : 1));
 
-  const isPaid = event.priceNum > 0;
-  const totalPrice = event.priceNum * quantity;
-
   const handleCheckout = async () => {
+    if (!event) return;
     // Form Validation
     if (!fullName.trim()) {
       Alert.alert('Validation Error', 'Full name is required.');
@@ -59,7 +80,7 @@ export default function TicketBookingScreen() {
         fullName,
         email,
         quantity,
-        status: isPaid ? 'confirmed' : 'confirmed',
+        status: 'confirmed',
       });
       // Success! Route to order confirmation page.
       router.replace({
@@ -70,6 +91,29 @@ export default function TicketBookingScreen() {
       Alert.alert('Booking Error', err.message || 'Failed to book event.');
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center' }} edges={['top', 'left', 'right']}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 12, color: Colors.textMuted, fontSize: 14 }} className="font-sans">Loading event details...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (!event) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }} edges={['top', 'left', 'right']}>
+        <Text style={{ fontSize: 16, color: Colors.textHeading, fontWeight: '600', marginBottom: 8 }} className="font-sans">Event not found</Text>
+        <TouchableOpacity
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/events')}
+          style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: Colors.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: Colors.white, fontWeight: '600' }} className="font-sans">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen }} edges={['top', 'left', 'right']}>

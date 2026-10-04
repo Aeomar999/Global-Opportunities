@@ -23,7 +23,9 @@ class SocketService {
 
     this.socket = io(SOCKET_URL, {
       transports: ['websocket'],
-      auth: { token },
+      auth: (cb: (data: { token: string }) => void) => {
+        getMobileToken().then((current) => cb({ token: current || '' }));
+      },
     });
 
     this.socket.on('connect', () => {

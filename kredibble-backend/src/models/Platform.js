@@ -113,6 +113,7 @@ grantSchema.index({ title: 'text', sector: 'text' });
 
 const grantApplicationSchema = new mongoose.Schema({
   grantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Grant', required: true, index: true },
+  applicantUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
   applicantName: { type: String, required: true },
   requestedAmount: { type: Number, required: true },
   status: { type: String, default: 'pending' },

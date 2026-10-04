@@ -1,4 +1,4 @@
-﻿import { jest } from '@jest/globals';
+import { jest } from '@jest/globals';
 import request from 'supertest';
 import app from '../src/app.js';
 import mongoose from 'mongoose';
@@ -77,5 +77,17 @@ describe('SEC-053: Refresh Token family revocation', () => {
   it('rejects malformed refresh body with 400', async () => {
     const res = await request(server).post('/api/auth/refresh').send({ refreshToken: { invalid: 'type' } });
     expect(res.status).toBe(400);
+  });
+
+  it('SEC-099: POST /auth/logout revokes the refresh token', async () => {
+    const login = await request(server).post('/api/auth/login').send({ email: 'test53@example.com', password: 'password123' });
+    const rt = login.body.data.refreshToken;
+    expect(rt).toBeDefined();
+
+    const logoutRes = await request(server).post('/api/auth/logout').send({ refreshToken: rt });
+    expect(logoutRes.status).toBe(204);
+
+    const refRes = await request(server).post('/api/auth/refresh').send({ refreshToken: rt });
+    expect(refRes.status).toBe(401);
   });
 });

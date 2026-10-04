@@ -9,94 +9,27 @@ import { useToast } from '../../components/ui/ToastProvider';
 
 // ─── Shared events data ────────────────────────────────────────────────────────
 
-export const EVENTS_DATA = [
-  {
-    id: '64a1b2c3d4e5f60011223347',
-    title: 'Climate Champion Competition Ghana',
-    location: 'British Council Accra, Greater Accra Region',
-    venueName: 'British Council',
-    venueAddress: 'Liberia road, accra, greater accra region',
-    date: 'Friday, May 22 • 10 AM - 2 PM',
-    price: 'Free',
-    priceNum: 0,
-    theme: "Empowering Africa's Climate Innovators for a Better Future",
-    duration: '4 hrs',
-    type: 'In-person event',
-    organizer: 'Startup Discovery',
-    category: 'Tech',
-    dateLabel: 'Today',
-    region: 'Greater Accra Region',
-    ticketType: 'Free',
-    eventType: 'In-person',
-    logoColor: '#4CAF50',
-    description: 'This competition aims to surface the most promising climate tech and green business solutions in Ghana. Finalists will pitch to a panel of international impact investors and climate action advocates, securing grants, mentorship, and commercialization pathways to scale their innovations.'
-  },
-  {
-    id: '64a1b2c3d4e5f60011223348',
-    title: 'Tech Leadership Summit Accra',
-    location: 'Accra International Conference Center',
-    venueName: 'AICC',
-    venueAddress: 'Castle Road, Accra, Greater Accra Region',
-    date: 'Saturday, May 23 • 9 AM - 5 PM',
-    price: 'GHS 100',
-    priceNum: 100,
-    theme: 'Shaping the Future of Fintech & AI in Ghana',
-    duration: '8 hrs',
-    type: 'In-person event',
-    organizer: 'Tech & Co.',
-    category: 'Tech',
-    dateLabel: 'Tomorrow',
-    region: 'Greater Accra Region',
-    ticketType: 'Paid',
-    eventType: 'In-person',
-    logoColor: '#6671E4',
-    description: 'Join industry pioneers, policy makers, and leading software developers for a day of panels, workshops, and high-impact networking covering artificial intelligence, mobile finance frameworks, blockchain scaling, and cloud architecture across Sub-Saharan Africa.'
-  },
-  {
-    id: '64a1b2c3d4e5f60011223349',
-    title: 'Fretwork & Jazz Night',
-    location: 'Alliance Française, Greater Accra Region',
-    venueName: 'Alliance Française d\'Accra',
-    venueAddress: 'Casely Hayford Rd, Accra, Greater Accra Region',
-    date: 'Friday, May 22 • 7 PM - 10 PM',
-    price: 'GHS 150',
-    priceNum: 150,
-    theme: 'A Live Evening of Classic Afro-Jazz and Acoustic Fusions',
-    duration: '3 hrs',
-    type: 'In-person event',
-    organizer: 'Accra Jazz Club',
-    category: 'Music',
-    dateLabel: 'Today',
-    region: 'Greater Accra Region',
-    ticketType: 'Paid',
-    eventType: 'In-person',
-    logoColor: '#9C27B0',
-    description: 'Experience an unforgettable evening of live jazz music featuring Accra\'s finest contemporary afro-jazz instrumentalists. This in-person concert celebrates local guitar techniques merged with classic brass arrangements, creating a soul-stirring auditory journey.'
-  },
-  {
-    id: '64a1b2c3d4e5f60011223350',
-    title: 'Startup Growth Accelerator Workshop',
-    location: 'Online Webinar',
-    venueName: 'Zoom Webinar',
-    venueAddress: 'Online / Zoom Invite Sent to Registered Attendees',
-    date: 'Saturday, May 23 • 2 PM - 4 PM',
-    price: 'Free',
-    priceNum: 0,
-    theme: 'Scaling Customer Acquisition and Unit Economics',
-    duration: '2 hrs',
-    type: 'Online event',
-    organizer: 'Kumasi Hive',
-    category: 'Business',
-    dateLabel: 'Tomorrow',
-    region: 'Ashanti Region',
-    ticketType: 'Free',
-    eventType: 'Online',
-    logoColor: '#FF9800',
-    description: 'Learn how to optimize your growth funnel, run highly targeted and low-cost ad experiments, and master startup metrics such as CAC, LTV, and cohort retention. Recommended for early-stage founders and growth marketing professionals.'
-  }
-];
-
-export type EventItem = (typeof EVENTS_DATA)[number];
+export type EventItem = {
+  id: string;
+  title: string;
+  location: string;
+  venueName?: string;
+  venueAddress?: string;
+  date: string;
+  price: string;
+  priceNum: number;
+  theme: string;
+  duration?: string;
+  type?: string;
+  organizer?: string;
+  category?: string;
+  dateLabel?: string;
+  region?: string;
+  ticketType?: string;
+  eventType?: string;
+  logoColor?: string;
+  description: string;
+};
 
 // ─── Event Card Component ──────────────────────────────────────────────────────
 
@@ -222,10 +155,7 @@ export default function EventsScreen() {
     fetchEvents();
   }, [params]);
 
-  // Merge live events with mock events so the screen isn't empty if the backend has no events
-  // Live events are mapped onto the full EventItem shape EventCard renders, so a
-  // backend row never shows up without a date, banner text or colour.
-  const filteredEvents: EventItem[] = liveEvents.length > 0 ? liveEvents.map((j): EventItem => ({
+  const filteredEvents: EventItem[] = liveEvents.map((j): EventItem => ({
     id: j.id,
     title: j.title,
     location: j.eventRegion || j.location || 'Remote',
@@ -245,26 +175,26 @@ export default function EventsScreen() {
     eventType: j.eventStyle || 'In-Person',
     logoColor: Colors.primary,
     description: j.description || '',
-  })) : EVENTS_DATA.filter(event => {
+  })).filter(event => {
     if (params.date) {
       const dates = params.date.split(',');
-      if (!dates.includes(event.dateLabel)) return false;
+      if (!dates.includes(event.dateLabel || '')) return false;
     }
     if (params.region) {
       const regions = params.region.split(',');
-      if (!regions.includes(event.region)) return false;
+      if (!regions.includes(event.region || '')) return false;
     }
     if (params.category) {
       const categories = params.category.split(',');
-      if (!categories.includes(event.category)) return false;
+      if (!categories.includes(event.category || '')) return false;
     }
     if (params.ticketType) {
       const ticketTypes = params.ticketType.split(',');
-      if (!ticketTypes.includes(event.ticketType)) return false;
+      if (!ticketTypes.includes(event.ticketType || '')) return false;
     }
     if (params.eventType) {
       const eventTypes = params.eventType.split(',');
-      if (!eventTypes.includes(event.eventType)) return false;
+      if (!eventTypes.includes(event.eventType || '')) return false;
     }
     return true;
   });
@@ -323,7 +253,11 @@ export default function EventsScreen() {
         </View>
 
         {/* Listings */}
-        {filteredEvents.length > 0 ? (
+        {isLoading ? (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <Text style={{ color: '#8A8D9F', fontSize: 14 }} className="font-sans">Loading events...</Text>
+          </View>
+        ) : filteredEvents.length > 0 ? (
           filteredEvents.map(event => (
             <EventCard
               key={event.id}

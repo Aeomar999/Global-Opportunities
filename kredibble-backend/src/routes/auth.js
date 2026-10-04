@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 const DUMMY_HASH = '$2a$12$bRWsa/PC32qEk5cFCdQ/n.DrtmNZZeIr7Fc15SfH6SoezqktcAbCO';
@@ -9,7 +10,7 @@ import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, reset
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
 import { User, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode, PasswordResetCode } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
-import { Applicant, EventAttendee, CompanyVerification, VerificationDoc, Opportunity } from '../models/Platform.js';
+import { Applicant, EventAttendee, CompanyVerification, VerificationDoc, Opportunity, GrantApplication } from '../models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership } from '../models/Community.js';
 import { Testimonial } from '../models/AdminPortal.js';
 import { SavedItem } from '../models/User.js';
@@ -19,6 +20,7 @@ import { AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES, auditReq } from '../lib/audit.js';
 import { registrationLimiter, passwordResetLimiter, authLimiter, emailVerificationLimiter, forgotPasswordLimiter, forgotPasswordEmailLimiter, passwordResetAttemptLimiter, reauthLimiter } from '../lib/rate-limiters.js';
 import logger from '../lib/logger.js';
 import { deleteAccount, userDataFilters } from '../lib/account-deletion.js';
+import { disconnectUserSockets } from '../socket.js';
 
 export const authRouter = Router();
 
@@ -284,6 +286,13 @@ authRouter.post(
 
       // SEC-065: a deleted or missing account can't be refreshed back into a session.
       if (!tokenDoc.userId || tokenDoc.userId.role === 'deleted') {
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.REFRESH_TOKEN,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          resourceId: tokenDoc.userId?._id,
+          outcome: 'failure',
+          metadata: { reason: 'account_deleted_or_missing' },
+        });
         throw new ApiError(401, 'Invalid refresh token');
       }
 
@@ -480,6 +489,40 @@ authRouter.post(
     });
 
     res.json({ data: { message: 'Logged out' } });
+  }),
+);
+
+// SEC-099: User logout — revokes the refresh token (idempotent, 204)
+authRouter.post(
+  '/logout',
+  asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body || {};
+    if (typeof refreshToken === 'string' && refreshToken.trim()) {
+      const tokenHash = hashRefreshTokenUtil(refreshToken.trim());
+      await RefreshToken.findOneAndUpdate(
+        { tokenHash, revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      );
+    }
+
+    const header = req.get('authorization');
+    const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+    if (token) {
+      try {
+        const payload = jwt.verify(token, env.jwtSecret);
+        await auditReq(req, {
+          action: AUDIT_ACTIONS.LOGOUT,
+          resourceType: AUDIT_RESOURCE_TYPES.USER,
+          resourceId: payload.sub,
+          outcome: 'success',
+          metadata: { isUserLogout: true },
+        });
+      } catch {
+        // Ignore token errors during logout
+      }
+    }
+
+    res.status(204).end();
   }),
 );
 
@@ -682,6 +725,7 @@ const revokeAllSessions = async (user) => {
   user.tokenVersion = (user.tokenVersion || 0) + 1;
   user.refreshTokenHash = null;
   await RefreshToken.deleteMany({ userId: user._id });
+  disconnectUserSockets(user._id);
 };
 
 /** Constant-time comparison of two hex digests. */
@@ -878,12 +922,13 @@ authRouter.get(
 
     const where = await userDataFilters(user);
     const [
-      seekerProfile, hirerAccount, applications, eventBookings, companyVerifications, verificationDocs,
+      seekerProfile, hirerAccount, applications, grantApplications, eventBookings, companyVerifications, verificationDocs,
       savedItems, channelMemberships, communityPosts, channels, opportunities, testimonials, sessions,
     ] = await Promise.all([
       SeekerProfile.findOne(where.seekerProfile).lean(),
       HirerAccount.findOne(where.hirerAccount).lean(),
       Applicant.find(where.applications).lean(),
+      GrantApplication.find(where.grantApplications).lean(),
       EventAttendee.find(where.eventBookings).lean(),
       CompanyVerification.find(where.companyVerifications).lean(),
       VerificationDoc.find(where.verificationDocs).lean(),
@@ -902,6 +947,7 @@ authRouter.get(
       seekerProfile,
       hirerAccount,
       applications,
+      grantApplications,
       eventBookings,
       companyVerifications,
       verificationDocs,
@@ -941,11 +987,13 @@ authRouter.delete(
     const { password } = req.body;
 
     const userId = req.auth.sub;
-    // Admin accounts are removed by another admin, not erased from the app.
-    if (req.auth.role === 'admin') throw new ApiError(403, 'Admin accounts cannot be deleted from the app');
-
     const user = await User.findById(userId).select('+passwordHash');
     if (!user?.passwordHash) throw new ApiError(404, 'User not found');
+
+    // Admin accounts are removed by another admin, not erased from the app.
+    if (user.role === 'admin' || req.auth.role === 'admin') {
+      throw new ApiError(403, 'Admin accounts cannot be deleted from the app');
+    }
 
     if (!(await bcrypt.compare(password, user.passwordHash))) {
       await auditReq(req, {
@@ -961,7 +1009,9 @@ authRouter.delete(
     let deletedAt;
     try {
       ({ deletedAt } = await deleteAccount(user));
+      disconnectUserSockets(userId);
     } catch (error) {
+      disconnectUserSockets(userId);
       // Before access is cut nothing is promised: let it surface as a 500.
       if (!error.accountClosed) throw error;
       logger.error({ err: error.message, userId }, 'Account deletion did not finish');

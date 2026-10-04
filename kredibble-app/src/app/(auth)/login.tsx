@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { Check, X, Eye, EyeOff, Home } from 'lucide-react-native';
 import Svg, { G, Rect, Defs, ClipPath, Path } from 'react-native-svg';
 import { authStore } from '../../constants/authStore';
-import { loginMobile } from '../../lib/api';
+import { loginMobile, requestForgotPassword, resetPassword } from '../../lib/api';
 
 const LogoSVG = () => (
   <Image 
@@ -61,14 +61,16 @@ export default function LoginScreen() {
   const [showForgotSheet, setShowForgotSheet] = useState(false);
   const [forgotStep, setForgotStep] = useState<'email' | 'verify' | 'reset' | 'success'>('email');
   const [forgotEmail, setForgotEmail] = useState('');
-  const [otpValues, setOtpValues] = useState(['', '', '', '', '']);
+  const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
   const [timeLeft, setTimeLeft] = useState(60);
   const [resendKey, setResendKey] = useState(0);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const otpRefs = useRef<(TextInput | null)[]>([null, null, null, null, null]);
+  const [forgotError, setForgotError] = useState('');
+  const [isForgotSubmitting, setIsForgotSubmitting] = useState(false);
+  const otpRefs = useRef<(TextInput | null)[]>([null, null, null, null, null, null]);
   const [slideAnim] = useState(() => new Animated.Value(windowHeight));
 
   useEffect(() => {
@@ -84,6 +86,7 @@ export default function LoginScreen() {
   }, [forgotStep, resendKey]);
 
   const openForgotSheet = () => {
+    setForgotError('');
     setShowForgotSheet(true);
     Animated.spring(slideAnim, {
       toValue: 0,
@@ -102,11 +105,13 @@ export default function LoginScreen() {
       setShowForgotSheet(false);
       setForgotEmail('');
       setForgotStep('email');
-      setOtpValues(['', '', '', '', '']);
+      setOtpValues(['', '', '', '', '', '']);
       setTimeLeft(60);
       setResendKey(0);
       setNewPassword('');
       setConfirmPassword('');
+      setForgotError('');
+      setIsForgotSubmitting(false);
     });
   };
 
@@ -115,7 +120,7 @@ export default function LoginScreen() {
     const next = [...otpValues];
     next[index] = digit;
     setOtpValues(next);
-    if (digit && index < 4) otpRefs.current[index + 1]?.focus();
+    if (digit && index < 5) otpRefs.current[index + 1]?.focus();
   };
 
   const handleOtpKeyPress = (index: number, key: string) => {
@@ -124,18 +129,66 @@ export default function LoginScreen() {
     }
   };
 
-  const isForgotValid = forgotEmail.trim().length > 0;
-  const isVerifyActive = otpValues.every(v => v.length > 0);
+  const isForgotValid = forgotEmail.trim().length > 0 && !isForgotSubmitting;
+  const isVerifyActive = otpValues.every(v => v.length > 0) && !isForgotSubmitting;
   const countdownLabel = `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}`;
 
   const passwordRules = [
-    { label: '8+ characters',    met: newPassword.length >= 8 },
+    { label: '10+ characters',   met: newPassword.length >= 10 },
+    { label: 'lowercase letter', met: /[a-z]/.test(newPassword) },
     { label: 'uppercase letter', met: /[A-Z]/.test(newPassword) },
     { label: 'number',           met: /[0-9]/.test(newPassword) },
-    { label: 'symbol',           met: /[^A-Za-z0-9]/.test(newPassword) },
   ];
-  const isResetActive = passwordRules.every(r => r.met) && newPassword === confirmPassword;
+  const isResetActive = passwordRules.every(r => r.met) && newPassword === confirmPassword && !isForgotSubmitting;
   const isLoginActive = email.trim().length > 0 && password.trim().length > 0 && !isSubmitting;
+
+  const handleSendCode = async () => {
+    if (!isForgotValid || isForgotSubmitting) return;
+    setForgotError('');
+    setIsForgotSubmitting(true);
+    try {
+      await requestForgotPassword(forgotEmail.trim());
+      setTimeLeft(60);
+      setForgotStep('verify');
+    } catch (err) {
+      setForgotError(err instanceof Error ? err.message : 'Failed to send reset code');
+    } finally {
+      setIsForgotSubmitting(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (timeLeft > 0 || isForgotSubmitting) return;
+    setForgotError('');
+    setIsForgotSubmitting(true);
+    try {
+      await requestForgotPassword(forgotEmail.trim());
+      setTimeLeft(60);
+      setResendKey(k => k + 1);
+    } catch (err) {
+      setForgotError(err instanceof Error ? err.message : 'Failed to resend code');
+    } finally {
+      setIsForgotSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!isResetActive || isForgotSubmitting) return;
+    setForgotError('');
+    setIsForgotSubmitting(true);
+    try {
+      await resetPassword({
+        email: forgotEmail.trim(),
+        code: otpValues.join(''),
+        newPassword,
+      });
+      setForgotStep('success');
+    } catch (err) {
+      setForgotError(err instanceof Error ? err.message : 'Failed to reset password');
+    } finally {
+      setIsForgotSubmitting(false);
+    }
+  };
 
   const handleLogin = async () => {
     if (!isLoginActive) return;
@@ -453,7 +506,7 @@ export default function LoginScreen() {
                   Email
                 </Text>
 
-                <View style={{ height: 48, borderWidth: 1, borderColor: '#EBEBEE', borderRadius: 8, paddingHorizontal: 16, justifyContent: 'center', backgroundColor: '#FFFFFF', marginBottom: 24 }}>
+                <View style={{ height: 48, borderWidth: 1, borderColor: '#EBEBEE', borderRadius: 8, paddingHorizontal: 16, justifyContent: 'center', backgroundColor: '#FFFFFF', marginBottom: 16 }}>
                   <TextInput
                     value={forgotEmail}
                     onChangeText={setForgotEmail}
@@ -466,15 +519,20 @@ export default function LoginScreen() {
                   />
                 </View>
 
+                {forgotError ? (
+                  <Text style={{ fontSize: 13, color: '#ED4C5C', marginBottom: 16 }} className="font-sans">
+                    {forgotError}
+                  </Text>
+                ) : null}
+
                 <TouchableOpacity
                   disabled={!isForgotValid}
-                  onPress={() => {
-                    setTimeLeft(60);
-                    setForgotStep('verify');
-                  }}
+                  onPress={handleSendCode}
                   style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isForgotValid ? '#6671E4' : '#C5C9F0' }}
                 >
-                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">Send</Text>
+                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">
+                    {isForgotSubmitting ? 'Sending...' : 'Send'}
+                  </Text>
                 </TouchableOpacity>
               </>
             ) : forgotStep === 'verify' ? (
@@ -489,7 +547,7 @@ export default function LoginScreen() {
                 </Text>
 
                 {/* OTP boxes */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
                   {otpValues.map((val, i) => (
                     <TextInput
                       key={i}
@@ -500,11 +558,11 @@ export default function LoginScreen() {
                       keyboardType="number-pad"
                       maxLength={1}
                       style={{
-                        width: 51,
-                        height: 55,
+                        width: 44,
+                        height: 52,
                         borderWidth: 1,
                         borderColor: val ? '#6671E4' : '#EBEBEE',
-                        borderRadius: 12,
+                        borderRadius: 10,
                         textAlign: 'center',
                         fontSize: 20,
                         fontWeight: 'bold',
@@ -516,25 +574,31 @@ export default function LoginScreen() {
                   ))}
                 </View>
 
+                {forgotError ? (
+                  <Text style={{ fontSize: 13, color: '#ED4C5C', marginBottom: 16 }} className="font-sans">
+                    {forgotError}
+                  </Text>
+                ) : null}
+
                 {/* Resend countdown */}
                 <View style={{ flexDirection: 'row', marginBottom: 32 }}>
                   <Text style={{ fontSize: 13, color: '#8A8D9F' }} className="font-sans">Resend code </Text>
                   <TouchableOpacity
-                    disabled={timeLeft > 0}
-                    onPress={() => {
-                      setTimeLeft(60);
-                      setResendKey(k => k + 1);
-                    }}
+                    disabled={timeLeft > 0 || isForgotSubmitting}
+                    onPress={handleResendCode}
                   >
-                    <Text style={{ fontSize: 13, color: timeLeft > 0 ? '#8A8D9F' : '#6671E4', fontWeight: 'bold' }} className="font-sans">
-                      {timeLeft > 0 ? `(${countdownLabel})` : 'Resend'}
+                    <Text style={{ fontSize: 13, color: timeLeft > 0 || isForgotSubmitting ? '#8A8D9F' : '#6671E4', fontWeight: 'bold' }} className="font-sans">
+                      {timeLeft > 0 ? `(${countdownLabel})` : isForgotSubmitting ? '(Sending...)' : 'Resend'}
                     </Text>
                   </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
                   disabled={!isVerifyActive}
-                  onPress={() => setForgotStep('reset')}
+                  onPress={() => {
+                    setForgotError('');
+                    setForgotStep('reset');
+                  }}
                   style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isVerifyActive ? '#6671E4' : '#C5C9F0' }}
                 >
                   <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">Verify</Text>
@@ -585,7 +649,7 @@ export default function LoginScreen() {
                 </View>
 
                 {/* Password requirements */}
-                <View style={{ gap: 8, marginBottom: 28 }}>
+                <View style={{ gap: 8, marginBottom: 20 }}>
                   {passwordRules.map((rule) => {
                     const hasInput = newPassword.length > 0;
                     const bg   = rule.met ? 'rgba(22,163,74,0.2)'  : hasInput ? 'rgba(237,76,92,0.2)' : '#F5F6FA';
@@ -602,12 +666,20 @@ export default function LoginScreen() {
                   })}
                 </View>
 
+                {forgotError ? (
+                  <Text style={{ fontSize: 13, color: '#ED4C5C', marginBottom: 16 }} className="font-sans">
+                    {forgotError}
+                  </Text>
+                ) : null}
+
                 <TouchableOpacity
                   disabled={!isResetActive}
-                  onPress={() => setForgotStep('success')}
+                  onPress={handleResetPassword}
                   style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isResetActive ? '#6671E4' : '#C5C9F0' }}
                 >
-                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">Reset password</Text>
+                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">
+                    {isForgotSubmitting ? 'Resetting...' : 'Reset password'}
+                  </Text>
                 </TouchableOpacity>
               </>
             ) : null}

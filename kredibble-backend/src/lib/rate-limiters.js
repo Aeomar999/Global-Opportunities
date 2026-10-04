@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import Redis from 'ioredis';
 import { RedisStore } from 'rate-limit-redis';
@@ -250,12 +251,27 @@ export const strictLimiter = createRateLimiter({
   message: { error: { message: 'Too many requests, please try again after an hour' } },
 });
 
-/** 100 requests per 15 minutes per IP across the whole API. */
+/**
+ * 100 requests per 15 minutes across the whole API.
+ * SEC-105: If an admin cookie or bearer token is present, key on its hash
+ * so each authenticated user / admin behind proxies (Vercel proxy or CGNAT)
+ * gets their own bucket instead of sharing one global IP limit.
+ */
 export const globalApiLimiter = createRateLimiter({
   prefix: 'global',
   windowMs: 15 * 60 * 1000,
   limit: 100,
   message: { error: { message: 'Too many requests, please try again later.' } },
+  keyGenerator: (req) => {
+    if (req.cookies?.kredibble_admin_token) {
+      return `adm:${crypto.createHash('sha256').update(req.cookies.kredibble_admin_token).digest('hex').slice(0, 16)}`;
+    }
+    const auth = req.headers?.authorization;
+    if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+      return `tok:${crypto.createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 16)}`;
+    }
+    return ipKeyGenerator(req.ip);
+  },
 });
 
 /** 20 auth attempts per 15 minutes per IP — the brute-force boundary. */

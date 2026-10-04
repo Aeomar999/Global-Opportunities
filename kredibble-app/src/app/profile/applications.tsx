@@ -1,12 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
-import { profileStore } from '../../constants/mockProfile';
+import { getMyApplications } from '../../lib/api';
 
 type ParentTab = 'jobs' | 'internships';
 type SubFilter = 'All' | 'Interview' | 'Rejected' | 'In review';
+
+interface ApplicationItem {
+  id: string;
+  title: string;
+  company: string;
+  description: string;
+  type: 'jobs' | 'internships';
+  status: 'In review' | 'Interview' | 'Rejected';
+  appliedDate?: string;
+}
 
 const MOCK_AVATARS = [
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
@@ -18,13 +28,73 @@ export default function ApplicationsStatusScreen() {
   const router = useRouter();
   const [parentTab, setParentTab] = useState<ParentTab>('jobs');
   const [activeFilter, setActiveFilter] = useState<SubFilter>('All');
-  const [applications, setApplications] = useState(profileStore.applications);
+  const [applications, setApplications] = useState<ApplicationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const mapRawApplications = (rawList: any[]): ApplicationItem[] => {
+    return rawList.map((item: any) => {
+      const opp = item.opportunity || {};
+      let normalizedStatus: 'In review' | 'Interview' | 'Rejected' = 'In review';
+      const rawStatus = String(item.status || '').toLowerCase();
+      if (rawStatus === 'interviewing' || rawStatus === 'interview' || rawStatus === 'offered') {
+        normalizedStatus = 'Interview';
+      } else if (rawStatus === 'rejected') {
+        normalizedStatus = 'Rejected';
+      }
+
+      const rawType = String(opp.type || '').toLowerCase();
+      const normalizedType: 'jobs' | 'internships' = rawType.includes('intern') ? 'internships' : 'jobs';
+
+      return {
+        id: String(item.id || item._id),
+        title: opp.title || 'Opportunity Application',
+        company: opp.company || 'Company',
+        description: opp.description || opp.location || (item.createdAt ? `Applied on ${new Date(item.createdAt).toLocaleDateString()}` : 'Applied'),
+        type: normalizedType,
+        status: normalizedStatus,
+        appliedDate: item.createdAt,
+      };
+    });
+  };
+
+  const loadData = () => {
+    getMyApplications()
+      .then((res) => {
+        const rawList = Array.isArray(res) ? res : ((res as any)?.data || []);
+        setApplications(mapRawApplications(rawList));
+        setLoading(false);
+      })
+      .catch((err: any) => {
+        setError(err?.message || 'Failed to load applications');
+        setLoading(false);
+      });
+  };
+
+  const handleRetry = () => {
+    setLoading(true);
+    setError(null);
+    loadData();
+  };
 
   useEffect(() => {
-    const unsubscribe = profileStore.subscribe(() => {
-      setApplications([...profileStore.applications]);
-    });
-    return unsubscribe;
+    let isMounted = true;
+    getMyApplications()
+      .then((res) => {
+        if (!isMounted) return;
+        const rawList = Array.isArray(res) ? res : ((res as any)?.data || []);
+        setApplications(mapRawApplications(rawList));
+        setLoading(false);
+      })
+      .catch((err: any) => {
+        if (!isMounted) return;
+        setError(err?.message || 'Failed to load applications');
+        setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const getFilteredApps = () => {
@@ -115,7 +185,19 @@ export default function ApplicationsStatusScreen() {
 
       {/* Scrollable list */}
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {currentList.length === 0 ? (
+        {loading ? (
+          <View style={styles.emptyContainer}>
+            <ActivityIndicator size="large" color="#6671E4" />
+            <Text style={[styles.emptyText, { marginTop: 12 }]} className="font-sans">Loading applications...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: '#ED4C5C', marginBottom: 12 }]} className="font-sans">{error}</Text>
+            <TouchableOpacity onPress={handleRetry} style={[styles.subFilterPill, styles.activeSubFilterPill]}>
+              <Text style={styles.activeSubFilterText} className="font-sans">Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : currentList.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText} className="font-sans">No applications match this filter</Text>
           </View>

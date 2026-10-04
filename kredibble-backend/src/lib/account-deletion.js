@@ -3,7 +3,7 @@ import {
   User, RefreshToken, SavedItem, EmailVerificationCode, PasswordResetCode, StaffMember, AuditLog, UserTombstone,
 } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
-import { Applicant, EventAttendee, CompanyVerification, VerificationDoc, Opportunity } from '../models/Platform.js';
+import { Applicant, EventAttendee, CompanyVerification, VerificationDoc, Opportunity, GrantApplication } from '../models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership } from '../models/Community.js';
 import { Testimonial } from '../models/AdminPortal.js';
 import { deleteUserMedia } from './cloudinary.js';
@@ -47,6 +47,7 @@ export async function userDataFilters(user) {
     channelMemberships: { userId },
     communityPosts: { authorId: userId },
     channels: { createdBy: userId },
+    grantApplications: { applicantUserId: userId },
     // Staff postings set createdBy; a hirer's own postings (POST /opportunities)
     // only set hirerId, to the User id.
     opportunities: { $or: [{ createdBy: userId }, { hirerId: { $in: companyIds } }] },
@@ -67,6 +68,7 @@ export async function purgeUserData(user, { deleteMedia = deleteUserMedia } = {}
   await Promise.all([
     SeekerProfile.deleteMany(where.seekerProfile),
     Applicant.deleteMany(where.applications),
+    GrantApplication.deleteMany(where.grantApplications),
     EventAttendee.deleteMany(where.eventBookings),
     Testimonial.deleteMany(where.testimonials),
     CompanyVerification.deleteMany(where.companyVerifications),

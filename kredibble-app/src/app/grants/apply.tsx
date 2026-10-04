@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, UploadCloud, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { GRANTS_DATA } from './index';
 import { Colors } from '../../constants/design';
 import { useToast } from '../../components/ui/ToastProvider';
-import { applyForGrant } from '../../lib/api';
+import { applyForGrant, getGrantById, Grant } from '../../lib/api';
+import { authStore } from '../../constants/authStore';
 
 const DURATION_OPTIONS = ['Less than 3 months', '3 - 6 months', '6 - 12 months', '1 - 2 years', 'More than 2 years'];
 const ENTITY_OPTIONS = ['Non-Governmental Organization (NGO)', 'Startup', 'Corporation', 'Individual / Freelancer', 'Academic Institution', 'Other'];
@@ -47,7 +47,8 @@ const Dropdown = ({ label, options, value, onSelect, placeholder }: any) => {
 export default function ApplyGrantScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const grant = GRANTS_DATA.find(g => g.id === id) ?? GRANTS_DATA[0];
+  const [grant, setGrant] = useState<Grant | null>(null);
+  const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
   const [hasReceivedFunding, setHasReceivedFunding] = useState<'yes' | 'no' | null>(null);
@@ -68,9 +69,28 @@ export default function ApplyGrantScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isApplied, setIsApplied] = useState(false);
 
-  // Mock auto-filled data
-  const autoFilledName = "Jane Doe";
-  const autoFilledEmail = "jane.doe@example.com";
+  // Auto-filled data from user session
+  const autoFilledName = authStore.user?.name || "Applicant";
+  const autoFilledEmail = authStore.user?.email || "applicant@kredibble.app";
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!id) return;
+    getGrantById(id)
+      .then((data) => {
+        if (!isMounted) return;
+        setGrant(data);
+      })
+      .catch((err) => {
+        console.warn('Failed to load grant:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
 
   const handleSubmit = async () => {
     if (!consentAccuracy || !consentContact) {
@@ -80,9 +100,9 @@ export default function ApplyGrantScreen() {
     
     setIsSubmitting(true);
     try {
-      await applyForGrant(grant.id, {
+      await applyForGrant(grant?.id || id, {
         applicantName: autoFilledName,
-        requestedAmount: parseFloat(projectBudget) || 0,
+        requestedAmount: parseFloat(projectBudget) || 1000,
         organizationName: orgName,
         projectTitle,
       });
@@ -113,6 +133,17 @@ export default function ApplyGrantScreen() {
     }
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={{ marginTop: 12, color: Colors.textMuted, fontSize: 14 }} className="font-sans">Loading grant details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {/* Header */}
@@ -129,10 +160,10 @@ export default function ApplyGrantScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Text style={styles.subHeading} className="font-sans">
-          {grant.title}
+          {grant?.title || 'Grant Opportunity'}
         </Text>
         <Text style={styles.companyText} className="font-sans">
-          {grant.org}
+          {grant?.org || grant?.funder || 'Organization'}
         </Text>
 
         {/* Form Fields */}
@@ -221,7 +252,7 @@ export default function ApplyGrantScreen() {
 
         <View style={styles.formGroup}>
           <Text style={styles.label} className="font-sans">
-            Have you previously received funding from {grant.org}? <Text style={styles.asterisk}>*</Text>
+            Have you previously received funding from {grant?.org || 'this organization'}? <Text style={styles.asterisk}>*</Text>
           </Text>
           <View style={styles.radioGroup}>
             <TouchableOpacity 

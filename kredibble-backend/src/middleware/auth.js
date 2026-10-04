@@ -1,4 +1,4 @@
-﻿import jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/http.js';
@@ -86,8 +86,13 @@ export const requireAuth = async (req, res, next) => {
     
     req.auth = payload;
     next();
-  } catch {
-    next(new ApiError(401, 'Authentication token is invalid or expired'));
+  } catch (err) {
+    const isExpired = err.name === 'TokenExpiredError';
+    const apiError = new ApiError(401, 'Authentication token is invalid or expired');
+    if (isExpired) {
+      apiError.code = 'TOKEN_EXPIRED';
+    }
+    next(apiError);
   }
 };
 
@@ -114,8 +119,13 @@ export const requireAdminAuth = async (req, res, next) => {
     
     req.auth = payload;
     next();
-  } catch {
-    next(new ApiError(401, 'Admin token is invalid or expired'));
+  } catch (err) {
+    const isExpired = err.name === 'TokenExpiredError';
+    const apiError = new ApiError(401, 'Admin token is invalid or expired');
+    if (isExpired) {
+      apiError.code = 'TOKEN_EXPIRED';
+    }
+    next(apiError);
   }
 };
 

@@ -158,13 +158,27 @@ adminRouter.get('/opportunities', requirePortalRoles(...OPPORTUNITY_ROLES), asyn
   listResponse(res, records.map(toClientObject));
 }));
 
+const OPPORTUNITY_ALLOWED_FIELDS = [
+  'title', 'type', 'company', 'offeringOrganization', 'location', 'description',
+  'date', 'workType', 'salary', 'experienceLevels', 'eventDateTime', 'eventRegion',
+  'eventCategory', 'grantBudgetRange', 'grantSector', 'status', 'moderationStatus',
+  'vetted', 'deadline', 'url', 'coverImage', 'assignedWriterId', 'referralCodeOnApply', 'category',
+];
+
 const prepareOpportunity = (data, actorId, existing = {}) => {
+  const allowed = {};
+  for (const field of OPPORTUNITY_ALLOWED_FIELDS) {
+    if (field in data) {
+      allowed[field] = data[field];
+    }
+  }
+
   const next = {
-    ...data,
-    company: data.company || data.offeringOrganization || existing.company,
-    offeringOrganization: data.offeringOrganization || data.company || existing.offeringOrganization,
+    ...allowed,
+    company: allowed.company || allowed.offeringOrganization || existing.company,
+    offeringOrganization: allowed.offeringOrganization || allowed.company || existing.offeringOrganization,
   };
-  if (data.vetted === true && !existing.vetted) {
+  if (allowed.vetted === true && !existing.vetted) {
     next.vettedBy = actorId;
     next.vettedAt = new Date();
   }
