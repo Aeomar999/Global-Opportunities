@@ -75,6 +75,19 @@ await Event.create({
   status: 'upcoming',
 });
 
+const { Grant, GrantApplication } = await import('../src/models/Platform.js');
+
+// Grants (SEC-077 Task 6).
+const grant = await Grant.create({
+  title: 'E2E Seed Fund',
+  hirer: 'E2E Holdings',
+  sector: 'Agriculture',
+  fundingPool: 10000,
+  allocated: 0,
+  status: 'open',
+});
+await GrantApplication.create({ grantId: grant._id, applicantName: 'E2E Applicant', requestedAmount: 2000 });
+
 const server = http.createServer(app).listen(env.port, () => {
   console.log(`e2e API listening on http://localhost:${env.port}/api`);
 });

@@ -1,40 +1,91 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Check, X } from "lucide-react";
-import { grantRecords, type GrantRecord, type GrantApplication } from "@/lib/mock-grant-ops";
+import { AlertCircle, Check, ChevronLeft, Loader2, X } from "lucide-react";
+import {
+  getGrantApplications,
+  getGrantById,
+  updateGrantApplication,
+  type GrantApplicationRecord,
+  type GrantRecord,
+} from "@/lib/api";
 
 export default function GrantDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const original = grantRecords.find((g) => g.id === params.id);
-  const [grant, setGrant] = useState<GrantRecord | undefined>(original);
+  const [grant, setGrant] = useState<GrantRecord | null>(null);
+  const [applications, setApplications] = useState<GrantApplicationRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  if (!grant) {
+  const fetchGrant = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [record, apps] = await Promise.all([
+        getGrantById(params.id),
+        getGrantApplications(params.id, { limit: 100 }),
+      ]);
+      setGrant(record);
+      setApplications(apps.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load grant");
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchGrant();
+  }, [fetchGrant]);
+
+  const setAppStatus = async (appId: string, status: "approved" | "rejected") => {
+    setSavingId(appId);
+    setActionError(null);
+    try {
+      const updated = await updateGrantApplication(appId, { status });
+      setApplications((prev) => prev.map((app) => (app.id === appId ? updated : app)));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to update application");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  if (loading) {
     return (
-      <div>
-        <p className="text-sm text-kb-text-muted">Grant not found.</p>
-        <Link href="/grants" className="text-sm text-kb-primary font-semibold mt-2 inline-block">
-          Back to Grants
-        </Link>
+      <div className="flex items-center justify-center py-10">
+        <Loader2 size={24} className="animate-spin text-kb-primary" />
+        <span className="ml-2 text-sm text-kb-text-muted">Loading grant...</span>
       </div>
     );
   }
 
-  const setAppStatus = (appId: string, status: GrantApplication["status"]) => {
-    setGrant((prev) => {
-      if (!prev) return prev;
-      const applications = prev.applications.map((a) => (a.id === appId ? { ...a, status } : a));
-      const allocated = applications
-        .filter((a) => a.status === "approved")
-        .reduce((sum, a) => sum + a.requestedAmount, 0);
-      return { ...prev, applications, allocated };
-    });
-  };
+  if (error || !grant) {
+    return (
+      <div>
+        <div className="flex items-center gap-2 text-sm text-kb-text-body">
+          <AlertCircle size={18} className="text-kb-error" />
+          <span>{error || "Grant not found."}</span>
+        </div>
+        <div className="flex items-center gap-4 mt-3">
+          <button onClick={fetchGrant} className="text-sm text-kb-primary font-semibold hover:underline">
+            Retry
+          </button>
+          <Link href="/grants" className="text-sm text-kb-primary font-semibold">
+            Back to Grants
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
-  const pct = Math.round((grant.allocated / grant.fundingPool) * 100);
+  const pct = grant.fundingPool > 0 ? Math.round((grant.allocated / grant.fundingPool) * 100) : 0;
   const remaining = grant.fundingPool - grant.allocated;
 
   return (
@@ -66,11 +117,17 @@ export default function GrantDetailPage() {
           ${grant.allocated.toLocaleString()} allocated of ${grant.fundingPool.toLocaleString()} ({pct}%)
           · ${remaining.toLocaleString()} remaining
         </p>
+        {/* SEC-060: allocation rules are undecided, so approvals record a decision only. */}
+        <p className="text-xs text-kb-text-placeholder mt-2">
+          Approving an application records the decision; it doesn&apos;t change the allocated amount yet.
+        </p>
       </div>
+
+      {actionError && <p className="text-sm text-kb-error mb-3">{actionError}</p>}
 
       <h2 className="text-sm font-bold text-kb-text-body mb-3">Applications</h2>
       <div className="flex flex-col gap-3">
-        {grant.applications.map((app) => (
+        {applications.map((app) => (
           <div
             key={app.id}
             className="flex items-center gap-4 bg-kb-bg-card border border-kb-border rounded-2xl p-4"
@@ -97,16 +154,17 @@ export default function GrantDetailPage() {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => setAppStatus(app.id, "approved")}
-                  className="w-8 h-8 rounded-lg bg-green-50 hover:bg-green-100 flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-lg bg-green-50 hover:bg-green-100 flex items-center justify-center transition-colors disabled:opacity-60"
                   title="Approve"
-                  disabled={app.requestedAmount > remaining}
+                  disabled={savingId !== null || app.requestedAmount > remaining}
                 >
                   <Check size={15} color="#16A34A" strokeWidth={2.5} />
                 </button>
                 <button
                   onClick={() => setAppStatus(app.id, "rejected")}
-                  className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors disabled:opacity-60"
                   title="Reject"
+                  disabled={savingId !== null}
                 >
                   <X size={15} color="#ED4C5C" strokeWidth={2.5} />
                 </button>
@@ -114,6 +172,10 @@ export default function GrantDetailPage() {
             )}
           </div>
         ))}
+
+        {applications.length === 0 && (
+          <p className="text-sm text-kb-text-muted">No applications yet.</p>
+        )}
       </div>
     </div>
   );

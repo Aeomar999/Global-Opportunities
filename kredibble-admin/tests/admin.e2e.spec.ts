@@ -269,3 +269,22 @@ test.describe('Events', () => {
     await expect(row.getByText('Cancelled')).toBeVisible();
   });
 });
+
+test.describe('Grants', () => {
+  test('approving an application persists', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/grants`);
+    await page.getByText('E2E Seed Fund').click();
+    await expect(page.getByRole('heading', { name: 'E2E Seed Fund' })).toBeVisible();
+
+    const application = page.locator('div.rounded-2xl').filter({ hasText: 'E2E Applicant' });
+    await expect(application.getByText('Pending')).toBeVisible();
+    await application.getByTitle('Approve').click();
+    await expect(application.getByText('Approved')).toBeVisible();
+
+    await page.reload();
+    await expect(page.locator('div.rounded-2xl').filter({ hasText: 'E2E Applicant' }).getByText('Approved')).toBeVisible();
+  });
+});
