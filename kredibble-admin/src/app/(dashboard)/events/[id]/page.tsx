@@ -1,40 +1,92 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, XCircle } from "lucide-react";
-import { eventRecords, type EventRecord } from "@/lib/mock-events";
+import { AlertCircle, ChevronLeft, Loader2, XCircle } from "lucide-react";
+import { getEventById, updateEvent, type EventRecord } from "@/lib/api";
 
 export default function EventDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const original = eventRecords.find((e) => e.id === params.id);
-  const [event, setEvent] = useState<EventRecord | undefined>(original);
-  const [capacityInput, setCapacityInput] = useState(String(original?.capacity ?? ""));
+  const [event, setEvent] = useState<EventRecord | null>(null);
+  const [capacityInput, setCapacityInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  if (!event) {
+  const fetchEvent = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const record = await getEventById(params.id);
+      setEvent(record);
+      setCapacityInput(String(record.capacity));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load event");
+    } finally {
+      setLoading(false);
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchEvent();
+  }, [fetchEvent]);
+
+  const save = async (data: Parameters<typeof updateEvent>[1]) => {
+    setSaving(true);
+    setActionError(null);
+    try {
+      const record = await updateEvent(params.id, data);
+      setEvent(record);
+      setCapacityInput(String(record.capacity));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to update event");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <Loader2 size={24} className="animate-spin text-kb-primary" />
+        <span className="ml-2 text-sm text-kb-text-muted">Loading event...</span>
+      </div>
+    );
+  }
+
+  if (error || !event) {
     return (
       <div>
-        <p className="text-sm text-kb-text-muted">Event not found.</p>
-        <Link href="/events" className="text-sm text-kb-primary font-semibold mt-2 inline-block">
-          Back to Events
-        </Link>
+        <div className="flex items-center gap-2 text-sm text-kb-text-body">
+          <AlertCircle size={18} className="text-kb-error" />
+          <span>{error || "Event not found."}</span>
+        </div>
+        <div className="flex items-center gap-4 mt-3">
+          <button onClick={fetchEvent} className="text-sm text-kb-primary font-semibold hover:underline">
+            Retry
+          </button>
+          <Link href="/events" className="text-sm text-kb-primary font-semibold">
+            Back to Events
+          </Link>
+        </div>
       </div>
     );
   }
 
   const saveCapacity = () => {
     const value = parseInt(capacityInput, 10);
-    if (Number.isNaN(value) || value < event.attendeesCount) return;
-    setEvent((prev) => (prev ? { ...prev, capacity: value } : prev));
+    if (Number.isNaN(value) || value < event.attendeesCount) {
+      setActionError(`Capacity must be a number no lower than ${event.attendeesCount}.`);
+      return;
+    }
+    save({ capacity: value });
   };
 
-  const cancelEvent = () => {
-    setEvent((prev) => (prev ? { ...prev, status: "cancelled" } : prev));
-  };
-
-  const pct = Math.round((event.attendeesCount / event.capacity) * 100);
+  const pct = event.capacity > 0 ? Math.round((event.attendeesCount / event.capacity) * 100) : 0;
 
   return (
     <div>
@@ -80,7 +132,8 @@ export default function EventDetailPage() {
           />
           <button
             onClick={saveCapacity}
-            className="h-10 px-4 rounded-lg bg-kb-primary text-white text-sm font-semibold"
+            disabled={saving}
+            className="h-10 px-4 rounded-lg bg-kb-primary text-white text-sm font-semibold disabled:opacity-60"
           >
             Save
           </button>
@@ -90,10 +143,13 @@ export default function EventDetailPage() {
         </p>
       </div>
 
+      {actionError && <p className="text-sm text-kb-error mb-3">{actionError}</p>}
+
       {event.status !== "cancelled" && (
         <button
-          onClick={cancelEvent}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-sm font-semibold text-red-600 transition-colors"
+          onClick={() => save({ status: "cancelled" })}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-sm font-semibold text-red-600 transition-colors disabled:opacity-60"
         >
           <XCircle size={16} strokeWidth={2.5} />
           Cancel event

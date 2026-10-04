@@ -246,3 +246,26 @@ test.describe('Reports queue', () => {
     await expect(page.getByText('Resolved', { exact: true })).toBeVisible();
   });
 });
+
+test.describe('Events', () => {
+  test('capacity change and cancellation persist', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/events`);
+    await page.getByText('E2E Career Fair').click();
+    await expect(page.getByRole('heading', { name: 'E2E Career Fair' })).toBeVisible();
+
+    await page.getByRole('spinbutton').fill('80');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('5 of 80 spots filled')).toBeVisible();
+    await page.reload();
+    await expect(page.getByText('5 of 80 spots filled')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cancel event' }).click();
+    await expect(page.getByRole('button', { name: 'Cancel event' })).toHaveCount(0);
+    await page.goto(`${BASE_URL}/events`);
+    const row = page.getByRole('link', { name: /E2E Career Fair/ });
+    await expect(row.getByText('Cancelled')).toBeVisible();
+  });
+});

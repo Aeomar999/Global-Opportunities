@@ -62,6 +62,19 @@ await Report.create({
   status: 'open',
 });
 
+const { Event } = await import('../src/models/Platform.js');
+
+// Events (SEC-077 Task 5).
+await Event.create({
+  title: 'E2E Career Fair',
+  hirer: 'E2E Holdings',
+  location: 'Accra',
+  dateTime: '20 Nov 2026, 10:00 AM GMT',
+  capacity: 50,
+  attendeesCount: 5,
+  status: 'upcoming',
+});
+
 const server = http.createServer(app).listen(env.port, () => {
   console.log(`e2e API listening on http://localhost:${env.port}/api`);
 });
