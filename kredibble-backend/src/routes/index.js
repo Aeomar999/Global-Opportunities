@@ -333,9 +333,9 @@ const collectionRoutes = ({
       );
       if (!item) throw notFound(resourceName);
 
-      // SEC-017: audit log for admin mutations
-      const isAdminMutation = req.auth?.role === ADMIN && policy.adminUpdateFields && Object.keys(data).some(k => policy.adminUpdateFields.includes(k));
-      if (isAdminMutation) {
+      // SEC-017 / SEC-077: every admin update is audited, not only admin-only fields
+      // (a report decision or a staff role change touches ordinary fields).
+      if (req.auth?.role === ADMIN) {
         await auditReq(req, {
           action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
           resourceType: AUDIT_RESOURCE_TYPES[resourceName.toUpperCase().replace(/ /g, '_')] || resourceName.toLowerCase().replace(/ /g, '_'),

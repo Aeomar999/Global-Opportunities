@@ -169,6 +169,25 @@ describe('SEC-077: admin image upload', () => {
   });
 });
 
+describe('SEC-077: every admin update is audited', () => {
+  it('records report decisions and staff role changes, not only admin-only fields', async () => {
+    const admin = await createAdmin();
+    const cookie = adminCookie(admin);
+    const report = await Report.create({ targetType: 'post', reason: 'spam', status: 'open' });
+    const staff = await StaffMember.create({ userId: admin._id, name: 'Ada Admin', email: 'ada@example.com', role: 'Writer', status: 'active' });
+
+    const resolved = await request(app).patch(api(`/admin/reports/${report._id}`)).set('Cookie', cookie).send({ status: 'resolved' });
+    const promoted = await request(app).patch(api(`/admin/staff/${staff._id}`)).set('Cookie', cookie).send({ role: 'Desk Lead' });
+
+    expect(resolved.status).toBe(200);
+    expect(promoted.status).toBe(200);
+    expect(await AuditLog.findOne({ resourceId: report._id, outcome: 'success' }).lean())
+      .toMatchObject({ metadata: { updatedFields: ['status'] } });
+    expect(await AuditLog.findOne({ resourceId: staff._id, outcome: 'success' }).lean())
+      .toMatchObject({ metadata: { updatedFields: ['role'] } });
+  });
+});
+
 describe('SEC-077: a channel an admin removed is hidden from users', () => {
   it('drops out of the public list, its pages answer 404, and nobody can post in it', async () => {
     const admin = await createAdmin();

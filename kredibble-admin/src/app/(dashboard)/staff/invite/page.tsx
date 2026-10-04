@@ -3,22 +3,30 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, UserPlus } from "lucide-react";
-import { staffStore, type StaffRole } from "@/lib/mock-staff";
+import { inviteStaff, STAFF_ROLES } from "@/lib/api";
 
-const ROLES: StaffRole[] = ["Super Admin", "Moderator", "Support"];
+type StaffRole = (typeof STAFF_ROLES)[number];
 
 export default function InviteStaffPage() {
   const router = useRouter();
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<StaffRole>("Support");
+  const [role, setRole] = useState<StaffRole>("Admin Support");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const isValid = name.trim() && email.trim();
+  const isValid = Boolean(email.trim());
 
-  const handleInvite = () => {
+  const handleInvite = async () => {
     if (!isValid) return;
-    staffStore.invite(name.trim(), email.trim(), role);
-    router.push("/staff");
+    setSaving(true);
+    setError(null);
+    try {
+      await inviteStaff({ email: email.trim(), role });
+      router.push("/staff");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add staff member");
+      setSaving(false);
+    }
   };
 
   return (
@@ -31,24 +39,15 @@ export default function InviteStaffPage() {
         Back to Staff
       </button>
 
-      <h1 className="text-xl font-bold text-kb-text-body mb-1">Invite Staff</h1>
+      <h1 className="text-xl font-bold text-kb-text-body mb-1">Add Staff</h1>
       <p className="text-sm text-kb-text-muted mb-6">
-        Add a new admin/support account and assign their permission tier.
+        Give an existing Kredibble account staff access and choose its role. They keep their own name and
+        password; ask them to sign up first if they don&apos;t have an account.
       </p>
 
       <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5 flex flex-col gap-4">
         <div>
-          <label className="block text-sm font-medium text-kb-text-body mb-1.5">Full Name</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Ama Boateng"
-            className="w-full h-11 rounded-lg border border-kb-border-input px-3 text-sm text-kb-text-body outline-none focus:border-kb-primary"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-kb-text-body mb-1.5">Email</label>
+          <label className="block text-sm font-medium text-kb-text-body mb-1.5">Account email</label>
           <input
             type="email"
             value={email}
@@ -60,15 +59,13 @@ export default function InviteStaffPage() {
 
         <div>
           <label className="block text-sm font-medium text-kb-text-body mb-1.5">Role</label>
-          <div className="flex gap-2">
-            {ROLES.map((r) => (
+          <div className="flex flex-wrap gap-2">
+            {STAFF_ROLES.map((r) => (
               <button
                 key={r}
                 onClick={() => setRole(r)}
                 className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
-                  role === r
-                    ? "bg-kb-primary text-white"
-                    : "bg-kb-bg-alt border border-kb-border text-kb-text-muted"
+                  role === r ? "bg-kb-primary text-white" : "bg-kb-bg-alt border border-kb-border text-kb-text-muted"
                 }`}
               >
                 {r}
@@ -77,13 +74,15 @@ export default function InviteStaffPage() {
           </div>
         </div>
 
+        {error && <p className="text-sm text-kb-error">{error}</p>}
+
         <button
           onClick={handleInvite}
-          disabled={!isValid}
+          disabled={!isValid || saving}
           className="flex items-center justify-center gap-2 h-11 rounded-lg bg-kb-primary text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-opacity mt-2"
         >
           <UserPlus size={15} />
-          Send Invite
+          {saving ? "Adding..." : "Add Staff Member"}
         </button>
       </div>
     </div>

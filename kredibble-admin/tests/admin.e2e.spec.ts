@@ -357,3 +357,35 @@ test.describe('Community', () => {
     await expect(page.getByRole('button', { name: 'Remove channel' })).toBeVisible();
   });
 });
+
+test.describe('Staff', () => {
+  test('adding an existing account, changing its role and suspending it persist', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/staff/invite`);
+    const email = page.getByPlaceholder('ama.boateng@kredibble.com');
+    await email.fill('nobody@kredibble.com');
+    await page.getByRole('button', { name: 'Writer', exact: true }).click();
+    await page.getByRole('button', { name: 'Add Staff Member' }).click();
+    await expect(page.getByText(/No Kredibble account uses that email/)).toBeVisible();
+
+    await email.fill('e2e-seeker@kredibble.com');
+    await page.getByRole('button', { name: 'Add Staff Member' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/staff`);
+    const row = page.getByRole('link', { name: /E2E Seeker/ });
+    await expect(row.getByText('Writer')).toBeVisible();
+
+    await row.click();
+    await page.getByRole('button', { name: 'Desk Lead', exact: true }).click();
+    await page.getByRole('button', { name: 'Suspend access' }).click();
+    await expect(page.getByRole('button', { name: 'Reinstate access' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Reinstate access' })).toBeVisible();
+
+    await page.goto(`${BASE_URL}/staff`);
+    const updated = page.getByRole('link', { name: /E2E Seeker/ });
+    await expect(updated.getByText('Desk Lead')).toBeVisible();
+    await expect(updated.getByText('Suspended')).toBeVisible();
+  });
+});

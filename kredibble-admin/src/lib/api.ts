@@ -98,6 +98,23 @@ export type ArticleRecord = {
 export type ArticleInput = Pick<ArticleRecord, "title" | "category" | "summary" | "content" | "status"> &
   Partial<Pick<ArticleRecord, "duration" | "bannerImage">>;
 
+/**
+ * Staff-portal roles: the values `requirePortalRoles` checks in
+ * kredibble-backend/src/routes/admin-api.js. A role outside this list grants nothing.
+ */
+export const STAFF_ROLES = [
+  "Desk Lead",
+  "Admin Support",
+  "Writer",
+  "Opportunities Officer",
+  "Partnerships Officer",
+  "Training and Capacity Development Officer",
+  "Database Officer",
+  "Communications Officer",
+  "Social Media Manager",
+  "Country Lead",
+] as const;
+
 export type StaffMember = {
   id: string;
   userId: string;
