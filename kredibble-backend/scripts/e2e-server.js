@@ -133,6 +133,21 @@ const reviewCase = await CompanyVerification.create({
   submittedDate: '03 Oct 2026',
   overallStatus: 'pending',
 });
+const { Opportunity } = await import('../src/models/Platform.js');
+
+// Opportunity moderation (SEC-077 Task 11).
+await Opportunity.create({
+  title: 'E2E Pending Role',
+  type: 'job',
+  company: 'E2E Holdings',
+  location: 'Accra',
+  description: 'E2E posting description',
+  workType: 'Remote',
+  salary: 'GHS 5,000',
+  moderationStatus: 'pending',
+  vetted: false,
+});
+
 await VerificationDoc.create([
   { companyId: reviewAccount._id, verificationCaseId: reviewCase._id, key: 'businessReg', label: 'E2E Business Registration', fileName: 'registration.pdf' },
   { companyId: reviewAccount._id, verificationCaseId: reviewCase._id, key: 'orgId', label: 'E2E Organisation ID', fileName: 'org-id.pdf' },

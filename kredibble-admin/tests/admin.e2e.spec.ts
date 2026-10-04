@@ -418,3 +418,24 @@ test.describe('Verification review', () => {
     await expect(page.getByText('E2E Verify Co')).toBeVisible();
   });
 });
+
+test.describe('Opportunity review', () => {
+  test('approving a pending posting publishes it', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/opportunities`);
+    await page.getByText('E2E Pending Role').click();
+    await expect(page.getByRole('heading', { name: 'E2E Pending Role' })).toBeVisible();
+    await expect(page.getByText('E2E posting description')).toBeVisible();
+    await expect(page.getByTestId('moderation-status')).toHaveText('Pending');
+
+    await page.getByRole('button', { name: 'Approve' }).click();
+    await expect(page.getByTestId('moderation-status')).toHaveText('Published');
+    await page.reload();
+    await expect(page.getByTestId('moderation-status')).toHaveText('Published');
+
+    await page.goto(`${BASE_URL}/opportunities`);
+    await expect(page.getByRole('link', { name: /E2E Pending Role/ }).getByText('Published')).toBeVisible();
+  });
+});

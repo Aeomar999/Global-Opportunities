@@ -208,6 +208,12 @@ export type OpportunityRecord = {
   description: string;
   workType?: string;
   salary?: string;
+  date?: string;
+  eventDateTime?: string;
+  eventRegion?: string;
+  eventCategory?: string;
+  grantBudgetRange?: string;
+  grantSector?: string;
   deadline?: string;
   eligibility?: string;
   benefits?: string;

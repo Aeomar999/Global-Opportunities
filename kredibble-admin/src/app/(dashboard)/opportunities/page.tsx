@@ -7,12 +7,16 @@ import { getOpportunities } from "@/lib/api";
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   pending: { bg: "#FFFBEB", text: "#B7791F", label: "Pending" },
+  published: { bg: "#F0FDF4", text: "#16A34A", label: "Published" },
   approved: { bg: "#F0FDF4", text: "#16A34A", label: "Approved" },
   rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
+  closed: { bg: "#F3F4F6", text: "#6B7280", label: "Closed" },
 };
 
 const TYPE_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+  job: { label: "Job", icon: Briefcase, color: "#6671E4" },
   jobs: { label: "Job", icon: Briefcase, color: "#6671E4" },
+  internship: { label: "Internship", icon: GraduationCap, color: "#F59E0B" },
   internships: { label: "Internship", icon: GraduationCap, color: "#F59E0B" },
   events: { label: "Event", icon: CalendarDays, color: "#10B981" },
   grants: { label: "Grant", icon: HandCoins, color: "#EF4444" },
