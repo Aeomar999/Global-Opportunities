@@ -224,7 +224,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ✅ Done |
 | SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | ✅ Done (admin data API + contract test, 8b68a3c) |
 | SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | ✅ Done |
-| SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | 🟡 API complete; 16 pages still on mock data |
+| SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | ✅ Done (all pages on the admin API, mock files deleted, every admin update audited) |
 | SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | Open |
 | SEC-079 | Admin CSP allows `'unsafe-inline' 'unsafe-eval'` | P2 | Admin app | Open |
 | SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | ⚠️ Reopened — refresh only fires on message 'jwt expired', which the API never sends |
@@ -251,6 +251,12 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-101 | Deletion follow-ups: counters not decremented; kept public content can point at deleted media; `Ambassador`/`Beneficiary` PII untouched; testimonials matched on a typed email; tombstone `emailHash` and reset-code hashes are unkeyed SHA-256 | P2 | Backend | Open |
 | SEC-102 | `registerSchema` uses the Zod 3 `errorMap`, which Zod 4.6.5 ignores (custom role error message lost) | P3 | Backend | Open |
 | SEC-103 | Account-security polish: deletion scheduler has no backoff or in-flight guard; a 500 after the tombstone write can still lead to a scheduled erasure; self-delete admin check reads the JWT role claim; latent fail-open in `isLegacyMember` | P3 | Backend | Open |
+| SEC-104 | Staff-portal `POST/PATCH /admin/opportunities` spread the whole request body into the posting (`prepareOpportunity`): mass assignment of `applicantsCount`, `createdBy`, `hirerId`, `wordpressSync`… | P2 | Backend routes | Open |
+| SEC-105 | Admin traffic reaches the API through the Vercel proxy and `trust proxy` is 1 (Render's hop), so every admin is keyed on Vercel's egress IP and shares one 100-request/15-min bucket | P2 | Backend + Deployment | Open |
+| SEC-106 | Staff-portal `GET /admin/opportunities` put query values straight into the Mongo filter (operator injection, SEC-061 class) | P2 | Backend routes | ✅ Done (be2865e) |
+| SEC-107 | A channel an admin marked `removed` stayed listed, readable and postable for everyone | P1 | Backend routes | ✅ Done (9a873ac) |
+| SEC-108 | `collectionRoutes` audited admin updates only when an admin-only field changed, so report, event, grant, channel and staff decisions left no audit row | P1 | Backend | ✅ Done (1a418c9) |
+| SEC-109 | The admin e2e server loaded `kredibble-backend/.env`, so an upload test reached the real Cloudinary account (3 × 1×1 PNG, 67 B, `kredibble/kredibble/admin/article-banner/`, 2026-10-04 03:21 UTC) | P2 | Tests / Ops | ✅ Done (5ebe9a9); test files left for the owner to delete |
 
 ---
 
@@ -1141,8 +1147,8 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 **Fix:** Wire each page to the admin API (SEC-075), deleting its mock file as you go, with empty, error and loading states. Admin mutations must be audit-logged.
 **Status:** Admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents have been added to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. **Seekers and Hirers list/detail pages wired to API.** Remaining work: wire remaining admin pages to API, delete mock files, add loading/error/empty states.
 **Acceptance criteria:**
-- [ ] `rg "lib/mock-" kredibble-admin/src/app` returns nothing
-- [ ] Every admin action persists and appears in `AuditLog`
+- [x] `rg "lib/mock-" kredibble-admin/src/app` returns nothing (all `src/lib/mock-*.ts` deleted)
+- [x] Every admin action persists and appears in `AuditLog` (creates, deletes and, since 1a418c9, every admin update; staff invites audited)
 
 ### SEC-078 — Admin Next.js has critical advisories
 **Evidence:** `npm audit --omit=dev` in `kredibble-admin`: `next@16.2.10` is critical (RCE in image optimisation and `next/og`, middleware bypass, SSRF, cache confusion); `postcss` and `sharp` are high.
@@ -1294,6 +1300,18 @@ The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 50
 - The self-delete admin check reads the JWT `role` claim instead of the loaded user's role.
 - `isLegacyMember` compares against a possibly-`undefined` user id (not reachable today).
 - The `/refresh` deleted/missing-user branch writes no audit row.
+
+### SEC-104 — Mass assignment on staff-portal opportunity writes
+**Evidence:** `prepareOpportunity` in `routes/admin-api.js` starts from `{ ...data }`, the raw request body, for both `POST` and `PATCH /admin/opportunities`. A staff member with an opportunity role (or an admin) can set any field: `applicantsCount`, `createdBy`, `hirerId`, `wordpressSync`, `vettedBy`. The collection routes reduce bodies to an allowlist (SEC-007); this path doesn't.
+**Fix:** build the update from an explicit allowlist (the `opportunities` policy fields, plus `vetted` and `moderationStatus` for moderation) and set `vettedBy`/`vettedAt` server-side only.
+**Acceptance criteria:**
+- [ ] `PATCH /admin/opportunities/:id { applicantsCount: 999, createdBy: <id> }` leaves both unchanged (test)
+
+### SEC-105 — Admins share one rate-limit bucket behind the Vercel proxy
+**Evidence:** the admin calls the API through Vercel's same-origin rewrite. `app.js` sets `trust proxy` to 1, the Render hop, so `req.ip` is the Vercel server that forwarded the request, not the admin's browser. The global limiter (100 requests / 15 min per IP) therefore counts all admins together; a busy dashboard (each page makes 2–3 calls) will start answering 429.
+**Fix:** either trust the extra Vercel hop for admin traffic (`trust proxy` 2, if every request really passes Render → Vercel) or key the limiter on the authenticated admin id for admin routes; verify against staging before changing.
+**Acceptance criteria:**
+- [ ] Two admins behind the proxy get independent limits (staging test)
 
 ## P3 — Docs & code health (new)
 
@@ -1506,6 +1524,10 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-04 | SEC-077 (partial) | — | In Progress | Added admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. Remaining: wire admin pages to API, delete mock files, add loading/error states. All 153 backend tests pass. |
 | 2026-10-04 | Correction: SEC-075 / SEC-077 entries above | f2921d2 | Inaccurate | A supertest probe with a valid admin cookie on `main` @ `f2921d2`: 9 of the 12 `/api/v1/admin/*` paths the admin client called returned `404 Route not found` (seekers, hirers, verification companies and documents, events, grants, articles, staff, community). `admin-api.js` was the staff-portal router with the new guard; the routes listed above were never added. The seekers, hirers and verification pages were broken in production. CI stayed green because no test called those paths. |
 | 2026-10-04 | SEC-075 (admin data API) | 45ed6ba, 8b68a3c, 9137d2c, c3bf053 | Done | `collectionRoutes` gains `authenticate`, `filterFields` (string-only, SEC-061), `searchFilter`, `populateAlways`, `decorate`. `mountAdminDataRoutes` serves seekers, hirers, verification companies/documents, events, grants, articles, staff, reports and community channels under `/admin` behind `requireAdminAuth` (admin sessions only; user Bearer tokens, even an admin's, get 401; staff-portal roles get no access), plus nested document and channel-post lists. Seekers/hirers carry the owner's name and email; hirers carry verification status and posting count. `tests/admin-api-contract.test.js` calls every path in `kredibble-admin/src/lib/api.ts` and fails on `Route not found`. Admin client: `requestPage` keeps `meta`; `request` tolerates 204; dead `createVerificationDocument` removed. Playwright: seekers, hirers and verification pages show seeded records. Backend 167/167, admin e2e 15/15. |
+| 2026-10-04 | SEC-077 (admin API, part 2) | be2865e, a1d542a, feaf665 | Done | Admin routes for grant applications, community posts, single opportunity, analytics, staff invite by email (existing accounts only; 404/409; audited without the email) and an image-only admin upload (`createUploadRouter` factory; user uploads unchanged). Admin client types now mirror the backend models. |
+| 2026-10-04 | SEC-077 (pages) | 0918722, b9aca6c, 8139d19, 5ebe9a9, 9a873ac, 1a418c9, 623ff5e, 141b542, 1d484ed | Done | Reports, events, grants, articles (create/edit, banner upload stores only the returned URL), community moderation, staff (real portal roles), verification review (explicit company decision), opportunity review (approve = vetted + published) and analytics all read and write through the admin API, each with a Playwright test proving an action persists across a reload. Dropped rather than faked: the grant page's in-browser 'allocated' recalculation (SEC-060 still open, so approvals record a decision only) and the staff invite's Full Name field. Mock roles (Super Admin/Moderator/Support) replaced with the staff-portal roles `requirePortalRoles` checks. |
+| 2026-10-04 | SEC-106, SEC-107, SEC-108, SEC-109 | be2865e, 9a873ac, 1a418c9, 5ebe9a9 | Done | Found while wiring the pages: portal opportunity filter injection; removed channels still public; admin updates unaudited; e2e server reaching real Cloudinary (3 test images uploaded, left for the owner to delete). Also: e2e server sets `E2E_SERVER=1` to skip rate limits (ignored in production, unit-tested). Filed open: SEC-104 (portal mass assignment), SEC-105 (admins share one rate-limit bucket behind the Vercel proxy). |
+| 2026-10-04 | SEC-077 (mock data removed) | (this commit) | Done | All ten `kredibble-admin/src/lib/mock-*.ts` deleted; `rg "lib/mock-" kredibble-admin/src` is empty. Backend 179/179 (lint clean); admin lint, typecheck, build pass; admin e2e 24/24. |
 
 ---
 
