@@ -96,6 +96,34 @@ export const requireAuth = async (req, res, next) => {
   }
 };
 
+/**
+ * SEC-062 / Q9: Progressive email verification middleware.
+ * Gates high-trust actions (applications, listings, verifications) behind email confirmation.
+ */
+export const requireEmailVerified = async (req, res, next) => {
+  // In tests, only enforce when explicitly enabled
+  if (env.isTest && process.env.REQUIRE_EMAIL_VERIFICATION !== 'true') {
+    return next();
+  }
+  // Admins always bypass verification checks
+  if (req.auth?.role === 'admin') {
+    return next();
+  }
+
+  const user = await User.findById(req.auth?.sub).select('emailVerified role').lean();
+  if (!user || user.role === 'deleted') {
+    return next(new ApiError(401, 'Account no longer active'));
+  }
+
+  if (!user.emailVerified) {
+    const error = new ApiError(403, 'Email verification is required to perform this action');
+    error.code = 'EMAIL_VERIFICATION_REQUIRED';
+    return next(error);
+  }
+
+  next();
+};
+
 export const requireAdminAuth = async (req, res, next) => {
   // Try cookie first (admin panel), then Authorization header (API clients)
   const cookieToken = req.cookies?.[COOKIE_NAME];

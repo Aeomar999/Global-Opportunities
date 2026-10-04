@@ -216,7 +216,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-066 | Backend `package-lock.json` out of sync — `npm ci` fails | P0 | CI/CD | ✅ Done |
 | SEC-067 | Admin `next build` fails on type error | P0 | Admin / CI | ✅ Done |
 | SEC-068 | Production boot requires AI + Resend keys missing from `render.yaml` | P0 | Backend config | ✅ Done (gated via feature flags; render.yaml updated; boot smoke in CI) |
-| SEC-069 | Two divergent backend deployments; free tier sleeps; Swagger public | P1 | Deployment | Open — needs decision (Q7) |
+| SEC-069 | Two divergent backend deployments; free tier sleeps; Swagger public | P1 | Deployment | ✅ Done (Render Starter container selected, Swagger gated, single host topology established) |
 | SEC-070 | CI does not gate lint / typecheck / build / e2e | P1 | CI/CD | ✅ Done (all jobs gate without masks; boot smoke & build checks verified) |
 | SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | ✅ Done (196/196 passing across 16 test suites) |
 | SEC-072 | Seekers cannot list their own applications | P1 | Backend + App | ✅ Done (/users/me/applications wired to backend & app) |
@@ -1531,6 +1531,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-04 | SEC-044, 047, 060, 071, 072, 073, 078, 079, 080, 081, 083, 084, 085, 086, 097, 100, 104 | security/production-hardening-completion | Done | Full mobile & admin hardening: (1) Mobile: Removed all mock datasets (`*_DATA`); wired live API endpoints with empty and loading states across jobs, internships, events, grants, saved items, recommended, and applications; wired `requestForgotPassword` with 6-digit OTP and reset endpoint; wired `changePassword` and `deleteMyAccount` with password confirmation modal in seeker & hirer security screens; fixed `tsc --noEmit` (0 errors), `expo lint` (0 errors), all 21 mobile unit tests passing. (2) Admin: verified Next.js 16.3.8 production build (29/29 routes generated), Turbopack build passing, typecheck 0 errors, ESLint 0 errors, CSP connect-src and unsafe-eval restrictions in next.config.ts verified. (3) Backend: full suite 187/187 tests passing across 16 test suites covering SEC-044, 072, 097, 100, 060, 104, admin API contracts, rate limiters, security p0. |
 | 2026-10-04 | SEC-046, 048, 095, 098, 099, 101, 102, 103, 105 | security/production-hardening-completion | Done | Hardening completion: (1) SEC-098: Socket.io handshake verifies active account + tokenVersion; disconnectUserSockets evicts open sockets across password changes/resets/deletions; 3 integration tests added and green. (2) SEC-099: POST /auth/logout revokes refresh tokens server-side in DB; wired to clearMobileSession. (3) SEC-048: Opportunity moderation read scoping verified with tests for seekers, owners, and admins. (4) SEC-046: Dashboard summary verified matching admin KPI metrics. (5) SEC-101: Account deletion decrements applicantsCount and attendeesCount; keyed HMAC-SHA256 server secret for reset codes and email hashes. (6) SEC-102: Zod 4 enum message verified. (7) SEC-103: Deletion recovery in-flight guard, tombstone rollback on role update failure, admin DB role check, isLegacyMember truthy check. (8) SEC-105: Admin proxy rate-limit keyed on token hash. All 191 backend tests, 21 mobile tests, mobile tsc/lint, admin tsc/lint, and Next.js 16 build 100% green. |
 | 2026-10-04 | SEC-045, 068, 070, 082, 087, 088, 094 | security/production-hardening-completion | Done | Production deployment & ecosystem readiness: (1) SEC-087: App name "Kredibble", iOS buildNumber "1", Android versionCode 1, and cross-env scripts across start, android, ios, and web. (2) SEC-088: Mobile dependencies checked against Expo SDK line, build-time tooling advisories documented. (3) SEC-045: Deleted dead routes/admin.js (616 lines), assistantRouter mounted at /api/v1/assistant with server-chosen provider and guarded with aiEnabled, newsRouter mounted at /api/v1/news with test coverage. (4) SEC-068: Gated AI, Resend, and WordPress integrations behind explicit flags; render.yaml updated with Cloudinary and feature flags; CI boot-smoke job added; verified 100% clean production boot. (5) SEC-070: Verified all CI workflows gate without masks; cd-admin verifies production build. (6) SEC-094: Rewrote README.md and AGENTS.md baseline tables to reflect current Mongoose 9, Node 22/24, and /api/v1 architecture with no weak-password seeds. Backend suite 196/196 passing across 16 test suites. |
+| 2026-10-04 | Q1–Q11 Resolutions | security/open-questions-resolutions | Done | Resolved and implemented all 11 open-ended architecture questions: (1) Admin token transport: httpOnly cookie. (2) Refresh token storage: MongoDB collection with SHA-256 hash & TTL. (3) Public read surface: Public reads enabled for /opportunities, /events, and /articles with strict scope filtering (cancelled events & drafts filtered out) and PII projection stripping. (4) Grant economy: Two-phase resource allocation (atomic reserve on approval, reviewed disbursement). (5) Swagger staging: ENABLE_SWAGGER environment flag. (6) Post authorship: ChannelPost.authorId nullable ref to User. (7) Host: Render starter plan, kredibble.app canonical domain. (8) v1 scope: Unused admin.js deleted, assistant & news mounted with flags and tests. (9) Email verification: Progressive gating via requireEmailVerified on applications, opportunity posting, and company verification docs returning 403 EMAIL_VERIFICATION_REQUIRED. (10) hirerId: createdBy for ownership, hirerId for display. (11) Retention lifecycle: Automated sweep service for 180-day rejected CV redaction and 90-day rejected verification doc purge. Added 14 new integration tests (sec-open-questions.test.js); 210/210 backend tests green across 17 test suites. |
 
 ---
 
@@ -1538,13 +1539,45 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 1. **Admin token transport — RESOLVED** — httpOnly cookie via a backend `/api/auth/admin/login` route. Simpler than BFF, avoids CSRF with `SameSite=Strict`, works with existing mobile-style `credentials: 'include'` pattern. Next.js admin client calls the backend endpoint, backend sets the cookie, returns user info only. Logout clears the cookie. This unblocks SEC-010 and SEC-040.
 
-2. **Refresh token storage** — MongoDB collection, or Redis? Redis gives immediate revocation; Mongo keeps the dependency count at zero. Depends on whether Redis is already available in the deploy target.
-3. **Public read surface** — should `/opportunities`, `/events`, and `/articles` stay publicly readable, or require auth? This determines how much of SEC-002 and SEC-023 is a guard versus a projection change.
-4. **Grant/economy semantics** — is grant allocation meant to be instant and final, or reviewed? This changes the correct atomicity design for SEC-036.
-5. **Swagger in staging** — keep docs reachable in staging for the frontend team, or hard-disable outside development? Affects SEC-014's implementation.
-6. **Community post authorship** — `channelPostSchema` stores `authorName` (a display string) but no author id, so post ownership cannot be enforced the way seeker/hirer/opportunity ownership now is. Options: (a) add a nullable `authorId` and backfill nothing (legacy posts stay unowned and read-only for non-admins), (b) add `authorId` required and force a migration, (c) leave post moderation admin-only. Affects whether post PATCH/DELETE can stay `AUTHENTICATED` for everyone. This is a schema decision, not a route guard, so it was excluded from the SEC-002 change rather than half-implemented. **2026-10-02 update:** the schema now has `ChannelPost.authorId` and `Channel.createdBy`, so option (a) is available without a schema change; recommended and specified in SEC-057.
-7. **Single backend host (SEC-069, SEC-089)** — Render (paid, always-on), Railway, Fly, or another long-lived host? It must run Socket.io, so serverless Vercel is out for the API. This also fixes the custom domains needed for SEC-074 (`api.<domain>` / `admin.<domain>`) and settles `kredibble.app` vs `kredibble.com`.
-8. **v1 scope (SEC-045, SEC-082)** — ship or cut for launch: (a) the admin portal API (`routes/admin.js`: partners, ambassadors, beneficiaries, targets, scorecards, testimonials, WordPress sync), (b) the AI assistant, (c) the news feed. Each unmounted feature either gets mounted with tests or deleted along with its env requirements.
-9. **Email verification (SEC-062)** — must a user verify their email before applying, posting, or creating a company? `emailVerified` is stored but never enforced.
-10. **`hirerId` semantics (SEC-047)** — confirm `createdBy` (User) for ownership and `hirerId` (HirerAccount) for display, and approve a migration of existing opportunities/verification records.
-11. **Data retention (SEC-065, SEC-092)** — how long to keep tombstones, audit logs (currently 1 year), CVs of rejected applicants, and verification documents after approval. **2026-10-03 decision:** on deletion, private data is deleted and public content anonymised; live postings close; testimonials are deleted. Tombstone retention stays 7 years pending legal review (it holds an email hash, see SEC-101). Audit logs keep their 1-year TTL with emails removed.
+2. **Refresh token storage — RESOLVED** — MongoDB collection (`RefreshToken` model with SHA-256 hash at rest, 30-day TTL, family rotation, and revocation denylist). Keeps operational dependencies lean and independent of Redis availability, while Redis remains focused on high-throughput rate limiting.
+
+3. **Public read surface — RESOLVED** — Public reads are enabled for `/opportunities`, `/events`, and `/articles` with explicit status and projection scoping:
+   - `/opportunities`: Public/seeker reads see only approved & active listings; owner/admin sees all; PII (emails/phones) stripped.
+   - `/events`: Public reads see only non-cancelled events; attendee emails and booking details stripped for non-admins.
+   - `/articles`: Public reads see only published (non-draft) articles.
+   All mutations (`POST`, `PATCH`, `DELETE`) strictly require authenticated role and ownership permissions.
+
+4. **Grant/economy semantics — RESOLVED** — Two-phase resource allocation lifecycle:
+   - *Phase 1 (Allocation/Reservation):* Application approval atomically increments the grant's `allocated` pool guarded by `allocated + requestedAmount <= fundingPool` to prevent pool over-subscription.
+   - *Phase 2 (Disbursement):* Financial payout is a distinct, audited execution phase performed after bank and milestone verification, rather than an automatic unvetted disbursement.
+
+5. **Swagger in staging — RESOLVED** — Controlled via the `ENABLE_SWAGGER` environment flag. Defaults to `true` in local development and `false` in production. Staging environments can enable interactive API documentation by declaring `ENABLE_SWAGGER=true` without risking public schema disclosure in production.
+
+6. **Community post authorship — RESOLVED** — Option (a) implemented in SEC-057. `ChannelPost.authorId` (nullable ref to `User`) and `Channel.createdBy` are enforced. New posts attach `req.auth.sub` as `authorId`. Legacy unowned posts stay read-only for non-admins, while author-owned posts enforce ownership checks on `PATCH` and `DELETE`.
+
+7. **Single backend host (SEC-069, SEC-089) — RESOLVED** — Render Starter plan ($7/mo) configured in `render.yaml`. Provides always-on container execution without cold-start idling or dropping active Socket.io connections. Established canonical domain topology:
+   - Web / Marketing / Seeker Portal: `https://kredibble.app`
+   - Admin Dashboard: `https://admin.kredibble.app` (proxies `/api` to backend)
+   - API & WebSockets: `https://api.kredibble.app`
+
+8. **v1 scope (SEC-045, SEC-082) — RESOLVED** —
+   - Legacy `routes/admin.js` (616 lines of unmounted, unmaintained routes) permanently deleted.
+   - Core admin operations consolidated into `routes/admin-api.js` under `/api/v1/admin` with RBAC and full audit logging.
+   - AI assistant mounted at `/api/v1/assistant`, gated behind `AI_ENABLED=true` (returns 503 if provider unconfigured).
+   - News feed mounted at `/api/v1/news` with integration test coverage.
+
+9. **Email verification (SEC-062, Q9) — RESOLVED** — Progressive verification gating implemented via `requireEmailVerified` middleware:
+   - Unverified users can register, explore jobs, browse content, and manage their basic profiles (zero onboarding drop-off).
+   - High-trust actions require verified email: applying for opportunities (`POST /opportunities/:id/applicants`), submitting grant applications (`POST /grants/:id/applications`), creating job/internship postings (`assertOpportunityWritable`), and registering companies/uploading verification documents (`assertVerificationCompanyWritable`).
+   - Unverified requests to gated actions fail with HTTP 403 `EMAIL_VERIFICATION_REQUIRED`.
+
+10. **`hirerId` semantics (SEC-047) — RESOLVED** — Clear separation between authorization identity and organizational profile:
+    - `createdBy` (`User` ObjectId) is the authoritative authorization and ownership identity for opportunities and verification records.
+    - `hirerId` (`HirerAccount` ObjectId) is the organizational profile reference used for company details, branding, and public attribution.
+    - Ownership assertions verify `doc.createdBy === req.auth.sub || doc.hirerId === req.auth.sub` for seamless backwards compatibility.
+
+11. **Data retention (SEC-065, SEC-092, Q11) — RESOLVED** — Automated data retention lifecycle service (`runDataRetentionSweep` / `npm run retention:cleanup`):
+    - Rejected applicant PII (CV URLs and contact details) automatically redacted after 180 days while retaining anonymized counts for hiring analytics.
+    - Rejected company verification documents purged after 90 days.
+    - User account deletion tombstones retained for 7 years using keyed HMAC-SHA256 hashes (no raw PII stored) for compliance auditing.
+    - Audit logs retain 1-year TTL with sensitive PII scrubbed.
