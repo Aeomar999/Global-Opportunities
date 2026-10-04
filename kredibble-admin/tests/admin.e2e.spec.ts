@@ -331,3 +331,29 @@ test.describe('Articles', () => {
     await expect(page.getByRole('link', { name: /E2E Article/ }).getByText('Published')).toBeVisible();
   });
 });
+
+test.describe('Community', () => {
+  test('removing a post and removing/restoring the channel persist', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/community`);
+    await page.getByText('E2E Builders').click();
+    await expect(page.getByRole('heading', { name: 'E2E Builders' })).toBeVisible();
+    await expect(page.getByText('E2E spam post')).toBeVisible();
+
+    await page.getByTitle('Remove post').click();
+    await expect(page.getByText('E2E spam post')).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'E2E Builders' })).toBeVisible();
+    await expect(page.getByText('E2E spam post')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Remove channel' }).click();
+    await expect(page.getByRole('button', { name: 'Restore channel' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByText('Removed', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Restore channel' }).click();
+    await expect(page.getByRole('button', { name: 'Remove channel' })).toBeVisible();
+  });
+});

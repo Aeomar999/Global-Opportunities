@@ -216,3 +216,14 @@ describe('createRedisStoreWithFallback', () => {
     await expect(store.init({ windowMs: WINDOW_MS })).resolves.toBeUndefined();
   });
 });
+
+describe('E2E mode (admin Playwright server only)', () => {
+  it('turns on only for E2E_SERVER=1 outside production', async () => {
+    const { e2eModeEnabled } = await import('../src/config/env.js');
+
+    expect(e2eModeEnabled({ NODE_ENV: 'development', E2E_SERVER: '1' })).toBe(true);
+    expect(e2eModeEnabled({ NODE_ENV: 'production', E2E_SERVER: '1' })).toBe(false);
+    expect(e2eModeEnabled({ NODE_ENV: 'development' })).toBe(false);
+    expect(e2eModeEnabled({ NODE_ENV: 'development', E2E_SERVER: 'true' })).toBe(false);
+  });
+});

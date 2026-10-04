@@ -198,7 +198,8 @@ function createRateLimiter({ prefix, windowMs, limit, message, keyGenerator, ski
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     keyGenerator: keyGenerator || ((req) => ipKeyGenerator(req.ip)),
-    skip: skip || (() => env.isTest),
+    // Off under Jest and on the admin e2e server only; env.isE2E is never true in production.
+    skip: skip || (() => env.isTest || env.isE2E),
   };
 
   if (client) {

@@ -133,6 +133,7 @@ export type ChannelPost = {
   authorId?: { id: string; name: string; email: string; avatarUrl?: string } | string | null;
   title?: string;
   body: string;
+  date?: string;
   flagged: boolean;
   createdAt: string;
 };

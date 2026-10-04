@@ -168,3 +168,28 @@ describe('SEC-077: admin image upload', () => {
     expect(asUser.status).toBe(401);
   });
 });
+
+describe('SEC-077: a channel an admin removed is hidden from users', () => {
+  it('drops out of the public list, its pages answer 404, and nobody can post in it', async () => {
+    const admin = await createAdmin();
+    const member = await User.create({ name: 'Ama', email: 'ama@example.com', role: 'seeker', passwordHash: 'x' });
+    const memberAuth = ['Authorization', `Bearer ${signToken(member)}`];
+    const removed = await Channel.create({ name: 'Removed group', category: 'Tech', status: 'removed', createdBy: member._id });
+    await Channel.create({ name: 'Live group', category: 'Tech' });
+
+    const list = await request(app).get(api('/community/channels'));
+    const detail = await request(app).get(api(`/community/channels/${removed._id}`));
+    const posts = await request(app).get(api(`/community/channels/${removed._id}/posts`));
+    const ownerDetail = await request(app).get(api(`/community/channels/${removed._id}`)).set(...memberAuth);
+    const newPost = await request(app).post(api(`/community/channels/${removed._id}/posts`)).set(...memberAuth)
+      .send({ body: 'Still here?' });
+    const adminList = await request(app).get(api('/admin/community/channels')).set('Cookie', adminCookie(admin));
+
+    expect(list.body.data.map((c) => c.name)).toEqual(['Live group']);
+    expect(detail.status).toBe(404);
+    expect(posts.status).toBe(404);
+    expect(ownerDetail.status).toBe(404);
+    expect(newPost.status).toBe(404);
+    expect(adminList.body.data.map((c) => c.name).sort()).toEqual(['Live group', 'Removed group']);
+  });
+});

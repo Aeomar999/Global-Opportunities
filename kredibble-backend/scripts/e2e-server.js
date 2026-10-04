@@ -24,6 +24,8 @@ process.env.NODE_ENV = 'development';
 process.env.DATABASE_URL = mongo.getUri();
 process.env.PORT ||= '4000';
 process.env.CORS_ORIGIN ||= 'http://localhost:3000';
+// One Playwright suite from one IP would otherwise trip the API rate limits (see env.isE2E).
+process.env.E2E_SERVER = '1';
 // Never reach real third-party services from the e2e API, whatever .env holds:
 // empty values make uploads answer "Cloudinary is not configured" and email a no-op.
 for (const key of ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'RESEND_API_KEY']) {
@@ -92,6 +94,24 @@ const grant = await Grant.create({
   status: 'open',
 });
 await GrantApplication.create({ grantId: grant._id, applicantName: 'E2E Applicant', requestedAmount: 2000 });
+
+const { Channel, ChannelPost } = await import('../src/models/Community.js');
+
+// Community moderation (SEC-077 Task 8).
+const channel = await Channel.create({
+  name: 'E2E Builders',
+  category: 'Tech',
+  owner: 'E2E Owner',
+  followers: '12 followers',
+  postsCount: 1,
+});
+await ChannelPost.create({
+  channelId: channel._id,
+  authorName: 'E2E Poster',
+  body: 'E2E spam post',
+  date: '04 Oct 2026',
+  flagged: true,
+});
 
 const server = http.createServer(app).listen(env.port, () => {
   console.log(`e2e API listening on http://localhost:${env.port}/api`);

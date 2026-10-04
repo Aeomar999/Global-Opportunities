@@ -454,6 +454,11 @@ const canManageChannel = async (channel, user) => {
   return membership?.status === 'active' && membership.role === 'admin';
 };
 
+/** SEC-077: a channel an admin removed is gone for everyone else, owner included. */
+const assertChannelVisible = (channel, user) => {
+  if (channel.status === 'removed' && user?.role !== ADMIN) throw notFound('Channel');
+};
+
 const requireChannelAdmin = async (channel, user) => {
   if (!await canManageChannel(channel, user)) throw new ApiError(403, 'Only a community admin can manage this group');
 };
@@ -919,6 +924,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       ? { $or: [{ visibility: 'public' }, { createdBy: req.auth.sub }, { memberIds: req.auth.sub }, { _id: { $in: membershipChannelIds } }] }
       : { visibility: 'public' };
     const clauses = [visible];
+    if (req.auth?.role !== ADMIN) clauses.push({ status: { $ne: 'removed' } });
     if (req.query.visibility) clauses.push({ visibility: String(req.query.visibility) });
     const pattern = searchPattern(req.query.q);
     if (pattern) clauses.push({ $or: [{ name: pattern }, { category: pattern }] });
@@ -962,6 +968,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.get('/community/channels/:channelId', optionalAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     itemResponse(res, toClientObject(channel));
   }));
@@ -1057,6 +1064,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.get('/community/channels/:channelId/posts', optionalAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     const { page, limit, skip } = parsePagination(req.query);
     const filter = { channelId: channel._id };
@@ -1069,6 +1077,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.post('/community/channels/:channelId/posts', requireAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     const author = await User.findById(req.auth.sub);
     // SEC-007: author identity comes from the token; only content fields come from the body.
