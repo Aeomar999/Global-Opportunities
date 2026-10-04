@@ -16,7 +16,7 @@ export const signToken = (user) => {
 export const signAdminToken = (user) => {
   const userId = user.id || user._id;
   return jwt.sign(
-    { sub: userId, role: user.role, email: user.email, aud: 'kredibble-admin' },
+    { sub: userId, role: user.role, email: user.email, aud: 'kredibble-admin', tv: user.tokenVersion || 0 },
     env.adminJwtSecret,
     { expiresIn: '15m' }
   );
@@ -115,6 +115,9 @@ export const requireAdminAuth = async (req, res, next) => {
     const user = await User.findById(payload.sub).select('tokenVersion role').lean();
     if (!user || user.role === 'deleted') {
       return next(new ApiError(401, 'Account no longer active'));
+    }
+    if (payload.tv !== undefined && payload.tv !== user.tokenVersion) {
+      return next(new ApiError(401, 'Token revoked due to security event'));
     }
     
     req.auth = payload;

@@ -470,7 +470,7 @@ const getMembership = (channelId, userId) =>
   userId ? CommunityMembership.findOne({ channelId, userId }) : null;
 
 const isLegacyMember = (channel, userId) =>
-  (channel.memberIds || []).some((memberId) => toId(memberId) === userId);
+  Boolean(userId) && (channel.memberIds || []).some((memberId) => Boolean(memberId) && toId(memberId) === String(userId));
 
 const canAccessChannel = async (channel, user) => {
   if (channel.visibility === 'public' || user?.role === ADMIN || isChannelCreator(channel, user)) return true;

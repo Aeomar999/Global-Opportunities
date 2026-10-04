@@ -2,7 +2,7 @@ import { io as ClientIO } from 'socket.io-client';
 import http from 'http';
 import jwt from 'jsonwebtoken';
 import { app } from '../src/app.js';
-import { initSocket } from '../src/socket.js';
+import { initSocket, disconnectUserSockets } from '../src/socket.js';
 import { signToken } from '../src/middleware/auth.js';
 import { User } from '../src/models/User.js';
 import { Channel, CommunityMembership } from '../src/models/Community.js';
@@ -181,5 +181,39 @@ describe('SEC-004: Socket.io transport authentication and room isolation', () =>
       socketB.disconnect();
       await new Promise(r => setTimeout(r, 50));
     }, 15000);
+  });
+
+  describe('SEC-098: socket revocation and eviction', () => {
+    it('refuses handshake when account is marked deleted', async () => {
+      const { user, token } = await makeUser({ email: 'deleted-user@socket.test' });
+      user.role = 'deleted';
+      await user.save();
+
+      await expect(connectSocket(token)).rejects.toThrow('UNAUTHORIZED: Account no longer active');
+    });
+
+    it('refuses handshake when tokenVersion has been bumped', async () => {
+      const { user, token } = await makeUser({ email: 'bumped-tv@socket.test' });
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
+      await user.save();
+
+      await expect(connectSocket(token)).rejects.toThrow('UNAUTHORIZED: Token revoked due to security event');
+    });
+
+    it('evicts open sockets when disconnectUserSockets is called', async () => {
+      const { user, token } = await makeUser({ email: 'evicted-user@socket.test' });
+      const socket = await connectSocket(token);
+      expect(socket.connected).toBe(true);
+
+      const disconnectPromise = new Promise((resolve) => {
+        socket.on('disconnect', (reason) => resolve(reason));
+      });
+
+      disconnectUserSockets(user.id);
+
+      const reason = await disconnectPromise;
+      expect(socket.connected).toBe(false);
+      expect(reason).toBeDefined();
+    });
   });
 });

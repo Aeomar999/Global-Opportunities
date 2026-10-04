@@ -3,10 +3,11 @@ import {
   User, RefreshToken, SavedItem, EmailVerificationCode, PasswordResetCode, StaffMember, AuditLog, UserTombstone,
 } from '../models/User.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
-import { Applicant, EventAttendee, CompanyVerification, VerificationDoc, Opportunity, GrantApplication } from '../models/Platform.js';
+import { Applicant, Event, EventAttendee, CompanyVerification, VerificationDoc, Opportunity, GrantApplication } from '../models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership } from '../models/Community.js';
 import { Testimonial } from '../models/AdminPortal.js';
 import { deleteUserMedia } from './cloudinary.js';
+import { env } from '../config/env.js';
 import logger from './logger.js';
 
 // Q11: the retention period is pending legal review.
@@ -17,7 +18,7 @@ const LIVE_OPPORTUNITY_STATUSES = ['pending', 'published', 'approved'];
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const hashEmail = (email) =>
-  crypto.createHash('sha256').update(String(email).trim().toLowerCase()).digest('hex');
+  crypto.createHmac('sha256', env.jwtSecret).update(String(email).trim().toLowerCase()).digest('hex');
 
 /**
  * Where a user's data lives, as one filter per collection. Deletion and the data
@@ -64,6 +65,28 @@ export async function purgeUserData(user, { deleteMedia = deleteUserMedia } = {}
   const userId = user._id;
   const where = await userDataFilters(user);
   const email = where.eventBookings.email;
+
+  // SEC-101: Decrement Opportunity.applicantsCount and Event.attendeesCount so capacity is freed
+  const applicantDocs = await Applicant.find(where.applications).select('opportunityId').lean();
+  const eventBookingDocs = await EventAttendee.find(where.eventBookings).select('eventId').lean();
+
+  for (const doc of applicantDocs) {
+    if (doc.opportunityId) {
+      await Opportunity.updateOne(
+        { _id: doc.opportunityId, applicantsCount: { $gt: 0 } },
+        { $inc: { applicantsCount: -1 } },
+      );
+    }
+  }
+
+  for (const doc of eventBookingDocs) {
+    if (doc.eventId) {
+      await Event.updateOne(
+        { _id: doc.eventId, attendeesCount: { $gt: 0 } },
+        { $inc: { attendeesCount: -1 } },
+      );
+    }
+  }
 
   await Promise.all([
     SeekerProfile.deleteMany(where.seekerProfile),
@@ -133,7 +156,13 @@ export async function deleteAccount(user, deps = {}) {
     { upsert: true },
   );
 
-  await User.updateOne({ _id: user._id }, { $set: { role: 'deleted' }, $inc: { tokenVersion: 1 } });
+  try {
+    await User.updateOne({ _id: user._id }, { $set: { role: 'deleted' }, $inc: { tokenVersion: 1 } });
+  } catch (error) {
+    // SEC-103: If setting role to deleted fails, clean up the pending tombstone so the scheduler does not later erase an active account
+    await UserTombstone.deleteOne({ userId: user._id, status: 'pending' });
+    throw error;
+  }
 
   try {
     await RefreshToken.deleteMany({ userId: user._id });
@@ -151,6 +180,8 @@ export async function deleteAccount(user, deps = {}) {
   return { deletedAt };
 }
 
+let isRecoveryInFlight = false;
+
 /**
  * SEC-065: finish account deletions that stopped part-way. A tombstone stays
  * `pending`, or has `mediaDeleted: false`, when a step failed. Every step is
@@ -160,30 +191,43 @@ export async function deleteAccount(user, deps = {}) {
  * Run hourly by the server and by scripts/complete-account-deletions.js.
  */
 export async function completePendingDeletions({ minAgeMs = 10 * 60 * 1000 } = {}) {
-  const tombstones = await UserTombstone.find({
-    $or: [{ status: 'pending' }, { mediaDeleted: false }],
-    deletedAt: { $lte: new Date(Date.now() - minAgeMs) },
-  });
-
-  let failed = 0;
-  for (const tombstone of tombstones) {
-    const userId = String(tombstone.userId);
-    // One broken account must not stop the rest from being finished.
-    try {
-      const user = await User.findById(tombstone.userId);
-      if (!user) {
-        logger.warn({ userId }, 'Tombstone has no user document; skipping');
-        continue;
-      }
-      const { mediaDeleted } = await purgeUserData(user);
-      tombstone.set({ status: 'completed', completedAt: new Date(), mediaDeleted });
-      await tombstone.save();
-      if (!mediaDeleted) failed += 1;
-      logger.info({ userId, mediaDeleted }, 'Account deletion completed');
-    } catch (error) {
-      failed += 1;
-      logger.error({ err: error.message, userId }, 'Completing account deletion failed');
-    }
+  // SEC-103: In-flight guard prevents multiple concurrent recovery runs
+  if (isRecoveryInFlight) {
+    logger.warn('completePendingDeletions is already in flight; skipping overlapping run');
+    return { processed: 0, failed: 0 };
   }
-  return { processed: tombstones.length, failed };
+
+  isRecoveryInFlight = true;
+  try {
+    const tombstones = await UserTombstone.find({
+      $or: [{ status: 'pending' }, { mediaDeleted: false }],
+      deletedAt: { $lte: new Date(Date.now() - minAgeMs) },
+    });
+
+    let processed = 0;
+    let failed = 0;
+    for (const tombstone of tombstones) {
+      const userId = String(tombstone.userId);
+      // One broken account must not stop the rest from being finished.
+      try {
+        const user = await User.findById(tombstone.userId);
+        if (!user) {
+          logger.warn({ userId }, 'Tombstone has no user document; skipping');
+          continue;
+        }
+        processed += 1;
+        const { mediaDeleted } = await purgeUserData(user);
+        tombstone.set({ status: 'completed', completedAt: new Date(), mediaDeleted });
+        await tombstone.save();
+        if (!mediaDeleted) failed += 1;
+        logger.info({ userId, mediaDeleted }, 'Account deletion completed');
+      } catch (error) {
+        failed += 1;
+        logger.error({ err: error.message, userId }, 'Completing account deletion failed');
+      }
+    }
+    return { processed, failed };
+  } finally {
+    isRecoveryInFlight = false;
+  }
 }
