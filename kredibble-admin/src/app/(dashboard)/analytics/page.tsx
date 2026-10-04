@@ -1,136 +1,131 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Briefcase, Building2, Flag, Loader2, Users } from "lucide-react";
-import { getAnalytics, type AnalyticsSummary } from "@/lib/api";
+/**
+ * Insights (/analytics): charts only. The Overview owns the headline KPIs, so this page keeps just one
+ * stat row (total applications, open reports) and the charts below.
+ *
+ * Charts (every number comes from fields that already exist in the mock files; nothing is invented):
+ * - Postings by type          segmented bar    postedOpportunities[].type
+ * - Verification status       segmented bar    pendingCompanies[].overallStatus
+ * - Reports by reason         highlight bar    reports[].reason (sorted so the most common is last, which is
+ *                                              the bar the chart highlights in orange)
+ * Each chart has a visually hidden text-alternative table and an empty state.
+ *
+ * The month selector in the header is UI only: the mock data has no per-month history, so choosing a month
+ * changes the label and a note says so. The records are the mock lists WITH this session's changes laid over
+ * them (mock-store.ts), so approving a company or resolving a report changes these charts too.
+ * There is no loading or error state: the data is in memory and cannot fail.
+ */
+import { useState } from "react";
+import { BarChart3, Briefcase, Flag } from "lucide-react";
+import { pendingCompanies } from "@/lib/mock-data";
+import { overlayRows, useMockStoreVersion } from "@/lib/mock-store";
+import { postedOpportunities, type OpportunityType } from "@/lib/mock-opportunities";
+import { reports } from "@/lib/mock-reports";
+import { seekerAccounts } from "@/lib/mock-seekers";
+import { getStatusMeta } from "@/lib/status-map";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { HighlightBarChart } from "@/components/ui/HighlightBarChart";
+import { IconTile } from "@/components/ui/IconTile";
+import { MonthSelect } from "@/components/ui/MonthSelect";
+import { SegmentedBar } from "@/components/ui/SegmentedBar";
 
-// Keys are the backend's opportunity types (kredibble-backend/src/models/Platform.js).
-const TYPE_META: Record<string, { label: string; color: string }> = {
-  job: { label: "Jobs", color: "#6671E4" },
-  jobs: { label: "Jobs", color: "#6671E4" },
-  internship: { label: "Internships", color: "#F59E0B" },
-  internships: { label: "Internships", color: "#F59E0B" },
-  competition: { label: "Competitions", color: "#EF4444" },
-  fellowship: { label: "Fellowships", color: "#10B981" },
-  "training-workshop": { label: "Training", color: "#0EA5E9" },
+const TYPE_LABELS: Record<OpportunityType, string> = {
+  jobs: "Jobs",
+  internships: "Internships",
+  events: "Events",
+  grants: "Grants",
 };
 
-const typeFor = (type: string) => TYPE_META[type] || { label: type, color: "#6B7280" };
+const VERIFICATION_ORDER = ["approved", "pending", "rejected"] as const;
 
-export default function AnalyticsPage() {
-  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function InsightsPage() {
+  useMockStoreVersion(); // re-render when a decision elsewhere changes the records
+  const [month, setMonth] = useState<string | null>(null);
 
-  const fetchAnalytics = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setSummary(await getAnalytics());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load analytics");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const opportunities = overlayRows("opportunities", postedOpportunities);
+  const companies = overlayRows("verification", pendingCompanies);
+  const reportRows = overlayRows("reports", reports);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchAnalytics();
-  }, [fetchAnalytics]);
+  const totalApplications = seekerAccounts.reduce((sum, seeker) => sum + seeker.applicationsCount, 0);
+  const openReports = reportRows.filter((report) => report.status === "open").length;
+
+  const postingsByType = (Object.keys(TYPE_LABELS) as OpportunityType[]).map((type) => ({
+    label: TYPE_LABELS[type],
+    value: opportunities.filter((opportunity) => opportunity.type === type).length,
+  }));
+
+  const verificationByStatus = VERIFICATION_ORDER.map((status) => ({
+    label: getStatusMeta(status).label,
+    value: companies.filter((company) => company.overallStatus === status).length,
+  }));
+
+  // Reports per reason, fewest first: the chart highlights its last bar, i.e. the most common reason.
+  const reasonCounts = [...new Set(reportRows.map((report) => report.reason))]
+    .map((reason) => ({ reason, count: reportRows.filter((report) => report.reason === reason).length }))
+    .sort((a, b) => a.count - b.count || a.reason.localeCompare(b.reason));
 
   return (
-    <div>
-      <h1 className="text-xl font-bold text-kb-text-body mb-1">Platform Analytics</h1>
-      <p className="text-sm text-kb-text-muted mb-6">
-        Cross-platform stats aggregated from Seekers, Hirers, Opportunities, and Trust & Safety.
-      </p>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-10">
-          <Loader2 size={24} className="animate-spin text-kb-primary" />
-          <span className="ml-2 text-sm text-kb-text-muted">Loading analytics...</span>
+    <div className="space-y-4">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 data-testid="page-title" className="page-title">Insights</h1>
+          <p className="page-subtitle mt-1">How postings, verification and reports break down across the platform.</p>
         </div>
-      ) : error || !summary ? (
-        <div className="flex items-center justify-center py-10 text-center">
-          <AlertCircle size={24} className="text-kb-error mr-2" />
-          <div className="text-sm text-kb-text-body">
-            <p className="font-medium">Failed to load analytics</p>
-            <p className="text-xs text-kb-text-muted mt-1">{error}</p>
-            <button onClick={fetchAnalytics} className="mt-3 text-sm text-kb-primary hover:underline">
-              Retry
-            </button>
-          </div>
-        </div>
-      ) : (
-        <AnalyticsView summary={summary} />
+        <MonthSelect onChange={setMonth} />
+      </header>
+      {month && (
+        <p className="caption" role="status">
+          {month}: the figures below are mock data and do not change by month yet.
+        </p>
       )}
+
+      {/* The one stat row */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatCard icon={Briefcase} label="Total applications" value={totalApplications} caption="Submitted by seekers" />
+        <StatCard icon={Flag} label="Open reports" value={openReports} caption={`of ${reportRows.length} reports`} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card as="section" ariaLabel="Postings by type">
+          <CardHeader title="Postings by type" subtitle="Every posting in the moderation queue." />
+          <SegmentedBar segments={postingsByType} totalLabel="Total postings" ariaLabel="Postings by type" emptyTitle="No postings yet" />
+        </Card>
+
+        <Card as="section" ariaLabel="Verification status">
+          <CardHeader title="Verification status" subtitle="Company verification requests by decision." />
+          <SegmentedBar segments={verificationByStatus} totalLabel="Total requests" ariaLabel="Verification requests by status" emptyTitle="No verification requests yet" />
+        </Card>
+      </div>
+
+      <Card as="section" ariaLabel="Reports by reason">
+        <CardHeader title="Reports by reason" subtitle="The most common reason is highlighted." />
+        {reasonCounts.length === 0 ? (
+          <EmptyState icon={BarChart3} title="No reports yet" description="Reports appear here once users flag content." />
+        ) : reasonCounts.length === 1 ? (
+          <EmptyState icon={BarChart3} title="Not enough variety to chart" description={`All ${reasonCounts[0].count} reports share one reason: ${reasonCounts[0].reason}.`} />
+        ) : (
+          <HighlightBarChart
+            data={reasonCounts.map(({ reason, count }) => ({ label: reason, value: count }))}
+            ariaLabel="Reports by reason"
+            unit="reports"
+          />
+        )}
+      </Card>
     </div>
   );
 }
 
-function AnalyticsView({ summary }: { summary: AnalyticsSummary }) {
-  const maxTypeCount = Math.max(...summary.opportunitiesByType.map((t) => t.count), 1);
-
+function StatCard({ icon, label, value, caption }: { icon: typeof Briefcase; label: string; value: number; caption: string }) {
   return (
-    <>
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <StatCard icon={Users} label="Active Seekers" value={summary.seekers.active} sub={`of ${summary.seekers.total} total`} color="#6671E4" />
-        <StatCard icon={Building2} label="Verified Hirers" value={summary.hirers.verified} sub={`of ${summary.hirers.total} total`} color="#16A34A" />
-        <StatCard icon={Briefcase} label="Total Applications" value={summary.applications.total} sub="across all seekers" color="#F59E0B" />
-        <StatCard icon={Flag} label="Open Reports" value={summary.reports.open} sub={`of ${summary.reports.total} total`} color="#ED4C5C" />
+    <Card className="flex items-center gap-4">
+      <IconTile icon={icon} tone="accent" />
+      <div className="min-w-0">
+        <p className="caption">{label}</p>
+        <p className="stat-value">{value.toLocaleString("en-US")}</p>
+        <p className="caption">{caption}</p>
       </div>
-
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-6">
-        <p className="text-sm font-bold text-kb-text-body mb-5">Postings by Type</p>
-        <div className="flex flex-col gap-4">
-          {summary.opportunitiesByType.length === 0 && (
-            <p className="text-sm text-kb-text-muted">No postings yet.</p>
-          )}
-          {summary.opportunitiesByType.map(({ type, count }) => {
-            const meta = typeFor(type);
-            return (
-              <div key={type} className="flex items-center gap-4">
-                <span className="text-sm text-kb-text-muted w-24 shrink-0">{meta.label}</span>
-                <div className="flex-1 h-3 rounded-full bg-kb-bg-alt overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${(count / maxTypeCount) * 100}%`, backgroundColor: meta.color }}
-                  />
-                </div>
-                <span data-testid={`postings-${type}`} className="text-sm font-semibold text-kb-text-body w-6 text-right shrink-0">
-                  {count}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  color,
-}: {
-  icon: typeof Users;
-  label: string;
-  value: number;
-  sub: string;
-  color: string;
-}) {
-  return (
-    <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5">
-      <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-3" style={{ backgroundColor: `${color}1A` }}>
-        <Icon size={18} color={color} />
-      </div>
-      <p className="text-2xl font-bold text-kb-text-body">{value}</p>
-      <p className="text-xs text-kb-text-muted mt-1">{label}</p>
-      <p className="text-[11px] text-kb-text-placeholder mt-0.5">{sub}</p>
-    </div>
+    </Card>
   );
 }

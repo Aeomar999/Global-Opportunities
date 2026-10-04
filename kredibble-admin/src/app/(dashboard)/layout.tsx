@@ -1,40 +1,24 @@
-"use client";
+import { cookies } from "next/headers";
+import { DashboardShell } from "@/components/DashboardShell";
+import { DEV_ROLES_COOKIE, parseDevRoles } from "@/config/dev-roles";
+import { SIDEBAR_COOKIE } from "@/config/sidebar";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Sidebar } from "@/components/Sidebar";
-import { hasAdminSession } from "@/lib/api";
-
-export default function DashboardLayout({
+/**
+ * Dashboard layout (server component).
+ * Its one job is to read two cookies on the server, so the first paint is already right (no flash):
+ * the "sidebar" cookie (expanded or collapsed) and the dev role switcher's cookie (which roles to view as;
+ * the client ignores it in production).
+ * Everything interactive lives in DashboardShell.
+ */
+export default async function DashboardLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const router = useRouter();
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const jar = await cookies();
+  const saved = jar.get(SIDEBAR_COOKIE)?.value;
+  const initialDevRoles = parseDevRoles(jar.get(DEV_ROLES_COOKIE)?.value);
+  const initialSidebar = saved === "expanded" || saved === "collapsed" ? saved : null;
 
-  useEffect(() => {
-    if (!hasAdminSession()) {
-      router.replace("/login");
-      return;
-    }
-
-    const timer = setTimeout(() => setIsCheckingSession(false), 0);
-    return () => clearTimeout(timer);
-  }, [router]);
-
-  if (isCheckingSession) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-kb-bg-screen text-sm text-kb-text-muted">
-        Checking admin session...
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-1 min-h-screen bg-kb-bg-screen">
-      <Sidebar />
-      <main className="flex-1 min-w-0 p-8">{children}</main>
-    </div>
-  );
+  return <DashboardShell initialSidebar={initialSidebar} initialDevRoles={initialDevRoles}>{children}</DashboardShell>;
 }

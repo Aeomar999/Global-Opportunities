@@ -278,6 +278,18 @@ const getStoredUser = () =>
 
 export const hasAdminSession = () => Boolean(getStoredUser());
 
+// Frontend-only read of the user saved at login (used by the top bar and the role context).
+// Returns null when there is no session or the stored value is unreadable.
+export const getAdminUser = (): AuthUser | null => {
+  const raw = getStoredUser();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+};
+
 export const saveAdminUser = (user: AuthUser) => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -292,6 +304,22 @@ const defaultFetchOpts: RequestInit = {
   credentials: "include", // send/receive httpOnly cookies
   headers: { "Content-Type": "application/json" },
 };
+
+/**
+ * Error thrown for any non-2xx API response. Keeps the server message as `message` (unchanged behaviour)
+ * and adds the HTTP status and, for 429 responses, the Retry-After value in seconds so the UI can react.
+ */
+export class ApiError extends Error {
+  status: number;
+  retryAfter?: number;
+
+  constructor(message: string, status: number, retryAfter?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
 
 let isRefreshing = false;
 let refreshPromise: Promise<AuthResponse> | null = null;
@@ -337,7 +365,8 @@ async function requestPayload<P>(path: string, init: RequestInit = {}, retried =
   if (!response.ok) {
     const errorMsg = payload?.error?.message || `Request failed with status ${response.status}`;
     // On 401, try to refresh once and retry
-    if (response.status === 401 && !retried) {
+    // A 401 from the LOGIN call means wrong credentials, not an expired session: show the server's message.
+    if (response.status === 401 && !retried && !path.startsWith("/auth/admin/login")) {
       try {
         await refreshAdminSession();
         // Retry the original request
@@ -347,7 +376,8 @@ async function requestPayload<P>(path: string, init: RequestInit = {}, retried =
         throw new Error("Session expired, please log in again");
       }
     }
-    throw new Error(errorMsg);
+    const retryAfter = Number(response.headers.get("Retry-After"));
+    throw new ApiError(errorMsg, response.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined);
   }
 
   return payload as P;
@@ -376,7 +406,13 @@ export const checkAdminSession = async (): Promise<AuthUser | null> => {
   }
 };
 
+/** The platform counts the Overview and the sidebar pills read (GET /dashboard/summary). */
 export const getDashboardSummary = async <T = Record<string, unknown>>() => {
+  return request<T>("/dashboard/summary");
+};
+
+/** The desk dashboard: month KPIs against targets, priorities, trend and pipeline (GET /admin/dashboard). */
+export const getAdminDashboard = async <T = Record<string, unknown>>() => {
   return request<T>("/admin/dashboard");
 };
 

@@ -1,144 +1,70 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import {
-  ShieldCheck, Briefcase, Users, Building2, Hash, Flag, BarChart3,
-  Clock, CheckCircle2, ArrowRight, Loader2,
-} from "lucide-react";
-import { getDashboardSummary } from "@/lib/api";
-
-interface SummaryData {
-  pendingVerifications: number;
-  pendingOpportunities: number;
-  activeSeekers: number;
-  activeHirers: number;
-  openReports: number;
-  totalUsers: number;
-  totalOpportunities: number;
-}
+/**
+ * Overview (route "/").
+ *
+ * The page calls getOverview() ONCE on mount (the service dedupes the
+ * in-flight request, so React Strict Mode does not double-fetch) and passes
+ * slices of the result to each section. There are no automatic retries; the
+ * banner's "Try again" re-runs getOverview().
+ *
+ * Failure handling: a slim banner explains what went wrong, and only the
+ * affected sections show "—". Every section keeps its final dimensions while
+ * loading, loaded and unavailable, so the layout never jumps.
+ */
+import { BRAND } from "@/config/brand";
+import { getOverview, type OverviewIssue } from "@/lib/services/overview";
+import { useAsync } from "@/lib/use-async";
+import { PageFooter } from "@/components/ui/PageFooter";
+import { ActivityCard } from "@/components/overview/ActivityCard";
+import { AttentionCard } from "@/components/overview/AttentionCard";
+import { KpiRow } from "@/components/overview/KpiRow";
+import { LatestOpportunities } from "@/components/overview/LatestOpportunities";
+import { OverviewHeader } from "@/components/overview/OverviewHeader";
+import { QueuesCard } from "@/components/overview/QueuesCard";
+import { StatusBanner } from "@/components/overview/StatusBanner";
+import { SubmissionsCard } from "@/components/overview/SubmissionsCard";
 
 export default function DashboardHomePage() {
-  const [summary, setSummary] = useState<SummaryData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const overview = useAsync(getOverview);
+  const loading = overview.isLoading;
+  const data = overview.data?.data ?? null; // null while loading, or if getOverview itself failed unexpectedly
 
-  useEffect(() => {
-    getDashboardSummary<SummaryData>()
-      .then(setSummary)
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  const quickLinks = [
-    {
-      href: "/verification",
-      icon: ShieldCheck,
-      title: "Review pending verifications",
-      sub: `${summary?.pendingVerifications || 0} compan${summary?.pendingVerifications === 1 ? "y" : "ies"} waiting on document review`,
-    },
-    {
-      href: "/opportunities",
-      icon: Briefcase,
-      title: "Review posted opportunities",
-      sub: `${summary?.pendingOpportunities || 0} posting${summary?.pendingOpportunities === 1 ? "" : "s"} awaiting moderation`,
-    },
-    {
-      href: "/seekers",
-      icon: Users,
-      title: "Seekers Directory",
-      sub: `${summary?.activeSeekers || 0} registered accounts`,
-    },
-    {
-      href: "/hirers",
-      icon: Building2,
-      title: "Hirers Directory",
-      sub: `${summary?.activeHirers || 0} registered companies`,
-    },
-    {
-      href: "/community",
-      icon: Hash,
-      title: "Community Channels",
-      sub: `Manage platform groups`,
-    },
-    {
-      href: "/reports",
-      icon: Flag,
-      title: "Reports Queue",
-      sub: `${summary?.openReports || 0} open report${summary?.openReports === 1 ? "" : "s"}`,
-    },
-    {
-      href: "/analytics",
-      icon: BarChart3,
-      title: "Platform Analytics",
-      sub: "Cross-platform stats",
-    },
-  ];
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-kb-primary" />
-      </div>
-    );
-  }
+  // getOverview() resolves with an `issue` for expected failures; a thrown error is the unexpected case.
+  const issue: OverviewIssue | null =
+    overview.data?.issue ?? (overview.error ? { kind: "failed", message: overview.error.message } : null);
 
   return (
-    <div>
-      <h1 className="text-xl font-bold text-kb-text-body mb-1">Dashboard</h1>
-      <p className="text-sm text-kb-text-muted mb-6">
-        Real-time platform overview fetched from the live database.
-      </p>
+    <div className="space-y-8">
+      <OverviewHeader />
 
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <StatCard icon={Clock} label="Pending Verification" value={summary?.pendingVerifications || 0} color="#F6B612" />
-        <StatCard icon={CheckCircle2} label="Active Seekers" value={summary?.activeSeekers || 0} color="#16A34A" />
-        <StatCard icon={Building2} label="Active Hirers" value={summary?.activeHirers || 0} color="#6671E4" />
+      {/* 16px between every block */}
+      <div className="space-y-4">
+        {issue && !loading && <StatusBanner issue={issue} onRetry={overview.reload} />}
+
+        <KpiRow data={data?.kpis ?? null} loading={loading} />
+
+        {/* Row 3 (2fr / 1fr): items-stretch makes both cards as tall as the taller one. */}
+        <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+          <SubmissionsCard series={data?.submissions ?? null} loading={loading} className="lg:col-span-2" />
+          <QueuesCard data={data?.queues ?? null} note={data?.queuesNote ?? null} loading={loading} />
+        </div>
+
+        {/* Row 4 (2fr / 1fr): same stretch; the attention card pins its button to the bottom. */}
+        <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+          <LatestOpportunities data={data?.latestOpportunities ?? null} loading={loading} className="lg:col-span-2" />
+          <AttentionCard
+            pendingVerifications={data ? data.kpis.pendingVerifications.value : null}
+            openReports={data ? data.kpis.openReports.value : null}
+            loading={loading}
+          />
+        </div>
+
+        {/* Row 5: full width, two timeline columns from 1024px. */}
+        <ActivityCard data={data?.activity ?? null} loading={loading} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {quickLinks.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="flex items-center justify-between bg-kb-bg-card border border-kb-border rounded-2xl p-5 hover:border-kb-primary transition-colors"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-kb-primary/10 flex items-center justify-center shrink-0">
-                <link.icon size={20} color="#6671E4" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-kb-text-body">{link.title}</p>
-                <p className="text-xs text-kb-text-muted mt-0.5">{link.sub}</p>
-              </div>
-            </div>
-            <ArrowRight size={18} className="text-kb-text-muted shrink-0" />
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  color,
-}: {
-  icon: typeof Clock;
-  label: string;
-  value: number;
-  color: string;
-}) {
-  return (
-    <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5">
-      <div
-        className="w-9 h-9 rounded-lg flex items-center justify-center mb-3"
-        style={{ backgroundColor: `${color}1A` }}
-      >
-        <Icon size={18} color={color} />
-      </div>
-      <p className="text-2xl font-bold text-kb-text-body">{value}</p>
-      <p className="text-xs text-kb-text-muted mt-1">{label}</p>
+      <PageFooter crumbs={[BRAND.sub, "Overview"]} />
     </div>
   );
 }

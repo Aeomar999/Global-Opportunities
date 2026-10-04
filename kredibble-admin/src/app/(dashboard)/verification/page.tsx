@@ -1,107 +1,71 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ChevronRight, Loader2 } from "lucide-react";
-import { getVerifications } from "@/lib/api";
+/**
+ * Verification Queue: companies that submitted their documents for Hirer verification.
+ * Built on the shared list template (ListPage + TableToolbar + DataTable): this file only
+ * holds the column config, the filter and the data loader.
+ *
+ * Data: loadVerificationRows() (mock data in mock mode, GET /verification/companies in real mode).
+ * It loads everything once; the filter and its counts are computed here, so changing the filter
+ * does not make a request. A failed request shows inline with "Try again".
+ */
+import { useMemo, useState } from "react";
+import { ShieldCheck } from "lucide-react";
+import { formatDate } from "@/lib/format";
+import { loadVerificationRows, type VerificationRow } from "@/lib/services/lists";
+import { subscribeMockStore } from "@/lib/mock-store";
+import { useListData } from "@/lib/use-list-data";
+import { DataTable } from "@/components/list/DataTable";
+import { ListPage } from "@/components/list/ListPage";
+import { TableToolbar } from "@/components/list/TableToolbar";
+import type { Column } from "@/components/list/types";
 
-const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  pending: { bg: "#FFFBEB", text: "#B7791F", label: "Pending" },
-  approved: { bg: "#F0FDF4", text: "#16A34A", label: "Approved" },
-  rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
-};
+type Filter = "all" | "pending" | "approved" | "rejected";
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
+];
 
-interface CompanyVerification {
-  id: string;
-  name: string;
-  recruiterEmail: string;
-  industry: string;
-  submittedDate: string;
-  overallStatus: string;
-}
+const COLUMNS: Column<VerificationRow>[] = [
+  { key: "company", header: "Company", type: "primary", width: "34%", title: (r) => r.name, subtitle: (r) => r.recruiterEmail },
+  { key: "industry", header: "Industry", type: "text", width: "22%", value: (r) => r.industry },
+  { key: "submitted", header: "Submitted", type: "text", width: "20%", value: (r) => formatDate(r.submittedDate) },
+  { key: "status", header: "Status", type: "status", width: "24%", status: (r) => r.overallStatus },
+];
 
 export default function VerificationQueuePage() {
-  const [companies, setCompanies] = useState<CompanyVerification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
+  const { rows, isLoading, error, retry } = useListData(loadVerificationRows, { subscribe: subscribeMockStore });
+  const [filter, setFilter] = useState<Filter>("all");
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(true), 0);
-    getVerifications<CompanyVerification>(filter === "all" ? undefined : filter)
-      .then(setCompanies)
-      .finally(() => setIsLoading(false));
-    return () => clearTimeout(timer);
-  }, [filter]);
+  const all = useMemo(() => rows ?? [], [rows]);
+  const options = FILTERS.map((f) => ({
+    ...f,
+    count: rows ? (f.value === "all" ? all.length : all.filter((r) => r.overallStatus === f.value).length) : undefined,
+  }));
+  const visible = filter === "all" ? all : all.filter((r) => r.overallStatus === filter);
 
   return (
-    <div>
-      <h1 className="text-xl font-bold text-kb-text-body mb-1">Verification Queue</h1>
-      <p className="text-sm text-kb-text-muted mb-6">
-        Review the documents companies submitted at signup and approve or reject their Hirer verification.
-      </p>
-
-      {/* Filter Tabs */}
-      <div className="flex bg-kb-bg-card border border-kb-border rounded-xl p-1 gap-1 w-fit mb-6">
-        {["all", "pending", "approved", "rejected"].map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${
-              filter === s ? "bg-kb-primary text-white shadow-md shadow-kb-primary/20" : "text-kb-text-muted hover:bg-kb-bg-body"
-            }`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_20px] gap-4 px-5 py-3 border-b border-kb-border text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder">
-          <span>Company</span>
-          <span>Industry</span>
-          <span>Submitted</span>
-          <span>Status</span>
-          <span />
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-kb-primary" />
-          </div>
-        ) : (
-          companies.map((company) => {
-            const style = STATUS_STYLES[company.overallStatus] || STATUS_STYLES.pending;
-
-            return (
-              <Link
-                key={company.id}
-                href={`/verification/${company.id}`}
-                className="grid grid-cols-[2fr_1.2fr_1fr_1fr_20px] gap-4 px-5 py-4 items-center border-b border-kb-border last:border-b-0 hover:bg-kb-bg-alt transition-colors"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-kb-text-body">{company.name}</p>
-                  <p className="text-xs text-kb-text-muted mt-0.5">{company.recruiterEmail}</p>
-                </div>
-                <span className="text-sm text-kb-text-muted">{company.industry}</span>
-                <span className="text-sm text-kb-text-muted">{company.submittedDate}</span>
-                <span
-                  className="inline-flex w-fit text-xs font-semibold rounded-full px-2.5 py-1"
-                  style={{ backgroundColor: style.bg, color: style.text }}
-                >
-                  {style.label}
-                </span>
-                <ChevronRight size={18} className="text-kb-text-placeholder justify-self-end" />
-              </Link>
-            );
-          })
-        )}
-
-        {!isLoading && companies.length === 0 && (
-          <div className="px-5 py-12 text-center text-kb-text-muted italic">
-            No verification requests found.
-          </div>
-        )}
-      </div>
-    </div>
+    <ListPage
+      title="Verification Queue"
+      subtitle="Review the documents companies submitted at signup and approve or reject their Hirer verification."
+      toolbar={<TableToolbar filters={{ options, value: filter, onChange: setFilter, label: "Filter by status" }} />}
+    >
+      <DataTable
+        label="Verification requests"
+        columns={COLUMNS}
+        rows={visible}
+        getRowKey={(r) => r.id}
+        getRowHref={(r) => `/verification/${r.id}`}
+        loading={isLoading}
+        error={error}
+        onRetry={retry}
+        isFiltered={filter !== "all"}
+        resetKey={filter}
+        emptyNoData={{ icon: ShieldCheck, title: "No verification requests yet", description: "Companies show up here when they submit their documents at signup." }}
+        emptyNoResults={{ icon: ShieldCheck, title: "No requests match this filter", description: "Try another status, or choose All." }}
+      />
+    </ListPage>
   );
 }

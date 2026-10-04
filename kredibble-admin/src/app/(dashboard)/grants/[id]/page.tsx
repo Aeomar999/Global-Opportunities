@@ -1,182 +1,183 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { AlertCircle, Check, ChevronLeft, Loader2, X } from "lucide-react";
-import {
-  getGrantApplications,
-  getGrantById,
-  updateGrantApplication,
-  type GrantApplicationRecord,
-  type GrantRecord,
-} from "@/lib/api";
+/**
+ * Grant detail: one grant's funding pool and its applications.
+ * Built on the shared detail template.
+ *
+ * Fields: title, hirer, sector, funding pool (allocated, total, percent, remaining), and every
+ * application (applicant, requested amount, status).
+ * Actions: Approve (per pending application, disabled when the request exceeds what remains) and Reject
+ * (per pending application, confirm dialog). Allocated is recalculated from approved applications.
+ * Data: mock grants (src/lib/mock-grant-ops.ts), changed in LOCAL state only.
+ */
+import { useCallback } from "react";
+import { useParams } from "next/navigation";
+import { Check, HandCoins, X } from "lucide-react";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
+import { grantRecords, type GrantApplication } from "@/lib/mock-grant-ops";
+import { useDetailData } from "@/lib/use-detail-data";
+import { DetailHeader } from "@/components/detail/DetailHeader";
+import { DetailPage } from "@/components/detail/DetailPage";
+import { DetailError, DetailNotFound, DetailSkeleton } from "@/components/detail/DetailStates";
+import { InfoCard } from "@/components/detail/InfoCard";
+import { Button } from "@/components/ui/Button";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { KeyValueList } from "@/components/ui/KeyValueList";
+import { MiniStat } from "@/components/ui/MiniStat";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useToast } from "@/components/ui/Toast";
+
+const money = (amount: number) => `$${amount.toLocaleString()}`;
 
 export default function GrantDetailPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const [grant, setGrant] = useState<GrantRecord | null>(null);
-  const [applications, setApplications] = useState<GrantApplicationRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const { id } = useParams<{ id: string }>();
+  const load = useCallback(() => Promise.resolve(grantRecords.find((g) => g.id === id)), [id]);
+  const { status, record: grant, setRecord, error, retry } = useDetailData(load, { collection: "grants" });
+  const toast = useToast();
+  const { confirm, dialog } = useConfirmDialog();
 
-  const fetchGrant = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [record, apps] = await Promise.all([
-        getGrantById(params.id),
-        getGrantApplications(params.id, { limit: 100 }),
-      ]);
-      setGrant(record);
-      setApplications(apps.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load grant");
-    } finally {
-      setLoading(false);
-    }
-  }, [params.id]);
+  useBreadcrumbLabel(status === "loading" ? undefined : grant ? grant.title : "Not found");
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchGrant();
-  }, [fetchGrant]);
+  if (status === "loading") return <DetailSkeleton />;
+  if (status === "error") return <DetailError message={error ?? "Could not load this grant."} onRetry={retry} />;
+  if (!grant) return <DetailNotFound noun="Grant" listLabel="Grants" listHref="/grants" />;
 
-  const setAppStatus = async (appId: string, status: "approved" | "rejected") => {
-    setSavingId(appId);
-    setActionError(null);
-    try {
-      const updated = await updateGrantApplication(appId, { status });
-      setApplications((prev) => prev.map((app) => (app.id === appId ? updated : app)));
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to update application");
-    } finally {
-      setSavingId(null);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <Loader2 size={24} className="animate-spin text-kb-primary" />
-        <span className="ml-2 text-sm text-kb-text-muted">Loading grant...</span>
-      </div>
-    );
-  }
-
-  if (error || !grant) {
-    return (
-      <div>
-        <div className="flex items-center gap-2 text-sm text-kb-text-body">
-          <AlertCircle size={18} className="text-kb-error" />
-          <span>{error || "Grant not found."}</span>
-        </div>
-        <div className="flex items-center gap-4 mt-3">
-          <button onClick={fetchGrant} className="text-sm text-kb-primary font-semibold hover:underline">
-            Retry
-          </button>
-          <Link href="/grants" className="text-sm text-kb-primary font-semibold">
-            Back to Grants
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const pct = grant.fundingPool > 0 ? Math.round((grant.allocated / grant.fundingPool) * 100) : 0;
+  const pct = Math.round((grant.allocated / grant.fundingPool) * 100);
   const remaining = grant.fundingPool - grant.allocated;
 
+  const setAppStatus = (appId: string, next: GrantApplication["status"]) => {
+    // TODO(backend): persist this change
+    setRecord((prev) => {
+      const applications = prev.applications.map((a) => (a.id === appId ? { ...a, status: next } : a));
+      const allocated = applications.filter((a) => a.status === "approved").reduce((sum, a) => sum + a.requestedAmount, 0);
+      return { ...prev, applications, allocated };
+    });
+  };
+
+  const approve = (app: GrantApplication) => {
+    setAppStatus(app.id, "approved");
+    toast.success(`${app.applicantName}'s request for ${money(app.requestedAmount)} was approved.`);
+  };
+
+  const reject = (app: GrantApplication) =>
+    confirm({
+      title: "Reject this application?",
+      description: (
+        <>
+          <strong className="text-ink">{app.applicantName}</strong>&apos;s request for {money(app.requestedAmount)} from{" "}
+          <strong className="text-ink">{grant.title}</strong> will be marked Rejected.
+        </>
+      ),
+      confirmLabel: "Reject application",
+      onConfirm: () => {
+        setAppStatus(app.id, "rejected");
+        toast.success(`${app.applicantName}'s request was rejected.`);
+      },
+    });
+
   return (
-    <div>
-      <button
-        onClick={() => router.push("/grants")}
-        className="flex items-center gap-1.5 text-sm text-kb-text-muted hover:text-kb-text-body mb-6"
-      >
-        <ChevronLeft size={16} />
-        Back to Grants
-      </button>
-
-      <h1 className="text-xl font-bold text-kb-text-body">{grant.title}</h1>
-      <p className="text-sm text-kb-text-muted mt-1 mb-6">
-        {grant.hirer} · {grant.sector}
-      </p>
-
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5 mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder mb-3">
-          Funding Pool
-        </p>
-        <div className="h-3 rounded-full bg-kb-bg-alt overflow-hidden mb-2">
-          <div
-            className="h-full rounded-full bg-kb-primary transition-all"
-            style={{ width: `${Math.min(pct, 100)}%` }}
+    <>
+      <DetailPage
+        header={
+          <DetailHeader
+            leading={{ icon: HandCoins }}
+            title={grant.title}
+            badges={<StatusBadge status={grant.status} />}
+            meta={`${grant.hirer} · ${grant.sector}`}
           />
-        </div>
-        <p className="text-sm text-kb-text-muted">
-          ${grant.allocated.toLocaleString()} allocated of ${grant.fundingPool.toLocaleString()} ({pct}%)
-          · ${remaining.toLocaleString()} remaining
-        </p>
-        {/* SEC-060: allocation rules are undecided, so approvals record a decision only. */}
-        <p className="text-xs text-kb-text-placeholder mt-2">
-          Approving an application records the decision; it doesn&apos;t change the allocated amount yet.
-        </p>
-      </div>
-
-      {actionError && <p className="text-sm text-kb-error mb-3">{actionError}</p>}
-
-      <h2 className="text-sm font-bold text-kb-text-body mb-3">Applications</h2>
-      <div className="flex flex-col gap-3">
-        {applications.map((app) => (
-          <div
-            key={app.id}
-            className="flex items-center gap-4 bg-kb-bg-card border border-kb-border rounded-2xl p-4"
-          >
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-kb-text-body">{app.applicantName}</p>
-              <p className="text-xs text-kb-text-muted mt-0.5">
-                Requested ${app.requestedAmount.toLocaleString()}
-              </p>
-            </div>
-            <span
-              className="text-xs font-semibold rounded-full px-2.5 py-1 shrink-0"
-              style={
-                app.status === "approved"
-                  ? { backgroundColor: "#F0FDF4", color: "#16A34A" }
-                  : app.status === "rejected"
-                    ? { backgroundColor: "#FEF2F2", color: "#ED4C5C" }
-                    : { backgroundColor: "#FFFBEB", color: "#B7791F" }
-              }
-            >
-              {app.status === "approved" ? "Approved" : app.status === "rejected" ? "Rejected" : "Pending"}
-            </span>
-            {app.status === "pending" && (
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => setAppStatus(app.id, "approved")}
-                  className="w-8 h-8 rounded-lg bg-green-50 hover:bg-green-100 flex items-center justify-center transition-colors disabled:opacity-60"
-                  title="Approve"
-                  disabled={savingId !== null || app.requestedAmount > remaining}
-                >
-                  <Check size={15} color="#16A34A" strokeWidth={2.5} />
-                </button>
-                <button
-                  onClick={() => setAppStatus(app.id, "rejected")}
-                  className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors disabled:opacity-60"
-                  title="Reject"
-                  disabled={savingId !== null}
-                >
-                  <X size={15} color="#ED4C5C" strokeWidth={2.5} />
-                </button>
+        }
+        main={
+          <>
+            <InfoCard title="Funding Pool">
+              <div className="h-3 overflow-hidden rounded-pill bg-surface-2" role="presentation">
+                <div className="h-full rounded-pill bg-purple-600 transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
               </div>
-            )}
-          </div>
-        ))}
+              <p className="body-sm mt-2 text-muted">
+                {money(grant.allocated)} allocated of {money(grant.fundingPool)} ({pct}%) · {money(remaining)} remaining
+              </p>
+            </InfoCard>
 
-        {applications.length === 0 && (
-          <p className="text-sm text-kb-text-muted">No applications yet.</p>
-        )}
-      </div>
-    </div>
+            <InfoCard title="Applications">
+              {grant.applications.length === 0 ? (
+                <p className="body-sm text-muted">No applications yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {grant.applications.map((app) => (
+                    <li
+                      key={app.id}
+                      // Name | badge | actions. The badge is always in the same column, so it lines up on every row.
+                      className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-3 rounded-control border border-line p-3 sm:grid-cols-[1fr_auto_auto]"
+                    >
+                      <div className="min-w-0">
+                        <p className="body-sm break-words font-semibold text-ink">{app.applicantName}</p>
+                        <p className="caption">Requested {money(app.requestedAmount)}</p>
+                      </div>
+                      <StatusBadge status={app.status} />
+
+                      {/* 640px and up: compact icon buttons in a fixed-width column (empty on decided rows). */}
+                      <div className="flex w-22 justify-end gap-2 max-sm:hidden">
+                        {app.status === "pending" && (
+                          <>
+                            <IconButton
+                              label={`Approve ${app.applicantName}`}
+                              icon={Check}
+                              tone="success"
+                              disabled={app.requestedAmount > remaining}
+                              onClick={() => approve(app)}
+                            />
+                            <IconButton label={`Reject ${app.applicantName}`} icon={X} tone="danger" onClick={() => reject(app)} />
+                          </>
+                        )}
+                      </div>
+
+                      {/* Phones: a second row inside the card with labelled buttons, 44px tall. */}
+                      {app.status === "pending" && (
+                        <div className="col-span-2 grid grid-cols-2 gap-2 sm:hidden">
+                          <Button
+                            variant="secondary"
+                            icon={Check}
+                            className="h-11"
+                            aria-label={`Approve ${app.applicantName}`}
+                            disabled={app.requestedAmount > remaining}
+                            onClick={() => approve(app)}
+                          >
+                            Approve
+                          </Button>
+                          <Button variant="danger" icon={X} className="h-11" aria-label={`Reject ${app.applicantName}`} onClick={() => reject(app)}>
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </InfoCard>
+          </>
+        }
+        side={
+          <>
+            <InfoCard title="Details">
+              <KeyValueList
+                items={[
+                  { label: "Hirer", value: grant.hirer },
+                  { label: "Sector", value: grant.sector },
+                  { label: "Funding pool", value: money(grant.fundingPool) },
+                  { label: "Remaining", value: money(remaining) },
+                ]}
+              />
+            </InfoCard>
+            <InfoCard title="Activity">
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-1 xl:grid-cols-2">
+                <MiniStat value={grant.applications.length} label="Applications" />
+                <MiniStat value={grant.applications.filter((a) => a.status === "pending").length} label="Pending" />
+              </div>
+            </InfoCard>
+          </>
+        }
+      />
+      {dialog}
+    </>
   );
 }

@@ -1,95 +1,157 @@
+/**
+ * Navigation: the single source for the sidebar, the rail flyouts, the
+ * command palette and the breadcrumbs.
+ *
+ * Two levels: groups (parents) contain pages (children). Only children have
+ * routes. A group is "active" when any of its children is.
+ *
+ * Every child has a `screen` key (src/config/permissions.ts). What a person sees is the full list filtered
+ * by `visibleNavGroups(can)`: a page appears only where they can at least view its screen, and a group with
+ * no visible page is hidden. The same screen key guards the route itself (RequireAccess).
+ *
+ * `match` lists extra path prefixes that should also highlight a child ("Team" stays highlighted on a member's
+ * page and the invite form, /staff/...).
+ */
 import {
-  LayoutDashboard, ShieldCheck, Briefcase, Users, Building2, Hash,
-  Flag, FileText, GraduationCap, Factory, Landmark, CalendarDays,
-  HandCoins, Send, History, UserCog, KeyRound, BarChart3,
+  BarChart3, Bell, Briefcase, CalendarDays, CalendarRange, Building2, Database, FileText, Flag, GraduationCap, HandCoins, Handshake,
+  Hash, LayoutDashboard, Network, Quote, Settings, Settings2, Share2, ShieldCheck, Target, Trophy, UserCog, Users, type LucideIcon,
 } from "lucide-react";
+import type { AccessLevel, Screen } from "@/config/permissions";
 
-export interface NavItem {
+/** Counts the sidebar can show. Unknown counts are hidden, never shown as 0. */
+export type CountKey = "pendingVerifications" | "openReports";
+
+export interface NavChild {
   label: string;
   href: string;
-  icon: typeof LayoutDashboard;
-  built: boolean;
+  icon: LucideIcon;
+  /** The permission screen that decides whether this page is shown and reachable. */
+  screen: Screen;
+  /** Entity accent for this page's icon tile: Opportunities and Programs are orange, Partners and Network purple. */
+  accent?: "orange" | "purple";
+  /** Which count (if any) to show as a pill next to this page. */
+  countKey?: CountKey;
+  /** Extra path prefixes that also mark this page active (see file header). */
+  match?: string[];
 }
 
-export interface NavSection {
-  title: string;
-  items: NavItem[];
+export interface NavGroup {
+  group: string;
+  icon: LucideIcon;
+  children: NavChild[];
 }
 
-// `built: false` items would show a "Coming soon" badge instead of linking
-// out — all 28 planned pages are now built, so every item below is live.
-export const NAV_SECTIONS: NavSection[] = [
+export const NAV_GROUPS: NavGroup[] = [
   {
-    title: "Overview",
-    items: [
-      { label: "Dashboard", href: "/", icon: LayoutDashboard, built: true },
-      { label: "Platform Analytics", href: "/analytics", icon: BarChart3, built: true },
+    group: "Dashboard",
+    icon: LayoutDashboard,
+    children: [
+      { label: "Overview", href: "/", icon: LayoutDashboard, screen: "overview" },
+      { label: "Insights", href: "/analytics", icon: BarChart3, screen: "insights" },
+      { label: "Monthly report", href: "/monthly-report", icon: CalendarRange, screen: "monthly_report" },
+      // "My scorecard" for most roles; the same screen has a "Team" tab for the desk lead and the super admin.
+      { label: "Scorecard", href: "/scorecard", icon: Target, screen: "my_scorecard" },
     ],
   },
   {
-    title: "Verification",
-    items: [
-      { label: "Verification Queue", href: "/verification", icon: ShieldCheck, built: true },
+    group: "Opportunities",
+    icon: Briefcase,
+    children: [
+      { label: "Opportunities Queue", href: "/opportunities", icon: Briefcase, screen: "opportunities_queue", accent: "orange" },
+      { label: "Events", href: "/events", icon: CalendarDays, screen: "events" },
+      { label: "Grants", href: "/grants", icon: HandCoins, screen: "grants" },
+      { label: "Programs", href: "/programs", icon: GraduationCap, screen: "programs", accent: "orange" },
     ],
   },
   {
-    title: "Opportunities",
-    items: [
-      { label: "Opportunities Queue", href: "/opportunities", icon: Briefcase, built: true },
+    group: "Partners & network",
+    icon: Handshake,
+    children: [
+      { label: "Partners", href: "/partners", icon: Handshake, screen: "partners", accent: "purple" },
+      { label: "Network", href: "/network", icon: Network, screen: "network", accent: "purple" },
+      { label: "Leaderboard", href: "/leaderboard", icon: Trophy, screen: "leaderboard" },
     ],
   },
   {
-    title: "Users & Companies",
-    items: [
-      { label: "Seekers", href: "/seekers", icon: Users, built: true },
-      { label: "Hirers", href: "/hirers", icon: Building2, built: true },
+    group: "People",
+    icon: Users,
+    children: [
+      { label: "Seekers", href: "/seekers", icon: Users, screen: "seekers" },
+      { label: "Hirers", href: "/hirers", icon: Building2, screen: "hirers" },
+      { label: "Channels", href: "/community", icon: Hash, screen: "channels" },
+      { label: "Database", href: "/database", icon: Database, screen: "database" },
     ],
   },
   {
-    title: "Community",
-    items: [
-      { label: "Channels", href: "/community", icon: Hash, built: true },
+    group: "Trust & safety",
+    icon: ShieldCheck,
+    children: [
+      { label: "Verification Queue", href: "/verification", icon: ShieldCheck, screen: "verification", countKey: "pendingVerifications" },
+      { label: "Reports Queue", href: "/reports", icon: Flag, screen: "reports_queue", countKey: "openReports" },
     ],
   },
   {
-    title: "Trust & Safety",
-    items: [
-      { label: "Reports Queue", href: "/reports", icon: Flag, built: true },
+    group: "Content",
+    icon: FileText,
+    children: [
+      { label: "Career Resources", href: "/content/articles", icon: FileText, screen: "career_resources" },
+      { label: "Reference data", href: "/reference-data", icon: Database, screen: "reference_data" },
+      { label: "Social", href: "/social", icon: Share2, screen: "social" },
+      { label: "Testimonials", href: "/testimonials", icon: Quote, screen: "testimonials" },
     ],
   },
   {
-    title: "Content",
-    items: [
-      { label: "Career Resources", href: "/content/articles", icon: FileText, built: true },
-    ],
-  },
-  {
-    title: "Reference Data",
-    items: [
-      { label: "Seeker Taxonomy", href: "/taxonomy/seeker", icon: GraduationCap, built: true },
-      { label: "Hirer Taxonomy", href: "/taxonomy/hirer", icon: Factory, built: true },
-      { label: "Grants Taxonomy", href: "/taxonomy/grants", icon: Landmark, built: true },
-    ],
-  },
-  {
-    title: "Events & Grants",
-    items: [
-      { label: "Events", href: "/events", icon: CalendarDays, built: true },
-      { label: "Grants", href: "/grants", icon: HandCoins, built: true },
-    ],
-  },
-  {
-    title: "Notifications",
-    items: [
-      { label: "Composer", href: "/notifications/compose", icon: Send, built: true },
-      { label: "History", href: "/notifications/history", icon: History, built: true },
-    ],
-  },
-  {
-    title: "Admin Team",
-    items: [
-      { label: "Staff", href: "/staff", icon: UserCog, built: true },
-      { label: "Roles & Permissions", href: "/roles", icon: KeyRound, built: true },
+    group: "Comms & admin",
+    icon: Settings2,
+    children: [
+      { label: "Notifications", href: "/notifications", icon: Bell, screen: "notifications" },
+      { label: "Team", href: "/team", icon: UserCog, screen: "team", match: ["/staff"] },
+      { label: "Settings", href: "/settings", icon: Settings, screen: "settings" },
     ],
   },
 ];
+
+/** The nav a person may see: only pages whose screen they can view; groups left empty are dropped. */
+export function visibleNavGroups(can: (screen: Screen, level: AccessLevel) => boolean): NavGroup[] {
+  return NAV_GROUPS.map((group) => ({ ...group, children: group.children.filter((child) => can(child.screen, "view")) })).filter(
+    (group) => group.children.length > 0,
+  );
+}
+
+/** True when `pathname` is this child's page, a page nested under it, or under one of its `match` prefixes. */
+export function isChildActive(child: NavChild, pathname: string): boolean {
+  if (child.href === "/") return pathname === "/";
+  const prefixes = [child.href, ...(child.match ?? [])];
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+export const isGroupActive = (group: NavGroup, pathname: string) =>
+  group.children.some((child) => isChildActive(child, pathname));
+
+export interface NavMatch {
+  group: NavGroup;
+  child: NavChild;
+  /**
+   * Path segments after the part of the route that belongs to the child.
+   * "/seekers/42" -> ["42"] (a detail page); "/staff/invite" -> ["invite"]
+   * (a page reached through the child's `match` prefix); the child's own page -> [].
+   */
+  extra: string[];
+}
+
+/** Finds the nav page a pathname belongs to (used by the breadcrumbs and the route guard). */
+export function findNavMatch(pathname: string): NavMatch | null {
+  for (const group of NAV_GROUPS) {
+    for (const child of group.children) {
+      if (!isChildActive(child, pathname)) continue;
+      if (child.href === "/") return { group, child, extra: [] };
+      // The first prefix (own href, then match prefixes) that contains this path.
+      const prefix = [child.href, ...(child.match ?? [])].find((p) => pathname === p || pathname.startsWith(`${p}/`)) ?? child.href;
+      return { group, child, extra: pathname.slice(prefix.length).split("/").filter(Boolean) };
+    }
+  }
+  return null;
+}
+
+/** "Trust & safety" -> "trust-safety". Used to build stable data-testid values for the nav. */
+export const navSlug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");

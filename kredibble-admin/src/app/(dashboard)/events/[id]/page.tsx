@@ -1,160 +1,147 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { AlertCircle, ChevronLeft, Loader2, XCircle } from "lucide-react";
-import { getEventById, updateEvent, type EventRecord } from "@/lib/api";
+/**
+ * Event detail: one event's attendance and capacity.
+ * Built on the shared detail template.
+ *
+ * Fields: title, hirer, location, date & time, status, attendance (count, capacity, percent), capacity input.
+ * Actions: Save capacity (cannot go below the current attendee count) and Cancel event (danger zone,
+ * confirm dialog; hidden once cancelled).
+ * Data: mock events (src/lib/mock-events.ts), changed in LOCAL state only.
+ */
+import { useCallback, useState } from "react";
+import { useParams } from "next/navigation";
+import { CalendarDays, XCircle } from "lucide-react";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
+import { eventRecords } from "@/lib/mock-events";
+import { useDetailData } from "@/lib/use-detail-data";
+import { DangerZone } from "@/components/detail/DangerZone";
+import { DetailHeader } from "@/components/detail/DetailHeader";
+import { DetailPage } from "@/components/detail/DetailPage";
+import { DetailError, DetailNotFound, DetailSkeleton } from "@/components/detail/DetailStates";
+import { InfoCard } from "@/components/detail/InfoCard";
+import { Button } from "@/components/ui/Button";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { KeyValueList } from "@/components/ui/KeyValueList";
+import { MiniStat } from "@/components/ui/MiniStat";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useToast } from "@/components/ui/Toast";
 
 export default function EventDetailPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const [event, setEvent] = useState<EventRecord | null>(null);
-  const [capacityInput, setCapacityInput] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const { id } = useParams<{ id: string }>();
+  const load = useCallback(() => Promise.resolve(eventRecords.find((e) => e.id === id)), [id]);
+  const { status, record: event, setRecord, error, retry } = useDetailData(load, { collection: "events" });
+  const toast = useToast();
+  const { confirm, dialog } = useConfirmDialog();
+  // null = untouched: the input then shows the saved capacity.
+  const [capacityDraft, setCapacityDraft] = useState<string | null>(null);
 
-  const fetchEvent = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const record = await getEventById(params.id);
-      setEvent(record);
-      setCapacityInput(String(record.capacity));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load event");
-    } finally {
-      setLoading(false);
-    }
-  }, [params.id]);
+  useBreadcrumbLabel(status === "loading" ? undefined : event ? event.title : "Not found");
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchEvent();
-  }, [fetchEvent]);
+  if (status === "loading") return <DetailSkeleton />;
+  if (status === "error") return <DetailError message={error ?? "Could not load this event."} onRetry={retry} />;
+  if (!event) return <DetailNotFound noun="Event" listLabel="Events" listHref="/events" />;
 
-  const save = async (data: Parameters<typeof updateEvent>[1]) => {
-    setSaving(true);
-    setActionError(null);
-    try {
-      const record = await updateEvent(params.id, data);
-      setEvent(record);
-      setCapacityInput(String(record.capacity));
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to update event");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <Loader2 size={24} className="animate-spin text-kb-primary" />
-        <span className="ml-2 text-sm text-kb-text-muted">Loading event...</span>
-      </div>
-    );
-  }
-
-  if (error || !event) {
-    return (
-      <div>
-        <div className="flex items-center gap-2 text-sm text-kb-text-body">
-          <AlertCircle size={18} className="text-kb-error" />
-          <span>{error || "Event not found."}</span>
-        </div>
-        <div className="flex items-center gap-4 mt-3">
-          <button onClick={fetchEvent} className="text-sm text-kb-primary font-semibold hover:underline">
-            Retry
-          </button>
-          <Link href="/events" className="text-sm text-kb-primary font-semibold">
-            Back to Events
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const capacityInput = capacityDraft ?? String(event.capacity);
+  const parsed = parseInt(capacityInput, 10);
+  const capacityInvalid = Number.isNaN(parsed) || parsed < event.attendeesCount;
+  const pct = Math.round((event.attendeesCount / event.capacity) * 100);
 
   const saveCapacity = () => {
-    const value = parseInt(capacityInput, 10);
-    if (Number.isNaN(value) || value < event.attendeesCount) {
-      setActionError(`Capacity must be a number no lower than ${event.attendeesCount}.`);
-      return;
-    }
-    save({ capacity: value });
+    if (capacityInvalid) return;
+    // TODO(backend): persist this change
+    setRecord((prev) => ({ ...prev, capacity: parsed }));
+    setCapacityDraft(null);
+    toast.success(`Capacity for ${event.title} was set to ${parsed}.`);
   };
 
-  const pct = event.capacity > 0 ? Math.round((event.attendeesCount / event.capacity) * 100) : 0;
+  const cancelEvent = () =>
+    confirm({
+      title: "Cancel this event?",
+      description: (
+        <>
+          <strong className="text-ink">{event.title}</strong> by {event.hirer} ({event.dateTime}) will be marked Cancelled. Its{" "}
+          {event.attendeesCount} registered attendees are affected.
+        </>
+      ),
+      confirmLabel: "Cancel event",
+      onConfirm: () => {
+        // TODO(backend): persist this change
+        setRecord((prev) => ({ ...prev, status: "cancelled" }));
+        toast.success(`${event.title} was cancelled.`);
+      },
+    });
 
   return (
-    <div>
-      <button
-        onClick={() => router.push("/events")}
-        className="flex items-center gap-1.5 text-sm text-kb-text-muted hover:text-kb-text-body mb-6"
-      >
-        <ChevronLeft size={16} />
-        Back to Events
-      </button>
-
-      <h1 className="text-xl font-bold text-kb-text-body">{event.title}</h1>
-      <p className="text-sm text-kb-text-muted mt-1 mb-6">
-        {event.hirer} · {event.location} · {event.dateTime}
-      </p>
-
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5 mb-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder mb-3">
-          Attendance
-        </p>
-        <div className="h-3 rounded-full bg-kb-bg-alt overflow-hidden mb-2">
-          <div
-            className="h-full rounded-full bg-kb-primary transition-all"
-            style={{ width: `${Math.min(pct, 100)}%` }}
+    <>
+      <DetailPage
+        header={
+          <DetailHeader
+            leading={{ icon: CalendarDays }}
+            title={event.title}
+            badges={<StatusBadge status={event.status} />}
+            meta={`${event.hirer} · ${event.location} · ${event.dateTime}`}
           />
-        </div>
-        <p className="text-sm text-kb-text-muted">
-          {event.attendeesCount} of {event.capacity} spots filled ({pct}%)
-        </p>
-      </div>
+        }
+        main={
+          <>
+            <InfoCard title="Attendance">
+              <div className="h-3 overflow-hidden rounded-pill bg-surface-2" role="presentation">
+                <div className="h-full rounded-pill bg-purple-600 transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+              </div>
+              <p className="body-sm mt-2 text-muted">
+                {event.attendeesCount} of {event.capacity} spots filled ({pct}%)
+              </p>
+            </InfoCard>
 
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5 mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder mb-3">
-          Adjust Capacity
-        </p>
-        <div className="flex items-center gap-2 max-w-xs">
-          <input
-            type="number"
-            value={capacityInput}
-            onChange={(e) => setCapacityInput(e.target.value)}
-            min={event.attendeesCount}
-            className="flex-1 h-10 rounded-lg border border-kb-border-input px-3 text-sm text-kb-text-body outline-none focus:border-kb-primary"
-          />
-          <button
-            onClick={saveCapacity}
-            disabled={saving}
-            className="h-10 px-4 rounded-lg bg-kb-primary text-white text-sm font-semibold disabled:opacity-60"
-          >
-            Save
-          </button>
-        </div>
-        <p className="text-xs text-kb-text-placeholder mt-2">
-          Cannot be set below current attendee count ({event.attendeesCount}).
-        </p>
-      </div>
-
-      {actionError && <p className="text-sm text-kb-error mb-3">{actionError}</p>}
-
-      {event.status !== "cancelled" && (
-        <button
-          onClick={() => save({ status: "cancelled" })}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-sm font-semibold text-red-600 transition-colors disabled:opacity-60"
-        >
-          <XCircle size={16} strokeWidth={2.5} />
-          Cancel event
-        </button>
-      )}
-    </div>
+            <InfoCard title="Adjust Capacity">
+              <div className="flex max-w-xs items-center gap-2">
+                <input
+                  type="number"
+                  aria-label="Capacity"
+                  value={capacityInput}
+                  onChange={(e) => setCapacityDraft(e.target.value)}
+                  min={event.attendeesCount}
+                  className="input-text h-10 flex-1 rounded-control border border-input bg-surface px-3 text-ink"
+                />
+                <Button onClick={saveCapacity} disabled={capacityInvalid}>
+                  Save
+                </Button>
+              </div>
+              <p className={`caption mt-2 ${capacityInvalid ? "text-danger" : ""}`}>
+                Cannot be set below current attendee count ({event.attendeesCount}).
+              </p>
+            </InfoCard>
+          </>
+        }
+        side={
+          <>
+            <InfoCard title="Details">
+              <KeyValueList
+                items={[
+                  { label: "Hirer", value: event.hirer },
+                  { label: "Location", value: event.location },
+                  { label: "Date & Time", value: event.dateTime },
+                  { label: "Capacity", value: String(event.capacity) },
+                ]}
+              />
+            </InfoCard>
+            <InfoCard title="Activity">
+              <MiniStat value={event.attendeesCount} label="Attendees" />
+            </InfoCard>
+          </>
+        }
+        danger={
+          event.status !== "cancelled" && (
+            <DangerZone explanation="Marks this event as Cancelled. Registered attendees are affected.">
+              <Button variant="danger" icon={XCircle} onClick={cancelEvent}>
+                Cancel event
+              </Button>
+            </DangerZone>
+          )
+        }
+      />
+      {dialog}
+    </>
   );
 }

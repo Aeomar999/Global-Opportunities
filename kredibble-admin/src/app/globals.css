@@ -1,60 +1,453 @@
 @import "tailwindcss";
 
-:root {
-  --background: #F7F7F9;
-  --foreground: #1A1A1A;
+/*
+ * G.O.D Admin design tokens (Tailwind v4, CSS-first).
+ * Source of truth: docs/design-brief.md (sections 2 to 4).
+ *
+ * Everything in `@theme` becomes both a CSS variable and a utility
+ * (e.g. `--color-purple-500` -> `bg-purple-500`, `text-purple-500`).
+ * Pages use these utilities only: no hex values, no arbitrary pixel values.
+ *
+ * Spacing: Tailwind's 4px base is kept, so the brief's scale
+ * 4/8/12/16/20/24/28/32/40/48 is `1/2/3/4/5/6/7/8/10/12`
+ * (p-5 = 20px card padding, gap-4 = 16px grid gap, p-7 = 28px page padding).
+ *
+ * Naming note: the brief's "page bg / text / text-muted / border" are exposed
+ * as `canvas`, `ink`, `muted` and `line`. Those names are already used across
+ * the app, so keeping them means nothing has to be renamed.
+ */
+@theme {
+  /* ---- Light surfaces ---- */
+  --color-canvas: #f3f3f7; /* page background */
+  --color-surface: #ffffff; /* cards, bars, inputs */
+  --color-surface-2: #f6f5fa; /* inset areas, KPI upper layer, table header band */
+  --color-line: #e9e8f0; /* 1px card + divider border */
+  --color-line-strong: #d6d3e2; /* hover borders, secondary button border */
+  --color-border-input: #8f89a3; /* input / control boundary: 3.3:1 on white (the brief's #E9E8F0 is 1.2:1) */
+  --color-ink: #17121f; /* text */
+  --color-muted: #66607a; /* text-muted: 5.4:1 on the page bg, 6.0:1 on white */
+  --color-track: #edebf3; /* progress bar track, skeleton blocks */
 
-  /* Kredibble brand tokens — ported from kredibble-app/src/constants/design.ts */
-  --color-kb-primary: #6671E4;
-  --color-kb-primary-light: #8B95FF;
-  --color-kb-primary-dark: #3654FF;
-  --color-kb-bg-screen: #F7F7F9;
-  --color-kb-bg-card: #FFFFFF;
-  --color-kb-bg-alt: #F6F7F9;
-  --color-kb-text-body: #1A1A1A;
-  --color-kb-text-muted: #8A8D9F;
-  --color-kb-text-secondary: #595959;
-  --color-kb-text-placeholder: #A1A1AA;
-  --color-kb-border: #E5E6F2;
-  --color-kb-border-input: #EBEBEE;
-  --color-kb-success: #16A34A;
-  --color-kb-error: #ED4C5C;
-  --color-kb-warning: #F6B612;
-  --color-kb-divider: #EBEBEE;
+  /* ---- Purple (brand #792EA4): builds the structure ---- */
+  --color-purple-50: #f6effa;
+  --color-purple-100: #ecddf5;
+  --color-purple-200: #d9bdeb;
+  --color-purple-400: #9a52c2;
+  --color-purple-500: #792ea4;
+  --color-purple-600: #6a2792;
+  --color-purple-700: #5a2079; /* purple text on light, links */
+
+  /* ---- Orange (brand #fc5e24): the single accent ---- */
+  --color-orange-50: #fff1ea;
+  --color-orange-100: #ffdfd0;
+  --color-orange-500: #fc5e24; /* fills, bars, dots, icons only, never small text */
+  --color-orange-600: #cc4a12; /* primary button background, white label 4.6:1 */
+  --color-orange-hover: #b8410e; /* primary button hover */
+  /* Brief value was #C2410C: it measured 4.1:1 on orange-100, so it is darkened
+     to keep 4.5:1+ on white, orange-50 AND orange-100. */
+  --color-orange-700: #b53b0a; /* orange text on light */
+
+  /* ---- Status: text on tint, always shown with text ---- */
+  --color-success: #15803d;
+  --color-success-soft: #e8f6ee;
+  --color-success-dot: #16a34a;
+  --color-warning: #8a5a00;
+  --color-warning-soft: #fdf3d8;
+  --color-warning-dot: #d99a00;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fdecec;
+  --color-danger-dot: #dc2626;
+  --color-neutral: #4b4560;
+  --color-neutral-soft: #efeef4;
+  --color-neutral-dot: #4b4560;
+
+  /* ---- Dark sidebar ---- */
+  --color-sb-bg: #140a22;
+  --color-sb-raised: #1d1030;
+  --color-sb-line: rgb(255 255 255 / 0.08);
+  --color-sb-text: #f4eefb;
+  --color-sb-muted: #b8a9ce; /* 8.8:1 on sb-bg */
+  --color-sb-tree: rgb(255 255 255 / 0.14); /* tree lines + elbows in the nav */
+
+  /* ---- Charts ---- */
+  --color-chart-pale: #d5c6e3; /* non-highlighted bars when every bar has a value label (1.6:1, decorative) */
+  --color-chart-bar: #9e7fbb; /* non-highlighted bars when there are NO labels: 3.4:1 on white, 3.1:1 on surface-2 (WCAG 3:1 for graphics) */
+  /* primary series = purple-500, highlight = orange-500, secondary = purple-400 */
+
+  /* ---- Focus ring (2px, offset 2px) ---- */
+  --color-focus: #792ea4; /* purple-500 on light surfaces */
+  --color-focus-dark: #c9a3e6; /* on dark surfaces (9:1 on sb-bg) */
+
+  /* ---- Typography ---- */
+  /* The font vars are set by next/font in layout.tsx on <html>. */
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-display: var(--font-jakarta), var(--font-inter), system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+
+  /* ---- Radii ---- */
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-inset: 10px;
+  --radius-pill: 999px;
+  --radius-panel: 28px; /* the content panel's top-left curve (the sidebar itself has no rounded corners) */
+
+  /* ---- Shadows ---- */
+  --shadow-card: 0 1px 2px rgb(23 18 31 / 0.04);
+  --shadow-pop: 0 12px 32px rgb(23 18 31 / 0.14); /* menus, dialogs, tooltips */
+
+  /* ---- Layout sizes ---- */
+  --spacing-topbar: 64px; /* top bar height (h-topbar) */
+  --spacing-sidebar: 248px; /* expanded sidebar (w-sidebar) */
+  --spacing-rail: 72px; /* collapsed sidebar rail (w-rail) */
+  --spacing-kpi: 140px; /* KPI card min height (min-h-kpi) */
+  --spacing-chart: 260px; /* trend chart height (h-chart) */
+  --container-page: 90rem; /* content max width, 1440px (max-w-page) */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
+/* ================================================================ type scale */
 
-  --color-kb-primary: var(--color-kb-primary);
-  --color-kb-primary-light: var(--color-kb-primary-light);
-  --color-kb-primary-dark: var(--color-kb-primary-dark);
-  --color-kb-bg-screen: var(--color-kb-bg-screen);
-  --color-kb-bg-card: var(--color-kb-bg-card);
-  --color-kb-bg-alt: var(--color-kb-bg-alt);
-  --color-kb-text-body: var(--color-kb-text-body);
-  --color-kb-text-muted: var(--color-kb-text-muted);
-  --color-kb-text-secondary: var(--color-kb-text-secondary);
-  --color-kb-text-placeholder: var(--color-kb-text-placeholder);
-  --color-kb-border: var(--color-kb-border);
-  --color-kb-border-input: var(--color-kb-border-input);
-  --color-kb-success: var(--color-kb-success);
-  --color-kb-error: var(--color-kb-error);
-  --color-kb-warning: var(--color-kb-warning);
-  --color-kb-divider: var(--color-kb-divider);
+/* Greeting headline (Overview): Jakarta 800, 28/34, -0.01em. 24/30 below 640px. */
+@utility hero-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 34px;
+  letter-spacing: -0.01em;
+  word-spacing: 0.08em; /* Jakarta ExtraBold's native space is narrow; this opens the word gaps back up */
+  color: var(--color-ink);
+  @media (width < 40rem) {
+    font-size: 24px;
+    line-height: 30px;
+  }
 }
+
+/* Page title (inner pages): Jakarta 700, 24/30, -0.01em. 22/28 below 640px. */
+@utility page-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 30px;
+  letter-spacing: -0.01em;
+  word-spacing: normal;
+  color: var(--color-ink);
+  @media (width < 40rem) {
+    font-size: 22px;
+    line-height: 28px;
+  }
+}
+
+/* Page subtitle: Inter 400, 14/20, muted */
+@utility page-subtitle {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted);
+}
+
+/* Card title: Jakarta 700, 16/22 */
+@utility card-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 22px;
+  letter-spacing: -0.005em;
+  word-spacing: normal;
+  color: var(--color-ink);
+}
+
+/* Card subtitle: Inter 12/16, muted */
+@utility card-subtitle {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-muted);
+}
+
+/* KPI value: Jakarta 800, 30/36, tabular numerals */
+@utility stat-value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 36px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+/* KPI label: Inter 500, 12/16, muted */
+@utility kpi-label {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+/* Sidebar group row: Inter 600, 13/18. Child: Inter 400, 13/18 (active 500). */
+@utility nav-group {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+}
+@utility nav-child {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+}
+
+/* Brand name in the sidebar: Jakarta 700, 15/20 */
+@utility brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 20px;
+  color: #ffffff;
+}
+
+/* Brand tagline under the name in the sidebar: 11/16 as the brief specifies, so "Global Opportunity Desk" fits one line */
+@utility brand-sub {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--color-sb-muted);
+}
+
+/* Body small: Inter 13/18 (table body, menu items, list titles) */
+@utility body-sm {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* Breadcrumb: Inter 13/18 (the current segment adds font-semibold) */
+@utility breadcrumb {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* Table header: Inter 600, 11/16, uppercase, +0.06em. Body: 13/18. Secondary line: 12/16 muted. */
+@utility table-head {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+@utility table-text {
+  font-size: 13px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Badge, chip, count pill: Inter 600, 12/16 */
+@utility badge-text {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Button: Inter 600, 14/20. Input: 14/20. */
+@utility button-text {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+/* Form field label: Inter 600, 13/18 */
+@utility field-label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+}
+/* The article title input: Jakarta 700, 20/28 */
+@utility form-title-text {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 28px;
+}
+@utility input-text {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Mini stat value on detail pages: Jakarta 800, 24/30, tabular numerals */
+@utility ministat-value {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 24px;
+  line-height: 30px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+/* Label / value grid for detail pages: a fixed 140px label column, the value left-aligned beside it */
+@utility kv-grid {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 12px;
+}
+
+/* Captions, chart axes, footer, role lines: 12/16 muted */
+@utility caption {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-muted);
+}
+
+/* Small uppercase label (table heads in older components, group names) */
+@utility eyebrow {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* Header eyebrow: 11/16, 600, uppercase, +0.12em, orange-700 */
+@utility eyebrow-brand {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-orange-700);
+}
+
+/* Sidebar group label (older sidebar markup): 11/16, 600, uppercase */
+@utility nav-label {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* ================================================================== surfaces */
+
+/* Card surface: white, 1px border, 16px radius, 1px soft shadow */
+@utility card-surface {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  color: var(--color-ink); /* cards keep dark text even when placed on a dark surface */
+}
+
+/*
+ * Dark-surface effects. Glass lives ONLY on dark surfaces (sidebar, one
+ * feature card per page); light surfaces stay flat.
+ */
+
+/* Glass: "light from below". Used by the sidebar search field and the active child row. */
+@utility glass {
+  background: linear-gradient(to top, rgb(167 106 214 / 0.22), rgb(255 255 255 / 0.04));
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-bottom-color: rgb(210 170 240 / 0.4); /* the glowing bottom edge */
+}
+
+/* Active child in the sidebar: the same glass fill, but the "light from below" edge is much
+   brighter than the other three edges (bottom 0.55, others 0.08) */
+@utility glass-active {
+  background: linear-gradient(to top, rgb(167 106 214 / 0.22), rgb(255 255 255 / 0.04));
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-bottom-color: rgb(210 170 240 / 0.55);
+}
+
+/*
+ * Inverted corner: gives the content panel a rounded TOP-LEFT corner without clipping it.
+ * Put it on the sticky top bar. An absolutely positioned square at the bar's top-left is
+ * painted dark (the sidebar colour) everywhere EXCEPT inside a quarter circle, so the bar
+ * looks rounded and the dark shell shows through the notch. It sticks together with the bar,
+ * and nothing uses overflow:hidden (which would break position:sticky).
+ * The host must be positioned (the top bar is sticky). Apply it from 1024px up only:
+ * below that the panel is flush and there is no notch.
+ */
+@utility panel-corner {
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--radius-panel);
+    height: var(--radius-panel);
+    background: radial-gradient(circle at 100% 100%, transparent var(--radius-panel), var(--color-sb-bg) calc(var(--radius-panel) + 0.5px));
+    pointer-events: none;
+  }
+}
+
+/* Selected parent pill in the sidebar: white text on a violet gradient (5.8:1 or better) */
+@utility sb-pill {
+  background: linear-gradient(180deg, #8e40bd, #7b2fa7);
+  color: #ffffff;
+}
+
+/* Subtle purple glow at the bottom edge of the sidebar (alpha 0.18, about half of the first draft)
+   so the sidebar stays near-black except around the user card */
+@utility sb-glow {
+  background: radial-gradient(70% 45% at 50% 100%, rgb(121 46 164 / 0.18), transparent);
+}
+
+/* The one dark feature card per page: violet-black to purple with an orange glow at the bottom */
+@utility dark-feature {
+  background:
+    radial-gradient(80% 40% at 50% 100%, rgb(252 94 36 / 0.3), transparent),
+    linear-gradient(160deg, #140a22, #4a1c6b);
+  color: var(--color-sb-text);
+}
+
+/* Put on any dark surface so keyboard focus rings use the light-purple colour */
+@utility dark-surface {
+  /* Re-points the focus-ring colour variable used by the global :focus-visible rule below.
+     (A plain outline-color here would lose: the base rule is unlayered, utilities are layered.) */
+  --focus-ring: var(--color-focus-dark);
+}
+
+/* ======================================================================= base */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Text fields (Input, Textarea, the custom Select, search and add fields: everything built on CONTROL_CLASSES)
+   get ONE focus treatment, not the global outline below plus a border change:
+   - the border turns the focus purple (#792ea4)
+   - a single soft 3px ring, flush against the border (box-shadow: no offset, no gap)
+   - the outline stays in the box model but is transparent: invisible normally, and painted by the browser in
+     forced-colors (high contrast) mode, so focus is still visible there.
+   An invalid field uses the same pattern in the danger colour, so focus never turns it purple. */
+.form-control:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-focus) 25%, transparent);
+}
+.form-control[aria-invalid="true"]:focus-visible {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 25%, transparent);
+}
+
+/* Visible purple focus ring on every keyboard-focusable element (2px, 2px offset) */
+:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--color-focus));
+  outline-offset: 2px;
+}
+
+/* Users who ask for less motion get no animated transitions or skeleton pulse */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Lighter scroll indicator across the dashboard (Firefox) */
 * {
-  scrollbar-color: #D8D9E3 transparent;
+  scrollbar-color: var(--color-line-strong) transparent;
   scrollbar-width: thin;
 }
 
@@ -69,12 +462,39 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #D8D9E3;
+  background-color: var(--color-line-strong);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #C4C6D6;
+  background-color: var(--color-muted);
+}
+
+/* Scrolls but shows no scrollbar (the tab rows). Plain CSS, after the rules above: those are unlayered and
+   would beat a Tailwind utility, which lives in a layer. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Bottom sheet (the phone version of the Select list) slides up in 200ms; reduced motion shows it at once. */
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.sheet-enter {
+  animation: sheet-up 200ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-enter {
+    animation: none;
+  }
 }

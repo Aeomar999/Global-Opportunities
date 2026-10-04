@@ -1,127 +1,139 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { AlertCircle, Ban, ChevronLeft, Loader2, RotateCcw } from "lucide-react";
-import { getStaffById, STAFF_ROLES, updateStaff, type StaffMember } from "@/lib/api";
+/**
+ * Staff detail: one admin team member.
+ * Built on the shared detail template.
+ *
+ * Fields: name, email, joined date, role, status.
+ * Actions: change Role (Super Admin / Moderator / Support), Suspend access (danger zone, confirm
+ * dialog) and Reinstate access (header, when suspended).
+ * Data: the in-memory staff store (src/lib/mock-staff.ts), shared with the Staff list, so changes
+ * show there too. The store IS the local state; each handler carries a TODO(backend).
+ */
+import { useCallback } from "react";
+import { useParams } from "next/navigation";
+import { Ban, RotateCcw } from "lucide-react";
+import { formatDate } from "@/lib/format";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
+import { staffStore, type StaffRole } from "@/lib/mock-staff";
+import { useDetailData } from "@/lib/use-detail-data";
+import { DangerZone } from "@/components/detail/DangerZone";
+import { DetailHeader } from "@/components/detail/DetailHeader";
+import { DetailPage } from "@/components/detail/DetailPage";
+import { DetailError, DetailNotFound, DetailSkeleton } from "@/components/detail/DetailStates";
+import { InfoCard } from "@/components/detail/InfoCard";
+import { Button } from "@/components/ui/Button";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { KeyValueList } from "@/components/ui/KeyValueList";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useToast } from "@/components/ui/Toast";
+
+const ROLES: StaffRole[] = ["Super Admin", "Moderator", "Support"];
+
+// Module-level so the reference is stable (the store method needs its `this`).
+const subscribeToStaff = (notify: () => void) => staffStore.subscribe(notify);
 
 export default function StaffDetailPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const [staff, setStaff] = useState<StaffMember | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const { id } = useParams<{ id: string }>();
+  const load = useCallback(() => Promise.resolve(staffStore.members.find((s) => s.id === id)), [id]);
+  const { status, record: staff, error, retry } = useDetailData(load, { subscribe: subscribeToStaff });
+  const toast = useToast();
+  const { confirm, dialog } = useConfirmDialog();
 
-  const fetchStaff = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setStaff(await getStaffById(params.id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load staff member");
-    } finally {
-      setLoading(false);
-    }
-  }, [params.id]);
+  useBreadcrumbLabel(status === "loading" ? undefined : staff ? staff.name : "Not found");
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchStaff();
-  }, [fetchStaff]);
-
-  const save = async (data: Partial<Pick<StaffMember, "role" | "status">>) => {
-    setSaving(true);
-    setActionError(null);
-    try {
-      setStaff(await updateStaff(params.id, data));
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to update staff member");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <Loader2 size={24} className="animate-spin text-kb-primary" />
-        <span className="ml-2 text-sm text-kb-text-muted">Loading staff member...</span>
-      </div>
-    );
-  }
-
-  if (error || !staff) {
-    return (
-      <div>
-        <div className="flex items-center gap-2 text-sm text-kb-text-body">
-          <AlertCircle size={18} className="text-kb-error" />
-          <span>{error || "Staff member not found."}</span>
-        </div>
-        <div className="flex items-center gap-4 mt-3">
-          <button onClick={fetchStaff} className="text-sm text-kb-primary font-semibold hover:underline">
-            Retry
-          </button>
-          <Link href="/staff" className="text-sm text-kb-primary font-semibold">
-            Back to Staff
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  if (status === "loading") return <DetailSkeleton />;
+  if (status === "error") return <DetailError message={error ?? "Could not load this staff member."} onRetry={retry} />;
+  if (!staff) return <DetailNotFound noun="Staff member" listLabel="Team" listHref="/team" />;
 
   const isActive = staff.status === "active";
 
+  const changeRole = (role: StaffRole) => {
+    if (role === staff.role) return;
+    // TODO(backend): persist this change
+    staffStore.updateRole(staff.id, role);
+    toast.success(`${staff.name} was made ${role}.`);
+  };
+
+  const suspend = () =>
+    confirm({
+      title: "Suspend access?",
+      description: (
+        <>
+          <strong className="text-ink">{staff.name}</strong> ({staff.email}, {staff.role}) will lose access to the admin until you
+          reinstate it.
+        </>
+      ),
+      confirmLabel: "Suspend access",
+      onConfirm: () => {
+        // TODO(backend): persist this change
+        staffStore.toggleStatus(staff.id);
+        toast.success(`${staff.name} was suspended.`);
+      },
+    });
+
+  const reinstate = () => {
+    // TODO(backend): persist this change
+    staffStore.toggleStatus(staff.id);
+    toast.success(`${staff.name} was reinstated.`);
+  };
+
   return (
-    <div className="max-w-lg">
-      <button
-        onClick={() => router.push("/staff")}
-        className="flex items-center gap-1.5 text-sm text-kb-text-muted hover:text-kb-text-body mb-6"
-      >
-        <ChevronLeft size={16} />
-        Back to Staff
-      </button>
-
-      <h1 className="text-xl font-bold text-kb-text-body">{staff.name}</h1>
-      <p className="text-sm text-kb-text-muted mt-1 mb-6">
-        {staff.email}
-        {staff.joinedDate ? ` · Joined ${staff.joinedDate}` : ""}
-      </p>
-
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5 mb-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder mb-3">Role</p>
-        <div className="flex flex-wrap gap-2">
-          {STAFF_ROLES.map((role) => (
-            <button
-              key={role}
-              onClick={() => save({ role })}
-              disabled={saving}
-              className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors disabled:opacity-60 ${
-                staff.role === role
-                  ? "bg-kb-primary text-white"
-                  : "bg-kb-bg-alt border border-kb-border text-kb-text-muted"
-              }`}
-            >
-              {role}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {actionError && <p className="text-sm text-kb-error mb-3">{actionError}</p>}
-
-      <button
-        onClick={() => save({ status: isActive ? "suspended" : "active" })}
-        disabled={saving}
-        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-60 ${
-          isActive ? "bg-red-50 hover:bg-red-100 text-red-600" : "bg-green-50 hover:bg-green-100 text-green-700"
-        }`}
-      >
-        {isActive ? <Ban size={16} strokeWidth={2.5} /> : <RotateCcw size={16} strokeWidth={2.5} />}
-        {isActive ? "Suspend access" : "Reinstate access"}
-      </button>
-    </div>
+    <>
+      <DetailPage
+        header={
+          <DetailHeader
+            leading={{ name: staff.name }}
+            title={staff.name}
+            badges={<StatusBadge status={staff.status} />}
+            meta={`${staff.email} · Joined ${formatDate(staff.joinedDate)}`}
+            actions={
+              !isActive && (
+                <Button variant="secondary" icon={RotateCcw} onClick={reinstate}>
+                  Reinstate access
+                </Button>
+              )
+            }
+          />
+        }
+        main={
+          <InfoCard title="Role">
+            <div role="group" aria-label="Role" className="flex flex-wrap gap-2">
+              {ROLES.map((role) => (
+                <Button
+                  key={role}
+                  variant={staff.role === role ? "primary" : "secondary"}
+                  aria-pressed={staff.role === role}
+                  onClick={() => changeRole(role)}
+                >
+                  {role}
+                </Button>
+              ))}
+            </div>
+          </InfoCard>
+        }
+        side={
+          <InfoCard title="Details">
+            <KeyValueList
+              items={[
+                { label: "Email", value: staff.email },
+                { label: "Role", value: staff.role },
+                { label: "Joined", value: formatDate(staff.joinedDate) },
+              ]}
+            />
+          </InfoCard>
+        }
+        danger={
+          isActive && (
+            <DangerZone explanation="Removes this person's access to the admin. You can reinstate it at any time.">
+              <Button variant="danger" icon={Ban} onClick={suspend}>
+                Suspend access
+              </Button>
+            </DangerZone>
+          )
+        }
+      />
+      {dialog}
+    </>
   );
 }
