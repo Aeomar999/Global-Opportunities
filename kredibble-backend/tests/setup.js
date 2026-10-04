@@ -1,10 +1,14 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 
+import { jest } from '@jest/globals';
+
 let mongoServer;
 
+jest.setTimeout(60000);
+
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryServer.create({ instance: { launchTimeout: 30000 } });
   const uri = mongoServer.getUri();
   
   if (mongoose.connection.readyState !== 0) {

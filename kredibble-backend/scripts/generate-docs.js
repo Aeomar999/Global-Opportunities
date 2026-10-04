@@ -3,8 +3,8 @@ import m2s from 'mongoose-to-swagger';
 import Converter from 'openapi-to-postmanv2';
 
 import { User, StaffMember, SavedItem } from '../src/models/User.js';
-import { SeekerProfile, HirerAccount, Candidate } from '../src/models/Profiles.js';
-import { Opportunity, Applicant, Event, Grant, GrantApplication, CompanyVerification, VerificationDoc, EventAttendee } from '../src/models/Platform.js';
+import { SeekerProfile, HirerAccount } from '../src/models/Profiles.js';
+import { Opportunity, Applicant, Event, Grant, GrantApplication, CompanyVerification, VerificationDoc } from '../src/models/Platform.js';
 import { Channel, ChannelPost, Report } from '../src/models/Community.js';
 import { Article, Notification } from '../src/models/Content.js';
 

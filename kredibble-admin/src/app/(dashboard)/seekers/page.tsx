@@ -7,16 +7,17 @@
  */
 import { useState } from "react";
 import { Users } from "lucide-react";
-import { seekerAccounts, type SeekerAccount } from "@/lib/mock-seekers";
-import { overlayRows, subscribeMockStore } from "@/lib/mock-store";
+import type { SeekerAccount } from "@/lib/mock-seekers";
+import { subscribeMockStore } from "@/lib/mock-store";
+import { loadSeekerRows } from "@/lib/services/directory";
 import { useListData } from "@/lib/use-list-data";
 import { DataTable } from "@/components/list/DataTable";
 import { ListPage } from "@/components/list/ListPage";
 import { TableToolbar } from "@/components/list/TableToolbar";
 import type { Column } from "@/components/list/types";
 
-// Mock records with this session's changes (see mock-store.ts) laid over them.
-const loadSeekers = () => Promise.resolve(overlayRows("seekers", seekerAccounts));
+// Mock mode: the mock records with this session's changes laid over them; real mode: the admin API (services/directory.ts).
+const loadSeekers = loadSeekerRows;
 
 const COLUMNS: Column<SeekerAccount>[] = [
   { key: "name", header: "Name", type: "primary", width: "26%", title: (r) => r.name, subtitle: (r) => r.email },

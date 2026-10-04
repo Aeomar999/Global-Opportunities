@@ -12,9 +12,12 @@ export const opportunityTypes = [
 
 const opportunitySchema = new mongoose.Schema({
   hirerId: { type: mongoose.Schema.Types.ObjectId, ref: 'HirerAccount', index: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
   title: { type: String, required: true, index: true },
   type: { type: String, required: true, enum: opportunityTypes, index: true },
   company: { type: String, required: true, index: true },
+  offeringOrganization: String,
+  organizationLogo: String,
   location: { type: String, required: true, index: true },
   description: { type: String, required: true },
   applicantsCount: { type: Number, default: 0 },
@@ -24,12 +27,27 @@ const opportunitySchema = new mongoose.Schema({
   salary: String,
   experienceLevels: { type: String, default: '[]' },
   applicationUrl: String,
+  applicationLink: String,
+  costLabel: String,
+  format: { type: String, enum: ['online', 'in-person', 'hybrid'] },
+  country: String,
   deadline: Date,
   eligibility: String,
   benefits: String,
   organizer: String,
   coverImage: String,
   externalReferenceUrl: String,
+  assignedWriterId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  referralCodeOnApply: { type: Boolean, default: false },
+  vetted: { type: Boolean, default: false, index: true },
+  vettedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  vettedAt: Date,
+  wordpressSync: {
+    wordpressId: String,
+    status: { type: String, enum: ['pending', 'synced', 'failed'], default: 'pending', index: true },
+    lastAttemptAt: Date,
+    lastError: String,
+  },
   // Competition specific
   competitionCategory: String,
   prizeDetails: String,
@@ -62,11 +80,15 @@ const applicantSchema = new mongoose.Schema({
   status: { type: String, default: 'Applied' },
   skills: { type: String, default: '[]' },
   resumeUrl: String,
+  referralCode: String,
+  ambassadorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ambassador', index: true },
 }, { timestamps: true });
+applicantSchema.index({ opportunityId: 1, seekerId: 1 }, { unique: true, sparse: true });
 
 const eventSchema = new mongoose.Schema({
   title: { type: String, required: true, index: true },
   hirer: { type: String, required: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   location: { type: String, required: true, index: true },
   dateTime: { type: String, required: true },
   capacity: { type: Number, required: true },
@@ -133,6 +155,7 @@ const eventAttendeeSchema = new mongoose.Schema({
   quantity: { type: Number, default: 1 },
   status: { type: String, default: 'confirmed' },
 }, { timestamps: true });
+eventAttendeeSchema.index({ eventId: 1, email: 1 }, { unique: true });
 export const EventAttendee = mongoose.model('EventAttendee', eventAttendeeSchema);
 
 export const CompanyVerification = mongoose.model('CompanyVerification', companyVerificationSchema);

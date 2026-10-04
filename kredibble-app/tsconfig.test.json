@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "types": ["jest", "@testing-library/jest-native"],
+    "types": ["jest"],
     "ignoreDeprecations": "6.0"
   },
   "include": ["__tests__/**/*", "__mocks__/**/*"]

@@ -7,16 +7,17 @@
  */
 import { useState } from "react";
 import { Building2 } from "lucide-react";
-import { hirerAccounts, type HirerAccount } from "@/lib/mock-hirers";
-import { overlayRows, subscribeMockStore } from "@/lib/mock-store";
+import type { HirerAccount } from "@/lib/mock-hirers";
+import { subscribeMockStore } from "@/lib/mock-store";
+import { loadHirerRows } from "@/lib/services/directory";
 import { useListData } from "@/lib/use-list-data";
 import { DataTable } from "@/components/list/DataTable";
 import { ListPage } from "@/components/list/ListPage";
 import { TableToolbar } from "@/components/list/TableToolbar";
 import type { Column } from "@/components/list/types";
 
-// Mock records with this session's changes (see mock-store.ts) laid over them.
-const loadHirers = () => Promise.resolve(overlayRows("hirers", hirerAccounts));
+// Mock mode: the mock records with this session's changes laid over them; real mode: the admin API (services/directory.ts).
+const loadHirers = loadHirerRows;
 
 const COLUMNS: Column<HirerAccount>[] = [
   { key: "company", header: "Company", type: "primary", width: "22%", title: (r) => r.companyName, subtitle: (r) => r.location },

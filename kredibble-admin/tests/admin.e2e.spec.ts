@@ -350,6 +350,9 @@ test.describe('Command palette', () => {
   test('Ctrl+K opens it, typing filters, Enter opens the page', async ({ page }) => {
     await signedIn(page);
     await page.goto(`${BASE_URL}/`);
+    // Wait for the shell to hydrate: a shortcut pressed before React attaches its listeners is lost on a cold dev server.
+    await expect(page.getByTestId('sidebar-toggle')).toBeVisible();
+    await page.waitForTimeout(500);
     await page.keyboard.press('Control+k');
     const dialog = page.getByRole('dialog', { name: 'Command palette' });
     await expect(dialog).toBeVisible();
@@ -2731,5 +2734,44 @@ test.describe('New placeholder routes', () => {
     const collections = emptyCollections();
     expect(Object.keys(collections).sort()).toEqual(['ambassadors', 'databaseRecords', 'listings', 'partners', 'programs', 'socialPosts', 'targets', 'testimonials']);
     for (const rows of Object.values(collections)) expect(rows).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real admin data API (added on main: SEC-075). These need a backend that has the /admin/* routes and the
+// seeded fixtures of its e2e server, so they skip with a clear reason otherwise.
+// ---------------------------------------------------------------------------
+test.describe('Admin data API (real backend)', () => {
+  test('GET /admin/dashboard returns month KPIs against targets', async ({ request }) => {
+    test.skip(!(await apiAvailable(request)), API_DOWN_REASON);
+    const response = await request.get(`${API_URL}/admin/dashboard`);
+    test.skip(response.status() === 404, 'the running backend does not have the admin data API (/admin/*) yet');
+    expect(response.ok()).toBeTruthy();
+    const data = await response.json();
+    expect(Array.isArray(data.data.kpis)).toBeTruthy();
+    const metrics = data.data.kpis.map((kpi: { metric: string }) => kpi.metric);
+    expect(metrics).toContain('opportunitiesPublished');
+    expect(metrics).toContain('programsActive');
+  });
+});
+
+test.describe('Directory pages show real data (E2E_REAL_DATA=1)', () => {
+  // The dashboard must be running with NEXT_PUBLIC_USE_MOCKS=false against the e2e backend (seeded fixtures).
+  test.skip(process.env.E2E_REAL_DATA !== '1', 'set E2E_REAL_DATA=1 with the admin running in real-API mode against the seeded e2e backend');
+
+  test('seekers page lists the seeded seeker', async ({ page }) => {
+    await page.goto(`${BASE_URL}/seekers`, { timeout: 30_000 });
+    await expect(page.getByText('E2E Seeker')).toBeVisible();
+    await expect(page.getByText('e2e-seeker@kredibble.com')).toBeVisible();
+  });
+
+  test('hirers page lists the seeded company', async ({ page }) => {
+    await page.goto(`${BASE_URL}/hirers`, { timeout: 30_000 });
+    await expect(page.getByText('E2E Holdings')).toBeVisible();
+  });
+
+  test('verification page lists the pending company', async ({ page }) => {
+    await page.goto(`${BASE_URL}/verification`, { timeout: 30_000 });
+    await expect(page.getByText('E2E Holdings')).toBeVisible();
   });
 });

@@ -11,8 +11,8 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
-  const translateY = useRef(new Animated.Value(-150)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const [translateY] = useState(() => new Animated.Value(-150));
+  const [opacity] = useState(() => new Animated.Value(0));
   const insets = useSafeAreaInsets();
 
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {

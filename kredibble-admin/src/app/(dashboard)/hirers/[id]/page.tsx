@@ -7,7 +7,8 @@
  * Fields: Recruiter, Recruiter Email, Joined, Active Postings, industry, location, verification
  * summary + status, and (when linked) the "Go to Verification Review" link.
  * Actions: Suspend account (danger zone, with a confirm dialog) and Reinstate account (header).
- * Data: mock hirer accounts (src/lib/mock-hirers.ts), changed in LOCAL state only.
+ * Data: services/directory.ts: mock accounts in mock mode (changes go to the shared mock store), the admin API
+ * (read only) otherwise. Actions stay local until the backend persists them.
  */
 import { useCallback } from "react";
 import Link from "next/link";
@@ -15,7 +16,7 @@ import { useParams } from "next/navigation";
 import { Ban, RotateCcw, ShieldCheck } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
-import { hirerAccounts } from "@/lib/mock-hirers";
+import { loadHirer } from "@/lib/services/directory";
 import { getStatusMeta } from "@/lib/status-map";
 import { useDetailData } from "@/lib/use-detail-data";
 import { DangerZone } from "@/components/detail/DangerZone";
@@ -32,7 +33,7 @@ import { useToast } from "@/components/ui/Toast";
 
 export default function HirerDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const load = useCallback(() => Promise.resolve(hirerAccounts.find((h) => h.id === id)), [id]);
+  const load = useCallback(() => loadHirer(id), [id]);
   const { status, record: hirer, setRecord, error, retry } = useDetailData(load, { collection: "hirers" });
   const toast = useToast();
   const { confirm, dialog } = useConfirmDialog();

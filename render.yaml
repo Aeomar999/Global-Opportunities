@@ -16,6 +16,22 @@ services:
       - key: ADMIN_JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: https://admin.kredibble.com,https://app.kredibble.com
+        value: https://admin.kredibble.com,https://app.kredibble.com,https://kredibble-admin-jerry-amoahs-projects.vercel.app
+      - key: REDIS_URL
+        sync: false
       - key: PORT
         value: 4000
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        value: verify@kredibble.com
+      - key: WORDPRESS_SYNC_BASE_URL
+        sync: false
+      - key: WORDPRESS_API_KEY
+        sync: false

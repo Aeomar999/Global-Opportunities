@@ -3,13 +3,13 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { connectToDatabase } from './lib/mongodb.js';
-import { apiRouter } from './routes/index.js';
+import { createApiRouter } from './routes/index.js';
 import { isAllowedOrigin } from './lib/cors.js';
+import { globalApiLimiter } from './lib/rate-limiters.js';
 import { ApiError } from './utils/http.js';
 import { auditContext } from './lib/audit.js';
 import logger from './lib/logger.js';
@@ -17,6 +17,9 @@ import logger from './lib/logger.js';
 const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
 
 const app = express();
+app.set('trust proxy', 1);
+
+const isTest = env.isTest;
 
 // 1. Basic security and CORS (Must be at the top)
 app.use(helmet());
@@ -35,16 +38,11 @@ app.use(
 
 app.use(cookieParser());
 
-// SEC-024: global API rate limiter (100 req / 15 min). Disabled in test to avoid
-// polluting the route-manifest sweep and other enumeration tests.
-const isTest = process.env.NODE_ENV === 'test';
+// SEC-024: global API rate limiter (100 req / 15 min). Routed through the shared
+// factory so the counter lives in Redis in production and holds across replicas.
+// Skipped entirely in test to avoid polluting the route-manifest sweep.
 if (!isTest) {
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: { error: { message: 'Too many requests, please try again later.' } },
-  });
-  app.use('/api', limiter);
+  app.use('/api', globalApiLimiter);
 }
 
 
@@ -74,7 +72,7 @@ app.use((req, res, next) => {
 
 // 3. Routes
 app.get('/', (req, res) => {
-  res.json({ message: 'Kredibble API is running', env: env.nodeEnv });
+  res.json({ message: 'Kredibble API is running' });
 });
 
 // SEC-014: Swagger only in non-production unless explicitly enabled
@@ -91,26 +89,26 @@ if (!env.isProduction || process.env.ENABLE_SWAGGER === 'true') {
 // reachable unthrottled via /<resource>. Both clients already call /api
 // (kredibble-app/.env and the NEXT_PUBLIC_API_URL default), so the fallback only
 // widened the attack surface. It is gone rather than rate-limited twice.
-// SEC-019: mount at /api/v1 as primary versioned path
-app.use('/api/v1', apiRouter);
+// SEC-019: mount at /api/v1 as primary versioned path with populate enabled
+const apiV1Router = createApiRouter({ enablePopulate: true });
+app.use('/api/v1', apiV1Router);
 
 // SEC-019: legacy /api mount with deprecation headers (not a redirect, so tests work)
-  // Logs deprecation usage so clients can be migrated
-  app.use('/api', (req, res, next) => {
-    // Add deprecation headers
-    res.set('Deprecation', 'true');
-    res.set('Link', '</api/v1>; rel="successor-version"');
-    res.set('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()); // 1 year
-    
-    // Log deprecation usage (non-blocking)
-    logger.warn({ method: req.method, url: req.originalUrl }, 'Deprecated API endpoint accessed');
-    
-    // Continue to the v1 router
-    next();
-  });
+// Uses separate router WITHOUT populate to preserve backward compatibility
+const apiLegacyRouter = createApiRouter({ enablePopulate: false });
+app.use('/api', (req, res, next) => {
+  // Add deprecation headers
+  res.set('Deprecation', 'true');
+  res.set('Link', '</api/v1>; rel="successor-version"');
+  res.set('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()); // 1 year
+  
+  // Log deprecation usage (non-blocking)
+  logger.warn({ method: req.method, url: req.originalUrl }, 'Deprecated API endpoint accessed');
+  
+  next();
+});
 
-// Mount the same router at /api for backward compatibility (with deprecation headers)
-app.use('/api', apiRouter);
+app.use('/api', apiLegacyRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found' } });
@@ -142,9 +140,14 @@ app.use((err, req, res, next) => {
     err.name === 'StrictModeError';
 
   const status = isBadRequest ? 400 : err.status || 500;
+  // SEC-064: Hide internal error messages for 5xx responses in production
+  const message = (status >= 500 && !env.isDevelopment)
+    ? 'Internal server error'
+    : (err.message || 'Internal server error');
+
   res.status(status).json({
     error: {
-      message: err.message || 'Internal server error',
+      message,
       stack: env.isDevelopment ? err.stack : undefined,
     },
   });

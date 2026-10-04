@@ -6,14 +6,15 @@
  *
  * Fields: Email, University, Country, Joined, Applications submitted, Saved opportunities, status.
  * Actions: Suspend account (danger zone, with a confirm dialog) and Reinstate account (header).
- * Data: mock seeker accounts (src/lib/mock-seekers.ts), changed in LOCAL state only.
+ * Data: services/directory.ts: mock accounts in mock mode (changes go to the shared mock store), the admin API
+ * (read only) otherwise. Actions stay local until the backend persists them.
  */
 import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import { RotateCcw, Ban } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
-import { seekerAccounts } from "@/lib/mock-seekers";
+import { loadSeeker } from "@/lib/services/directory";
 import { useDetailData } from "@/lib/use-detail-data";
 import { DangerZone } from "@/components/detail/DangerZone";
 import { DetailHeader } from "@/components/detail/DetailHeader";
@@ -29,7 +30,7 @@ import { useToast } from "@/components/ui/Toast";
 
 export default function SeekerDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const load = useCallback(() => Promise.resolve(seekerAccounts.find((s) => s.id === id)), [id]);
+  const load = useCallback(() => loadSeeker(id), [id]);
   const { status, record: seeker, setRecord, error, retry } = useDetailData(load, { collection: "seekers" });
   const toast = useToast();
   const { confirm, dialog } = useConfirmDialog();

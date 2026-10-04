@@ -2,67 +2,156 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
+  workflow_dispatch:
+
+# One run per ref; a newer push to the same PR cancels the stale run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # mongodb-memory-server downloads mongod here (gitignored) so it can be cached.
+  MONGOMS_DOWNLOAD_DIR: ${{ github.workspace }}/.mongodb-binaries
 
 jobs:
-  backend-test:
-    name: Backend CI
+  backend:
+    name: Backend (lint, test)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: kredibble-backend
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: './kredibble-backend/package-lock.json'
-    - name: Install dependencies
-      working-directory: ./kredibble-backend
-      run: npm ci
-    - name: Run tests
-      working-directory: ./kredibble-backend
-      run: npm run test
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-backend/package-lock.json
+      - name: Cache MongoDB binaries (mongodb-memory-server)
+        uses: actions/cache@v6
+        with:
+          path: .mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('kredibble-backend/package-lock.json') }}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test -- --ci
 
-  admin-test:
-    name: Admin CI
+  backend-image:
+    name: Backend (Docker image builds)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: './kredibble-admin/package-lock.json'
-    - name: Install dependencies
-      working-directory: ./kredibble-admin
-      run: npm ci
-    - name: Install Playwright Browsers
-      working-directory: ./kredibble-admin
-      run: npx playwright install --with-deps
-    - name: Run lint
-      working-directory: ./kredibble-admin
-      run: npm run lint
-    - name: Run Playwright tests
-      working-directory: ./kredibble-admin
-      run: npx playwright test
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: kredibble-backend
+          push: false
+          tags: kredibble-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  app-test:
-    name: App CI
+  admin:
+    name: Admin (lint, typecheck, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: kredibble-admin
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: './kredibble-app/package-lock.json'
-    - name: Install dependencies
-      working-directory: ./kredibble-app
-      run: npm ci
-    - name: Run Typecheck
-      working-directory: ./kredibble-app
-      run: npm run lint || echo "No lint script yet"
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-admin/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Production build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          # Same shape as the deployed config: same-origin proxy to the API.
+          NEXT_PUBLIC_API_URL: /api
+          API_PROXY_TARGET: https://kredibble-api.onrender.com/api
+
+  admin-e2e:
+    name: Admin (Playwright end-to-end)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            kredibble-backend/package-lock.json
+            kredibble-admin/package-lock.json
+      - name: Cache MongoDB binaries (mongodb-memory-server)
+        uses: actions/cache@v6
+        with:
+          path: .mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('kredibble-backend/package-lock.json') }}
+      - name: Install backend (serves the API for the suite)
+        run: npm ci
+        working-directory: kredibble-backend
+      - name: Install admin
+        run: npm ci
+        working-directory: kredibble-admin
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: kredibble-admin
+      # A throwaway admin for this run: the in-memory API seeds it and the tests sign in with it. The password is
+      # random per run and masked, so nothing secret is stored in the repository.
+      - name: Create throwaway e2e admin credentials
+        run: |
+          PASSWORD="$(openssl rand -base64 24)"
+          echo "::add-mask::$PASSWORD"
+          echo "E2E_ADMIN_EMAIL=ci-admin@example.com" >> "$GITHUB_ENV"
+          echo "E2E_ADMIN_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
+      # playwright.config.ts starts the in-memory API and the admin dev server itself.
+      - name: Run Playwright
+        run: npx playwright test
+        working-directory: kredibble-admin
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: kredibble-admin/playwright-report/
+          retention-days: 14
+
+  app:
+    name: Mobile app (lint, typecheck, test, bundle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: kredibble-app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-app/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --ci
+      - name: Bundle check (Metro export)
+        run: npx expo export --platform android --output-dir "$RUNNER_TEMP/expo-export"
+        env:
+          EXPO_NO_TELEMETRY: 1
+          EXPO_PUBLIC_API_URL: https://kredibble-api.onrender.com/api

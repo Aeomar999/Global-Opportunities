@@ -1,7 +1,8 @@
-import jwt from 'jsonwebtoken';
+﻿import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/http.js';
+import { User } from '../models/User.js';
 
 export const signToken = (user) => {
   const userId = user.id || user._id;
@@ -26,6 +27,7 @@ export const generateRefreshToken = () => crypto.randomBytes(32).toString('hex')
 export const hashRefreshToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
 const COOKIE_NAME = 'kredibble_admin_token';
+const REFRESH_COOKIE_NAME = 'kredibble_admin_refresh';
 
 export const setAdminCookie = (res, token) => {
   res.cookie(COOKIE_NAME, token, {
@@ -34,6 +36,16 @@ export const setAdminCookie = (res, token) => {
     sameSite: 'strict',
     maxAge: 15 * 60 * 1000, // 15 minutes
     path: '/',
+  });
+};
+
+export const setAdminRefreshCookie = (res, token) => {
+  res.cookie(REFRESH_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: env.isProduction,
+    sameSite: 'strict',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    path: '/auth/admin',
   });
 };
 
@@ -46,17 +58,32 @@ export const clearAdminCookie = (res) => {
   });
 };
 
-export const requireAuth = (req, res, next) => {
+export const clearAdminRefreshCookie = (res) => {
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: env.isProduction,
+    sameSite: 'strict',
+    path: '/auth/admin',
+  });
+};
+
+export const requireAuth = async (req, res, next) => {
   const header = req.get('authorization');
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return next(new ApiError(401, 'Authentication token is required'));
 
   try {
     const payload = jwt.verify(token, env.jwtSecret);
-    // SEC-009: reject tokens whose tokenVersion is stale (password/role change)
-    if (payload.tv !== undefined && req.auth?.tokenVersion !== undefined && payload.tv !== req.auth.tokenVersion) {
+    
+    // SEC-052: Check token version and deleted role
+    const user = await User.findById(payload.sub).select('tokenVersion role').lean();
+    if (!user || user.role === 'deleted') {
+      return next(new ApiError(401, 'Account no longer active'));
+    }
+    if (payload.tv !== undefined && payload.tv !== user.tokenVersion) {
       return next(new ApiError(401, 'Token revoked due to security event'));
     }
+    
     req.auth = payload;
     next();
   } catch {
@@ -64,30 +91,100 @@ export const requireAuth = (req, res, next) => {
   }
 };
 
-export const requireAdminAuth = (req, res, next) => {
+export const requireAdminAuth = async (req, res, next) => {
   // Try cookie first (admin panel), then Authorization header (API clients)
   const cookieToken = req.cookies?.[COOKIE_NAME];
   const headerToken = req.get('authorization')?.startsWith('Bearer ')
     ? req.get('authorization').slice(7)
     : null;
-  const token = cookieToken || headerToken;
 
+  const token = cookieToken || headerToken;
   if (!token) return next(new ApiError(401, 'Admin authentication required'));
 
   try {
-    req.auth = jwt.verify(token, env.adminJwtSecret, { audience: 'kredibble-admin' });
-    if (req.auth.role !== 'admin') {
-      return next(new ApiError(403, 'Admin role required'));
+    const payload = jwt.verify(token, env.adminJwtSecret);
+    if (payload.aud !== 'kredibble-admin' || payload.role !== 'admin') {
+      return next(new ApiError(403, 'Insufficient permissions'));
     }
+    
+    const user = await User.findById(payload.sub).select('tokenVersion role').lean();
+    if (!user || user.role === 'deleted') {
+      return next(new ApiError(401, 'Account no longer active'));
+    }
+    
+    req.auth = payload;
     next();
   } catch {
-    next(new ApiError(401, 'Admin authentication invalid or expired'));
+    next(new ApiError(401, 'Admin token is invalid or expired'));
   }
 };
 
-export const requireRole = (...roles) => (req, res, next) => {
-  if (!req.auth || !roles.includes(req.auth.role)) {
-    return next(new ApiError(403, 'You do not have permission to perform this action'));
+export const optionalAuth = async (req, res, next) => {
+  const header = req.get('authorization');
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return next();
+
+  try {
+    const payload = jwt.verify(token, env.jwtSecret);
+    
+    const user = await User.findById(payload.sub).select('tokenVersion role').lean();
+    if (!user || user.role === 'deleted' || (payload.tv !== undefined && payload.tv !== user.tokenVersion)) {
+      return next(); // Ignore invalid tokens on optional routes
+    }
+
+    req.auth = payload;
+    next();
+  } catch {
+    // Ignore invalid tokens on optional routes
+    next();
   }
-  next();
+};
+
+/**
+ * Combined auth for admin routes: accepts admin cookie/JWT OR user Bearer token with StaffMember role.
+ * This maintains backward compatibility while supporting the admin panel's cookie-based auth.
+ */
+export const requireAdminOrStaffAuth = async (req, res, next) => {
+  // Try admin auth first (cookie or Bearer with admin audience)
+  const cookieToken = req.cookies?.kredibble_admin_token;
+  const headerToken = req.get('authorization')?.startsWith('Bearer ')
+    ? req.get('authorization').slice(7)
+    : null;
+
+  // Check if it's an admin token (has audience claim or is in cookie)
+  const isAdminToken = cookieToken || (headerToken && headerToken.startsWith('eyJ'));
+
+  if (isAdminToken && (cookieToken || headerToken)) {
+    try {
+      const token = cookieToken || headerToken;
+      const payload = jwt.verify(token, env.adminJwtSecret);
+      if (payload.aud === 'kredibble-admin' && payload.role === 'admin') {
+        const user = await User.findById(payload.sub).select('tokenVersion role').lean();
+        if (user && user.role !== 'deleted') {
+          req.auth = payload;
+          return next();
+        }
+      }
+    } catch {
+      // Fall through to user auth
+    }
+  }
+
+  // Fall back to user auth with StaffMember check
+  const userToken = headerToken;
+  if (!userToken) return next(new ApiError(401, 'Authentication required'));
+
+  try {
+    const payload = jwt.verify(userToken, env.jwtSecret);
+    
+    const user = await User.findById(payload.sub).select('tokenVersion role').lean();
+    if (!user || user.role === 'deleted' || (payload.tv !== undefined && payload.tv !== user.tokenVersion)) {
+      return next(new ApiError(401, 'Account no longer active'));
+    }
+    
+    req.auth = payload;
+    next();
+  } catch {
+    next(new ApiError(401, 'Authentication token is invalid or expired'));
+  }
 };

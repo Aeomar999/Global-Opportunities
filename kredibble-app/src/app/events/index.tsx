@@ -180,6 +180,7 @@ export const EventCard = ({ event, onPress }: { event: EventItem; onPress: () =>
 export default function EventsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
+    searchQuery?: string;
     date?: string;
     region?: string;
     category?: string;
@@ -222,17 +223,28 @@ export default function EventsScreen() {
   }, [params]);
 
   // Merge live events with mock events so the screen isn't empty if the backend has no events
-  const filteredEvents = liveEvents.length > 0 ? liveEvents.map(j => ({
+  // Live events are mapped onto the full EventItem shape EventCard renders, so a
+  // backend row never shows up without a date, banner text or colour.
+  const filteredEvents: EventItem[] = liveEvents.length > 0 ? liveEvents.map((j): EventItem => ({
     id: j.id,
     title: j.title,
     location: j.eventRegion || j.location || 'Remote',
+    venueName: j.venueName || j.location || '',
+    venueAddress: j.venueAddress || j.location || '',
+    date: j.eventDateTime || 'Upcoming',
+    price: j.eventTicketType === 'Paid' ? 'Paid' : 'Free',
+    priceNum: Number(j.priceNum) || 0,
+    theme: j.theme || j.title,
+    duration: j.duration || '',
+    type: j.eventStyle || 'In-person event',
+    organizer: j.organizer || j.company || '',
+    category: j.eventCategory || 'Technology',
     dateLabel: j.eventDateTime || 'Upcoming',
     region: j.eventRegion || 'Ghana',
-    category: j.eventCategory || 'Technology',
     ticketType: j.eventTicketType || 'Free',
     eventType: j.eventStyle || 'In-Person',
-    price: j.eventTicketType === 'Paid' ? 'Paid' : 'Free',
-    image: j.eventBannerUri || 'https://via.placeholder.com/300x120',
+    logoColor: Colors.primary,
+    description: j.description || '',
   })) : EVENTS_DATA.filter(event => {
     if (params.date) {
       const dates = params.date.split(',');

@@ -68,11 +68,8 @@ const HIRER_SELF_FIELDS = [
 export const RESOURCE_POLICIES = {
   // --- Internal identity surfaces. Never exposed to non-admins. ---
   users: {
-    // Any authenticated user may read the directory; `passwordHash` is stripped
-    // on every response (SEC-011/012). Writes stay admin-only, so role cannot be
-    // changed by a non-admin. Scoping *which* fields each role may see is tracked
-    // as a follow-up, not silently widened here.
-    read: AUTHENTICATED,
+    // SEC-054: /users is admin-only. PII stripping is a secondary defense.
+    read: ADMIN_ONLY,
     create: ADMIN_ONLY,
     update: ADMIN_ONLY,
     delete: ADMIN_ONLY,
@@ -285,12 +282,22 @@ export const RESOURCE_POLICIES = {
     updateFields: ['label', 'fileName'],
     adminUpdateFields: ['status'],
   },
+
+  'saved-items': {
+    read: AUTHENTICATED,
+    create: AUTHENTICATED,
+    update: AUTHENTICATED,
+    delete: AUTHENTICATED,
+    createFields: ['itemType', 'itemId'],
+    updateFields: [],
+  },
 };
 
 /** Roles allowed for a policy action, or the AUTHENTICATED sentinel. */
 export const allowedRoles = (policy, action) => {
   const spec = policy?.[action];
-  if (!spec) return AUTHENTICATED;
+  // SEC-063: Fail closed for missing policy actions
+  if (!spec) return [];
   return spec;
 };
 

@@ -1,4 +1,3 @@
-
 .mcp.json
 kredibble-backend/scripts/seed-test-credentials.js
 kredibble-app/.env
@@ -6,3 +5,10 @@ kredibble-app/.env.production
 
 .vercel
 .env*
+
+node_modules/
+coverage/
+*.log
+.pgadmin/
+.mongodb-binaries/
+.cache/
