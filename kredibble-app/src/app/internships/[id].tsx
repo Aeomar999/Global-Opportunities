@@ -1,38 +1,102 @@
-import React, { useState } from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Bookmark, Sparkles, Users, MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { INTERNSHIPS_DATA } from './index';
-import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
+import { Colors, FontWeight, FontSize, Radius } from '../../constants/design';
 import { useToast } from '../../components/ui/ToastProvider';
+import { getOpportunityById, applyForOpportunity } from '../../lib/api';
 
-const ABOUT = `Our mission\nWe're making Africa the first cashless continent.\n\nIn 2017, over half the population in Sub-Saharan Africa had no bank account. That's for good reason—the fees are too high, the closest branch can be miles away, and nobody takes cards. Without access to financial institutions, people are forced to keep their savings under the mattress. Small business owners rely on lenders who charge extortionate rates. Parents spend hours waiting in line to pay school fees in cash.\n\nWe're solving this by building financial services that just work: no account fees, instantly available, and accepted everywhere. In places where electricity, water and roads don't always work, you can still send money with Wave. In 2017, we launched a mobile app in Senegal for cash deposit, withdrawal, and peer-to-peer and business payments. Now, we have millions of users across 9 countries and are growing fast.\n\nOur goal is to make Africa the first cashless continent and that's where you come in...\n\nHow you'll help us achieve it\n\nWave is now the largest financial institution in Senegal and Côte d'Ivoire, with millions of users, growing rapidly year-on-year. And, we're still in the early days of our product roadmap and potential impact on people's everyday lives.`;
-
-const RESPONSIBILITIES = [
-  "Assist senior designers in creating user flows, visual mockups, and wireframes.",
-  "Participate in user research and testing sessions, documenting insights.",
-  "Collaborate on design system maintenance and UI component specifications.",
-  "Present designs to cross-functional team members and iterate on feedback."
+const DEFAULT_RESPONSIBILITIES = [
+  "Assist team members in executing key initiatives and workflows.",
+  "Participate in cross-functional planning and research sessions.",
+  "Collaborate on project documentation, presentations, and tasks.",
+  "Iterate and implement recommendations based on supervisor feedback."
 ];
 
 export default function InternshipDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const item = INTERNSHIPS_DATA.find(i => i.id === id) ?? INTERNSHIPS_DATA[0];
+  const [internship, setInternship] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [bookmarked, setBookmarked] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [applying, setApplying] = useState(false);
   const { showToast } = useToast();
 
-  const handleApply = () => {
-    if (applied) return;
-    setApplied(true);
-    showToast(`You have successfully submitted your application for the ${item.title} internship at ${item.company}!`);
+  useEffect(() => {
+    let isMounted = true;
+    if (!id) return;
+    getOpportunityById(id)
+      .then((data) => {
+        if (!isMounted) return;
+        setInternship(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err.message || 'Failed to load internship details');
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  const handleApply = async () => {
+    if (applied || applying || !id) return;
+    setApplying(true);
+    try {
+      await applyForOpportunity(id, { coverLetter: 'Applied via Kredibble Mobile' });
+      setApplied(true);
+      showToast(`You have successfully submitted your application for ${internship?.title || 'the internship'}!`);
+    } catch (err: any) {
+      if (err.status === 409 || err.message?.includes('already applied')) {
+        setApplied(true);
+        showToast('You have already applied for this opportunity.');
+      } else {
+        showToast(err.message || 'Application failed. Please try again.');
+      }
+    } finally {
+      setApplying(false);
+    }
   };
 
-  const fullDescription = `${item.description}\n\n${ABOUT}`;
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center' }} edges={['top', 'left', 'right']}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 12, color: Colors.textMuted, fontSize: 14 }} className="font-sans">Loading internship details...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !internship) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }} edges={['top', 'left', 'right']}>
+        <Text style={{ fontSize: 16, color: Colors.textHeading, fontWeight: '600', marginBottom: 8 }} className="font-sans">
+          {error || 'Internship not found'}
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/internships')}
+          style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: Colors.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: Colors.white, fontWeight: '600' }} className="font-sans">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const initial = (internship.company || 'I').charAt(0).toUpperCase();
+  const logoColor = internship.logoColor || '#34D399';
+  const responsibilities = Array.isArray(internship.requirements) && internship.requirements.length > 0 
+    ? internship.requirements 
+    : DEFAULT_RESPONSIBILITIES;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen }} edges={['top', 'left', 'right']}>
@@ -61,18 +125,18 @@ export default function InternshipDetailScreen() {
         {/* Company Logo Header Section (Centered) */}
         <View style={styles.logoHeaderContainer}>
           <View
-            style={[styles.logoCircle, { backgroundColor: item.logoColor }]}
+            style={[styles.logoCircle, { backgroundColor: logoColor }]}
           >
-            <Text style={styles.logoText}>{item.initial}</Text>
+            <Text style={styles.logoText}>{initial}</Text>
           </View>
           <Text style={styles.companyName} className="font-sans">
-            {item.company}
+            {internship.company || 'Company'}
           </Text>
           <Text style={styles.internshipTitle} className="font-sans">
-            {item.title}
+            {internship.title}
           </Text>
           <Text style={styles.internshipLocation} className="font-sans">
-            {item.location}
+            {internship.location || 'Remote'}
           </Text>
         </View>
 
@@ -80,11 +144,11 @@ export default function InternshipDetailScreen() {
         <View style={styles.metaCard}>
           <View style={{ flex: 1, marginRight: 12 }}>
             <Text style={styles.metaLabel} className="font-sans">Program Type</Text>
-            <Text style={styles.metaValue} className="font-sans">Paid Internship</Text>
+            <Text style={styles.metaValue} className="font-sans">{internship.salary || 'Internship'}</Text>
           </View>
           <View style={styles.badge}>
             <Text style={styles.badgeText} className="font-sans">
-              Paid
+              Active
             </Text>
           </View>
         </View>
@@ -96,20 +160,22 @@ export default function InternshipDetailScreen() {
           </Text>
           <Text
             style={styles.bodyText}
-            numberOfLines={expanded ? undefined : 3}
+            numberOfLines={expanded ? undefined : 4}
             className="font-sans"
           >
-            {fullDescription}
+            {internship.description || 'No description provided.'}
           </Text>
-          <TouchableOpacity
-            style={styles.readMoreButton}
-            onPress={() => setExpanded(!expanded)}
-          >
-            <Text style={styles.readMoreText} className="font-sans">
-              {expanded ? 'Read less' : 'Read more'}
-            </Text>
-            {expanded ? <ChevronUp size={14} color={Colors.primary} /> : <ChevronDown size={14} color={Colors.primary} />}
-          </TouchableOpacity>
+          {internship.description && internship.description.length > 150 && (
+            <TouchableOpacity
+              style={styles.readMoreButton}
+              onPress={() => setExpanded(!expanded)}
+            >
+              <Text style={styles.readMoreText} className="font-sans">
+                {expanded ? 'Read less' : 'Read more'}
+              </Text>
+              {expanded ? <ChevronUp size={14} color={Colors.primary} /> : <ChevronDown size={14} color={Colors.primary} />}
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Panel 2: Good to know */}
@@ -120,19 +186,19 @@ export default function InternshipDetailScreen() {
           <View style={styles.infoRow}>
             <Sparkles size={16} color={Colors.success} style={{ marginRight: 8 }} />
             <Text style={styles.infoText} className="font-sans">
-              {item.match}
+              92% Match
             </Text>
           </View>
           <View style={[styles.infoRow, { marginTop: 10 }]}>
             <Users size={16} color={Colors.textMuted} style={{ marginRight: 8 }} />
             <Text style={styles.infoText} className="font-sans">
-              {item.applied}
+              {internship.applicantsCount || 0} applied
             </Text>
           </View>
           <View style={[styles.infoRow, { marginTop: 10 }]}>
             <MapPin size={16} color={Colors.textMuted} style={{ marginRight: 8 }} />
             <Text style={styles.infoText} className="font-sans">
-              {item.location}
+              {internship.location || 'Remote'}
             </Text>
           </View>
         </View>
@@ -140,9 +206,9 @@ export default function InternshipDetailScreen() {
         {/* Panel 3: Key Responsibilities */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle} className="font-sans">
-            Responsibilities
+            Responsibilities & Requirements
           </Text>
-          {RESPONSIBILITIES.map((resp, idx) => (
+          {responsibilities.map((resp: string, idx: number) => (
             <View key={idx} style={styles.bulletRow}>
               <Text style={styles.bulletSymbol}>•</Text>
               <Text style={styles.bulletText} className="font-sans">
@@ -157,12 +223,12 @@ export default function InternshipDetailScreen() {
       <View style={styles.footer}>
         <TouchableOpacity
           onPress={handleApply}
-          style={[styles.applyButton, applied && styles.applyButtonInactive]}
-          disabled={applied}
+          style={[styles.applyButton, (applied || applying) && styles.applyButtonInactive]}
+          disabled={applied || applying}
           activeOpacity={0.7}
         >
-          <Text style={[styles.applyButtonText, applied && styles.applyButtonTextInactive]} className="font-sans">
-            {applied ? 'Applied' : 'Send application'}
+          <Text style={[styles.applyButtonText, (applied || applying) && styles.applyButtonTextInactive]} className="font-sans">
+            {applying ? 'Submitting...' : applied ? 'Applied' : 'Send application'}
           </Text>
         </TouchableOpacity>
       </View>

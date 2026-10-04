@@ -16,11 +16,14 @@ articleSchema.index({ title: 'text', category: 'text' });
 const notificationSchema = new mongoose.Schema({
   title: { type: String, required: true, index: true },
   message: { type: String, required: true, index: true },
-  audience: { type: String, required: true, index: true }, // e.g. seekers, hirers, all
+  audience: { type: String, required: true, index: true }, // e.g. seekers, hirers, all, both
+  type: { type: String, default: 'general' },
+  priority: { type: String, default: 'normal' },
+  isActive: { type: Boolean, default: true, index: true },
   sentAt: String,
 }, { timestamps: true });
 
-// SEC-031: Compound index for user notifications (userId + createdAt)
+// SEC-031: Compound index for notifications
 notificationSchema.index({ createdAt: -1 });
 
 export const Article = mongoose.model('Article', articleSchema);

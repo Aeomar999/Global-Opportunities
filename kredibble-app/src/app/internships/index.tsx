@@ -8,52 +8,17 @@ import { useToast } from '../../components/ui/ToastProvider';
 
 // ─── Shared internship data ───────────────────────────────────────────────────
 
-export const INTERNSHIPS_DATA = [
-  {
-    id: '1',
-    title: 'Senior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'Wave mobile money',
-    logoColor: '#00BCD4',
-    initial: 'W',
-    description: "In 2017, over half the population in Sub-Saharan Africa had no bank account. That's for good reason....",
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-  {
-    id: '2',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'Pinterest',
-    logoColor: '#E60023',
-    initial: 'P',
-    description: 'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-  {
-    id: '3',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'OpenSea',
-    logoColor: '#2081E2',
-    initial: 'O',
-    description: 'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-  {
-    id: '4',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'Product Hunt',
-    logoColor: '#DA552F',
-    initial: 'P',
-    description: 'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-];
+export type Internship = {
+  id: string;
+  title: string;
+  location: string;
+  company: string;
+  logoColor?: string;
+  initial?: string;
+  description: string;
+  applied?: string;
+  match?: string;
+};
 
 // ─── Components ───────────────────────────────────────────────────────────────
 
@@ -75,8 +40,6 @@ const AvatarStack = () => (
     ))}
   </View>
 );
-
-type Internship = (typeof INTERNSHIPS_DATA)[number];
 
 export const InternshipCard = ({ item, onPress }: { item: Internship; onPress: () => void }) => {
   const { showToast } = useToast();
@@ -207,18 +170,17 @@ export default function InternshipsScreen() {
     fetchInternships();
   }, [params.query]);
 
-  // Merge live internships with mock internships so the screen isn't empty if the backend has no internships
-  const displayInternships = liveInternships.length > 0 ? liveInternships.map(j => ({
+  const displayInternships: Internship[] = liveInternships.map(j => ({
     id: j.id,
     title: j.title,
     location: j.location || 'Remote',
     company: j.company || 'Company',
     logoColor: j.logoColor || '#34D399',
-    initial: j.initial || 'I',
+    initial: (j.company || 'I').charAt(0).toUpperCase(),
     description: j.description || '',
     applied: `${j.applicantsCount || 0} applied`,
     match: '92% Match',
-  })) : INTERNSHIPS_DATA;
+  }));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }} edges={['top', 'left', 'right']}>
@@ -272,13 +234,23 @@ export default function InternshipsScreen() {
         </View>
 
         {/* Internship cards */}
-        {displayInternships.map(item => (
-          <InternshipCard
-            key={item.id}
-            item={item}
-            onPress={() => router.push({ pathname: '/internships/[id]', params: { id: item.id } })}
-          />
-        ))}
+        {isLoading ? (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <Text style={{ color: '#8A8D9F', fontSize: 14 }} className="font-sans">Loading internships...</Text>
+          </View>
+        ) : displayInternships.length > 0 ? (
+          displayInternships.map(item => (
+            <InternshipCard
+              key={item.id}
+              item={item}
+              onPress={() => router.push({ pathname: '/internships/[id]', params: { id: item.id } })}
+            />
+          ))
+        ) : (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <Text style={{ color: '#8A8D9F', fontSize: 14 }} className="font-sans">No internships available at the moment.</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

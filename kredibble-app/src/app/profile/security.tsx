@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, X } from 'lucide-react-native';
 import { profileStore, SecuritySettings } from '../../constants/mockProfile';
+import { changePassword, deleteMyAccount } from '../../lib/api';
+import { authStore } from '../../constants/authStore';
 
 export default function ManageSecurityScreen() {
   const router = useRouter();
@@ -14,6 +16,14 @@ export default function ManageSecurityScreen() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+
+  // Delete account state
+  const [deletePassword, setDeletePassword] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     const unsubscribe = profileStore.subscribe(() => {
@@ -26,23 +36,41 @@ export default function ManageSecurityScreen() {
     profileStore.updateSecurity({ [key]: !security[key] });
   };
 
-  const handleUpdatePassword = () => {
-    if (newPassword && newPassword === confirmPassword) {
-      console.log('Password updated successfully');
+  const handleUpdatePassword = async () => {
+    if (!isPasswordValid || isUpdatingPassword) return;
+    setPasswordError('');
+    setPasswordSuccess('');
+    setIsUpdatingPassword(true);
+    try {
+      await changePassword({ currentPassword, newPassword });
+      setPasswordSuccess('Password updated successfully');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'Failed to update password');
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
-  const handleDeleteAccount = () => {
-    setDeleteVisible(false);
-    profileStore.deleteAccount();
-    // Redirect to login or onboarding
-    router.replace('/');
+  const handleDeleteAccount = async () => {
+    if (!deletePassword || isDeleting) return;
+    setDeleteError('');
+    setIsDeleting(true);
+    try {
+      await deleteMyAccount(deletePassword);
+      authStore.clearSession();
+      setDeleteVisible(false);
+      router.replace('/(auth)/login');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete account');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
-  const isPasswordValid = currentPassword.length > 0 && newPassword.length > 0 && newPassword === confirmPassword;
+  const isPasswordValid = currentPassword.length > 0 && newPassword.length >= 10 && newPassword === confirmPassword && !isUpdatingPassword;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -101,6 +129,18 @@ export default function ManageSecurityScreen() {
           />
         </View>
 
+        {passwordError ? (
+          <Text style={{ fontSize: 13, color: '#ED4C5C', marginBottom: 12 }} className="font-sans">
+            {passwordError}
+          </Text>
+        ) : null}
+
+        {passwordSuccess ? (
+          <Text style={{ fontSize: 13, color: '#16A34A', marginBottom: 12 }} className="font-sans">
+            {passwordSuccess}
+          </Text>
+        ) : null}
+
         {/* Update Password Button */}
         <TouchableOpacity 
           style={[styles.updateButton, !isPasswordValid && styles.disabledButton]} 
@@ -109,7 +149,7 @@ export default function ManageSecurityScreen() {
           activeOpacity={0.8}
         >
           <Text style={[styles.updateButtonText, !isPasswordValid && styles.disabledButtonText]} className="font-sans">
-            Update password
+            {isUpdatingPassword ? 'Updating...' : 'Update password'}
           </Text>
         </TouchableOpacity>
 
@@ -134,7 +174,11 @@ export default function ManageSecurityScreen() {
       <View style={styles.footer}>
         <TouchableOpacity 
           style={styles.deleteButton}
-          onPress={() => setDeleteVisible(true)}
+          onPress={() => {
+            setDeletePassword('');
+            setDeleteError('');
+            setDeleteVisible(true);
+          }}
           activeOpacity={0.8}
         >
           <Text style={styles.deleteButtonText} className="font-sans">Delete Account</Text>
@@ -146,28 +190,58 @@ export default function ManageSecurityScreen() {
         visible={deleteVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setDeleteVisible(false)}
+        onRequestClose={() => { if (!isDeleting) setDeleteVisible(false); }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle} className="font-sans">Delete account</Text>
-            <Text style={styles.modalSubtitle} className="font-sans">Are you sure you want to Delete your account?</Text>
+            <Text style={styles.modalSubtitle} className="font-sans">
+              Are you sure? This action is permanent. All your data, profile, and applications will be deleted immediately.
+            </Text>
+
+            <View style={{ width: '100%', marginBottom: 16 }}>
+              <Text style={styles.fieldLabel} className="font-sans">Confirm Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your password to confirm"
+                placeholderTextColor="#8A8D9F"
+                secureTextEntry={true}
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                className="font-sans"
+              />
+            </View>
+
+            {deleteError ? (
+              <Text style={{ fontSize: 13, color: '#ED4C5C', marginBottom: 12, textAlign: 'center' }} className="font-sans">
+                {deleteError}
+              </Text>
+            ) : null}
             
             <View style={styles.modalButtons}>
               <TouchableOpacity 
                 style={styles.cancelButton} 
-                onPress={() => setDeleteVisible(false)}
+                onPress={() => {
+                  if (isDeleting) return;
+                  setDeletePassword('');
+                  setDeleteError('');
+                  setDeleteVisible(false);
+                }}
+                disabled={isDeleting}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cancelButtonText} className="font-sans">No, keep it</Text>
+                <Text style={styles.cancelButtonText} className="font-sans">Cancel</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.confirmDeleteButton} 
+                style={[styles.confirmDeleteButton, (!deletePassword || isDeleting) && styles.disabledButton]} 
                 onPress={handleDeleteAccount}
+                disabled={!deletePassword || isDeleting}
                 activeOpacity={0.8}
               >
-                <Text style={styles.confirmDeleteText} className="font-sans">Yes, delete!</Text>
+                <Text style={[styles.confirmDeleteText, (!deletePassword || isDeleting) && styles.disabledButtonText]} className="font-sans">
+                  {isDeleting ? 'Deleting...' : 'Yes, delete!'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

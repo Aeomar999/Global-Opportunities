@@ -62,14 +62,6 @@ app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 // SEC-017 + SEC-039: audit context with request ID propagation
 app.use(auditContext);
 
-// Add simple URL logging for debugging production 404s
-app.use((req, res, next) => {
-  if (!env.isDevelopment) {
-    logger.info({ method: req.method, url: req.url }, 'Request received');
-  }
-  next();
-});
-
 // 3. Routes
 app.get('/', (req, res) => {
   res.json({ message: 'Kredibble API is running' });
@@ -93,18 +85,25 @@ if (!env.isProduction || process.env.ENABLE_SWAGGER === 'true') {
 const apiV1Router = createApiRouter({ enablePopulate: true });
 app.use('/api/v1', apiV1Router);
 
-// SEC-019: legacy /api mount with deprecation headers (not a redirect, so tests work)
+// SEC-019 / SEC-095: legacy /api mount with fixed Sunset header and rate-limited deprecation logging
 // Uses separate router WITHOUT populate to preserve backward compatibility
 const apiLegacyRouter = createApiRouter({ enablePopulate: false });
+const FIXED_SUNSET_DATE = new Date('2027-10-01T00:00:00Z').toUTCString();
+const deprecatedLogSeen = new Set();
+
 app.use('/api', (req, res, next) => {
-  // Add deprecation headers
   res.set('Deprecation', 'true');
   res.set('Link', '</api/v1>; rel="successor-version"');
-  res.set('Sunset', new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString()); // 1 year
-  
-  // Log deprecation usage (non-blocking)
-  logger.warn({ method: req.method, url: req.originalUrl }, 'Deprecated API endpoint accessed');
-  
+  res.set('Sunset', FIXED_SUNSET_DATE);
+
+  // SEC-095: Log deprecation usage once per client per day to prevent logging noise
+  const clientDay = `${req.ip}:${new Date().toISOString().slice(0, 10)}`;
+  if (!deprecatedLogSeen.has(clientDay)) {
+    deprecatedLogSeen.add(clientDay);
+    logger.warn({ method: req.method, url: req.originalUrl }, 'Deprecated API endpoint accessed');
+    if (deprecatedLogSeen.size > 5000) deprecatedLogSeen.clear();
+  }
+
   next();
 });
 

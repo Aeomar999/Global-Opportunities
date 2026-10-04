@@ -3,6 +3,75 @@ import * as SecureStore from 'expo-secure-store';
 
 export type AuthRole = 'seeker' | 'hirer' | 'admin';
 
+export type Opportunity = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  type?: string;
+  requirements?: string | string[];
+  salary?: string;
+  applicantsCount?: number;
+  vetted?: boolean;
+  moderationStatus?: string;
+  logoColor?: string;
+  initial?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type EventItem = {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  time?: string;
+  location: string;
+  venueName?: string;
+  venueAddress?: string;
+  theme?: string;
+  duration?: string;
+  capacity?: number;
+  attendeesCount?: number;
+  image?: string;
+  organizer?: string;
+  type?: string;
+  price?: string | number;
+  priceNum?: number;
+  category?: string;
+  region?: string;
+  ticketType?: string;
+  eventType?: string;
+  logoColor?: string;
+  virtualUrl?: string;
+};
+
+export type Grant = {
+  id: string;
+  title: string;
+  org?: string;
+  funder?: string;
+  fundingAgency?: string;
+  description: string;
+  fundingPool?: number;
+  allocated?: number;
+  budget?: string;
+  openStatus?: string;
+  deadline?: string;
+  location?: string;
+  requirements?: string;
+  status?: string;
+  logoColor?: string;
+  initial?: string;
+  awardCeiling?: string;
+  awardFloor?: string;
+  sector?: string;
+  languages?: string;
+  eligibleApplicants?: string;
+  datePosted?: string;
+};
+
 export type AuthUser = {
   id: string;
   name: string;
@@ -105,8 +174,9 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
   let payload = await response.json().catch(() => null);
 
-  // Handle expired token by refreshing
-  if (response.status === 401 && payload?.error?.message === 'jwt expired') {
+  // SEC-080: Handle expired token by refreshing on any 401 for authenticated non-auth requests
+  const isAuthRoute = path.includes('/auth/login') || path.includes('/auth/refresh') || path.includes('/auth/logout');
+  if (response.status === 401 && token && !isAuthRoute) {
     const refreshToken = await getMobileRefreshToken();
     
     if (refreshToken) {
@@ -262,6 +332,18 @@ export const signupMobile = async (values: {
 
 export const clearMobileSession = async () => {
   try {
+    const refreshToken = await getMobileRefreshToken();
+    const token = await getMobileToken();
+    if (refreshToken) {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => null);
+    }
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);
@@ -271,6 +353,10 @@ export const clearMobileSession = async () => {
 };
 
 // --- Applicant Management ---
+
+export const getMyApplications = async () => {
+  return request<any[]>('/users/me/applications');
+};
 
 export const getApplicants = async (opportunityId: string) => {
   return request<any[]>(`/opportunities/${opportunityId}/applicants`);
@@ -443,5 +529,51 @@ export const createReport = async (data: any) => {
     body: JSON.stringify(data)
   });
 };
+
+export const getOpportunityById = async (id: string) => {
+  return request<Opportunity>(`/opportunities/${id}`);
+};
+
+export const getEventById = async (id: string) => {
+  return request<EventItem>(`/events/${id}`);
+};
+
+export const getGrantById = async (id: string) => {
+  return request<Grant>(`/grants/${id}`);
+};
+
+export const requestForgotPassword = async (email: string) => {
+  return request<void>('/auth/password/forgot', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+};
+
+export const resetPassword = async (data: { email: string; code: string; newPassword: string }) => {
+  return request<{ message: string }>('/auth/password/reset', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const changePassword = async (data: { currentPassword: string; newPassword: string }) => {
+  return request<AuthResponse>('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteMyAccount = async (password: string) => {
+  await request('/auth/me', {
+    method: 'DELETE',
+    body: JSON.stringify({ password, confirmation: 'DELETE MY ACCOUNT' }),
+  });
+  await clearMobileSession();
+};
+
+export const getMyGrantApplications = async () => {
+  return request<any[]>('/users/me/grant-applications');
+};
+
 
 

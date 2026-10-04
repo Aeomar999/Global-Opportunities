@@ -1,80 +1,148 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Bookmark, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, Bookmark } from 'lucide-react-native';
 import { profileStore } from '../../constants/mockProfile';
+import { getSavedItems, getOpportunities, getEvents, getGrants } from '../../lib/api';
 
-// Import datasets and components
-import { JOBS_DATA, JobCard } from '../jobs/index';
-import { INTERNSHIPS_DATA, InternshipCard } from '../internships/index';
-import { EVENTS_DATA, EventCard } from '../events/index';
-import { GRANTS_DATA, GrantCard } from '../grants/index';
+// Import components and types
+import { JobCard, Job } from '../jobs/index';
+import { InternshipCard, Internship } from '../internships/index';
+import { EventCard, EventItem } from '../events/index';
+import { GrantCard } from '../grants/index';
 
 type CategoryType = 'jobs' | 'internships' | 'events' | 'grants';
-
-const MOCK_AVATARS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
-  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100'
-];
 
 export default function SavedOpportunitiesScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<CategoryType>('jobs');
   const [savedItems, setSavedItems] = useState(profileStore.saved);
+  const [loading, setLoading] = useState(true);
+
+  const [allJobs, setAllJobs] = useState<Job[]>([]);
+  const [allInternships, setAllInternships] = useState<Internship[]>([]);
+  const [allEvents, setAllEvents] = useState<EventItem[]>([]);
+  const [allGrants, setAllGrants] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchSaved = async () => {
+    let isMounted = true;
+    const fetchSavedAndCatalog = async () => {
+      setLoading(true);
       try {
-        const { authStore } = require('../../constants/authStore');
-        const { getSavedItems } = require('../../lib/api');
-        const userId = authStore.user?.id;
-        
-        if (userId) {
-          const apiItems = await getSavedItems(userId);
-          
-          // Map backend itemType to frontend type
-          const mappedItems = apiItems.map((item: any) => {
-            let mappedType = item.itemType;
-            if (mappedType === 'opportunities') mappedType = 'jobs'; // Simple mock heuristic
-            return { id: item.itemId, type: mappedType };
-          });
-          
-          // Hydrate the store so everything stays in sync
-          profileStore.saved = mappedItems;
-          setSavedItems(mappedItems);
+        const [apiSaved, oppsData, eventsData, grantsData] = await Promise.all([
+          getSavedItems().catch(() => []),
+          getOpportunities().catch(() => []),
+          getEvents().catch(() => []),
+          getGrants().catch(() => []),
+        ]);
+
+        if (!isMounted) return;
+
+        // Map backend itemType to frontend type
+        const mappedSaved = (Array.isArray(apiSaved) ? apiSaved : []).map((item: any) => {
+          let mappedType: CategoryType = 'jobs';
+          if (item.itemType === 'internships') mappedType = 'internships';
+          else if (item.itemType === 'events') mappedType = 'events';
+          else if (item.itemType === 'grants') mappedType = 'grants';
+          return { id: String(item.itemId || item._id), type: mappedType };
+        });
+
+        if (mappedSaved.length > 0) {
+          profileStore.saved = mappedSaved;
+          setSavedItems(mappedSaved);
           profileStore.notify();
         }
+
+        // Map opportunities to jobs and internships
+        const jobsList: Job[] = [];
+        const internshipsList: Internship[] = [];
+
+        (Array.isArray(oppsData) ? oppsData : []).forEach((o: any) => {
+          const isIntern = String(o.type || '').toLowerCase().includes('intern');
+          const mapped = {
+            id: String(o.id || o._id),
+            title: o.title,
+            location: o.location || 'Remote',
+            company: o.company || 'Company',
+            logoColor: o.logoColor || (isIntern ? '#34D399' : '#6671E4'),
+            initial: (o.company || 'C').charAt(0).toUpperCase(),
+            description: o.description || '',
+            applied: `${o.applicantsCount || 0} applied`,
+            match: '92% Match',
+          };
+          if (isIntern) {
+            internshipsList.push(mapped);
+          } else {
+            jobsList.push(mapped);
+          }
+        });
+
+        setAllJobs(jobsList);
+        setAllInternships(internshipsList);
+
+        // Map events
+        const mappedEvents: EventItem[] = (Array.isArray(eventsData) ? eventsData : []).map((e: any) => ({
+          id: String(e.id || e._id),
+          title: e.title,
+          description: e.description || '',
+          date: e.eventDateTime || e.date || 'Upcoming',
+          location: e.eventRegion || e.location || 'Remote',
+          venueName: e.venueName || e.location || '',
+          venueAddress: e.venueAddress || e.location || '',
+          theme: e.theme || e.title,
+          duration: e.duration || '',
+          type: e.eventStyle || 'In-person event',
+          organizer: e.organizer || e.company || '',
+          price: e.eventTicketType === 'Paid' ? 'Paid' : 'Free',
+          priceNum: Number(e.priceNum) || 0,
+          logoColor: '#6671E4',
+        }));
+        setAllEvents(mappedEvents);
+
+        // Map grants
+        const mappedGrants = (Array.isArray(grantsData) ? grantsData : []).map((g: any) => ({
+          id: String(g.id || g._id),
+          title: g.title,
+          org: g.org || g.funder || 'Foundation',
+          logoColor: g.logoColor || '#3D2A6B',
+          initial: (g.org || g.funder || 'G').charAt(0).toUpperCase(),
+          description: g.description || '',
+          applied: `${g.applicantsCount || 0} applied`,
+          status: g.status,
+          deadline: g.deadline,
+        }));
+        setAllGrants(mappedGrants);
+
       } catch (err) {
-        console.warn('Failed to fetch saved items from server', err);
+        console.warn('Failed to fetch saved items or catalogue:', err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
-    
-    fetchSaved();
+
+    fetchSavedAndCatalog();
 
     const unsubscribe = profileStore.subscribe(() => {
       setSavedItems([...profileStore.saved]);
     });
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
-  const handleToggleSave = (id: string, type: CategoryType) => {
-    profileStore.toggleSaved(id, type);
-  };
-
-  // Resolve matching details
+  // Filter items matching active tab and saved item IDs
   const getFilteredData = () => {
-    const ids = savedItems.filter(item => item.type === activeTab).map(item => item.id);
-    
+    const savedIds = new Set(savedItems.filter(item => item.type === activeTab).map(item => String(item.id)));
     if (activeTab === 'jobs') {
-      return JOBS_DATA.filter(item => ids.includes(item.id));
+      return allJobs.filter(job => savedIds.has(String(job.id)));
     } else if (activeTab === 'internships') {
-      return INTERNSHIPS_DATA.filter(item => ids.includes(item.id));
+      return allInternships.filter(intern => savedIds.has(String(intern.id)));
     } else if (activeTab === 'events') {
-      return EVENTS_DATA.filter(item => ids.includes(item.id));
+      return allEvents.filter(ev => savedIds.has(String(ev.id)));
     } else {
-      return GRANTS_DATA.filter(item => ids.includes(item.id));
+      return allGrants.filter(gr => savedIds.has(String(gr.id)));
     }
   };
 
@@ -113,21 +181,50 @@ export default function SavedOpportunitiesScreen() {
 
       {/* List */}
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {currentList.length === 0 ? (
+        {loading ? (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <ActivityIndicator size="small" color="#6671E4" />
+            <Text style={{ marginTop: 12, color: '#8A8D9F', fontSize: 13 }} className="font-sans">Loading saved opportunities...</Text>
+          </View>
+        ) : currentList.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Bookmark size={48} color="#8A8D9F" style={{ opacity: 0.3, marginBottom: 12 }} />
-            <Text style={styles.emptyText} className="font-sans">No saved opportunities here</Text>
+            <Text style={styles.emptyText} className="font-sans">No saved {activeTab} yet</Text>
           </View>
         ) : (
           currentList.map((item: any) => {
             if (activeTab === 'jobs') {
-              return <JobCard key={item.id} job={item} onPress={() => {}} />;
+              return (
+                <JobCard 
+                  key={item.id} 
+                  job={item} 
+                  onPress={() => router.push({ pathname: '/jobs/[id]', params: { id: item.id } })} 
+                />
+              );
             } else if (activeTab === 'internships') {
-              return <InternshipCard key={item.id} item={item} onPress={() => {}} />;
+              return (
+                <InternshipCard 
+                  key={item.id} 
+                  item={item} 
+                  onPress={() => router.push({ pathname: '/internships/[id]', params: { id: item.id } })} 
+                />
+              );
             } else if (activeTab === 'events') {
-              return <EventCard key={item.id} event={item} onPress={() => {}} />;
+              return (
+                <EventCard 
+                  key={item.id} 
+                  event={item} 
+                  onPress={() => router.push({ pathname: '/events/[id]', params: { id: item.id } })} 
+                />
+              );
             } else {
-              return <GrantCard key={item.id} grant={item} onPress={() => {}} />;
+              return (
+                <GrantCard 
+                  key={item.id} 
+                  grant={item} 
+                  onPress={() => router.push({ pathname: '/grants/[id]', params: { id: item.id } })} 
+                />
+              );
             }
           })
         )}

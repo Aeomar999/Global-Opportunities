@@ -160,6 +160,15 @@ const assertOwnership = (document, ownerField, req, label) => {
   if (!ownerField) return;
   if (req.auth?.role === ADMIN) return;
 
+  if (label === 'Opportunity') {
+    const isOwner = (document.createdBy && String(document.createdBy) === String(req.auth?.sub)) ||
+                    (document.hirerId && String(document.hirerId) === String(req.auth?.sub));
+    if (!isOwner) {
+      throw new ApiError(403, `You do not have permission to modify this ${label}`);
+    }
+    return;
+  }
+
   const owner = document?.[ownerField];
   if (!owner || String(owner) !== String(req.auth?.sub)) {
     throw new ApiError(403, `You do not have permission to modify this ${label}`);
@@ -250,12 +259,7 @@ const collectionRoutes = ({
         }
       }
 
-      // SEC-026: for notifications, filter by authenticated user unless admin
-      if (policyKey === 'notifications' && req.auth?.role !== ADMIN) {
-        filter.userId = req.auth.sub;
-      }
-
-      const scoped = withScope(filter, readScope(req));
+      const scoped = withScope(filter, await readScope(req));
       let listQuery = Model.find(scoped).sort({ createdAt: -1 }).skip(skip).limit(limit);
       if (populateAlways && populate) listQuery = listQuery.populate(populate);
       const [data, total] = await Promise.all([listQuery, Model.countDocuments(scoped)]);
@@ -270,7 +274,7 @@ const collectionRoutes = ({
     '/:id',
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'read', req, resourceName);
-      let query = Model.findOne(withScope({ _id: req.params.id }, readScope(req)));
+      let query = Model.findOne(withScope({ _id: req.params.id }, await readScope(req)));
       if ((enablePopulate || populateAlways) && populate) {
         query = query.populate(populate);
       }
@@ -295,6 +299,15 @@ const collectionRoutes = ({
       // post an opportunity under someone else's company.
       if (ownerField && req.auth?.role !== ADMIN) {
         allowed[ownerField] = req.auth.sub;
+      }
+      if (resourceName === 'Opportunity' && req.auth?.role !== ADMIN) {
+        allowed.createdBy = req.auth.sub;
+        if (!allowed.hirerId) {
+          const hirerAccount = await HirerAccount.findOne({ userId: req.auth.sub }).select('_id').lean();
+          if (hirerAccount) {
+            allowed.hirerId = hirerAccount._id;
+          }
+        }
       }
       const data = normalizeIn ? normalizeIn(allowed) : allowed;
       const item = new Model(data);
@@ -414,6 +427,23 @@ const findReferringAmbassador = async (rawCode) => {
   return { referralCode, ambassador };
 };
 
+/**
+ * SEC-044: Notifications are targeted by audience; non-admins see only matching and active notifications.
+ */
+const notificationReadScope = (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  const allowedAudiences = ['all', 'both'];
+  if (req.auth?.role === SEEKER) {
+    allowedAudiences.push('seekers', 'seeker');
+  } else if (req.auth?.role === HIRER) {
+    allowedAudiences.push('hirers', 'hirer');
+  }
+  return {
+    audience: { $in: allowedAudiences },
+    isActive: { $ne: false },
+  };
+};
+
 // --- Community ------------------------------------------------------------
 
 const toId = (value) => value?.toString();
@@ -440,7 +470,7 @@ const getMembership = (channelId, userId) =>
   userId ? CommunityMembership.findOne({ channelId, userId }) : null;
 
 const isLegacyMember = (channel, userId) =>
-  (channel.memberIds || []).some((memberId) => toId(memberId) === userId);
+  Boolean(userId) && (channel.memberIds || []).some((memberId) => Boolean(memberId) && toId(memberId) === String(userId));
 
 const canAccessChannel = async (channel, user) => {
   if (channel.visibility === 'public' || user?.role === ADMIN || isChannelCreator(channel, user)) return true;
@@ -461,6 +491,38 @@ const assertChannelVisible = (channel, user) => {
 
 const requireChannelAdmin = async (channel, user) => {
   if (!await canManageChannel(channel, user)) throw new ApiError(403, 'Only a community admin can manage this group');
+};
+
+/**
+ * SEC-097: Private-channel posts are restricted to members, creator, or admin.
+ * Generic GET /community/posts and GET /community/posts/:id use this scope.
+ */
+const communityPostsReadScope = async (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  const userId = req.auth?.sub;
+  if (!userId) {
+    const publicChannels = await Channel.find({ visibility: 'public', status: { $ne: 'removed' } }).select('_id').lean();
+    return { channelId: { $in: publicChannels.map((c) => c._id) } };
+  }
+
+  const [accessibleChannels, activeMemberships] = await Promise.all([
+    Channel.find({
+      status: { $ne: 'removed' },
+      $or: [
+        { visibility: 'public' },
+        { createdBy: userId },
+        { memberIds: userId },
+      ],
+    }).select('_id').lean(),
+    CommunityMembership.find({ userId, status: 'active' }).select('channelId').lean(),
+  ]);
+
+  const channelIds = [
+    ...accessibleChannels.map((c) => c._id),
+    ...activeMemberships.map((m) => m.channelId),
+  ];
+
+  return { channelId: { $in: channelIds } };
 };
 
 const submitJoinRequest = async (channel, userId, body = {}) => {
@@ -1173,7 +1235,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'], ownerField: 'createdBy', enablePopulate }));
   router.use('/grants', collectionRoutes({ Model: Grant, resourceName: 'Grant', policyKey: 'grants', searchFields: ['title', 'sector'], enablePopulate }));
   router.use('/articles', collectionRoutes({ Model: Article, resourceName: 'Article', policyKey: 'articles', searchFields: ['title', 'category'], enablePopulate }));
-  router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate }));
+  router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate, readScope: notificationReadScope }));
   router.use('/verification/companies', collectionRoutes({ Model: CompanyVerification, resourceName: 'Company verification', policyKey: 'verification/companies', searchFields: ['name', 'industry'], ownerField: 'hirerId', enablePopulate }));
 
   // Special nested routes
@@ -1224,7 +1286,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.get('/opportunities/:opportunityId/applicants', ...guard('applicants', 'read', 'applicant'), asyncHandler(async (req, res) => {
     const opportunity = await Opportunity.findById(req.params.opportunityId);
     if (!opportunity) throw notFound('Opportunity');
-    if (req.auth.role !== ADMIN && String(opportunity.createdBy) !== req.auth.sub) {
+    if (req.auth.role !== ADMIN && String(opportunity.createdBy) !== req.auth.sub && String(opportunity.hirerId) !== req.auth.sub) {
       throw new ApiError(403, 'You do not have permission to view applicants for this opportunity');
     }
 
@@ -1238,9 +1300,43 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
 
   router.post('/grants/:grantId/applications', ...guard('grant-applications', 'create', 'grantApplication'), asyncHandler(async (req, res) => {
-    const application = new GrantApplication(buildCreatePayload(RESOURCE_POLICIES['grant-applications'], req.body));
-    application.set('grantId', req.params.grantId);
+    const grantId = req.params.grantId;
+    const grant = await Grant.findById(grantId);
+    if (!grant) throw notFound('Grant');
+    if (grant.status !== 'open') throw new ApiError(400, 'Grant is not open for applications');
+
+    const requestedAmount = Number(req.body.requestedAmount);
+    if (!requestedAmount || requestedAmount <= 0) {
+      throw new ApiError(400, 'Requested amount must be greater than 0');
+    }
+    if (requestedAmount > grant.fundingPool) {
+      throw new ApiError(400, 'Requested amount cannot exceed grant funding pool');
+    }
+
+    // SEC-060: Atomic conditional reservation on fundingPool
+    const updatedGrant = await Grant.findOneAndUpdate(
+      {
+        _id: grantId,
+        status: 'open',
+        $expr: { $lte: [{ $add: ['$allocated', requestedAmount] }, '$fundingPool'] },
+      },
+      { $inc: { allocated: requestedAmount } },
+      { returnDocument: 'after' },
+    );
+
+    if (!updatedGrant) {
+      throw new ApiError(400, 'Grant funding pool capacity exceeded');
+    }
+
+    const application = new GrantApplication({
+      ...buildCreatePayload(RESOURCE_POLICIES['grant-applications'], req.body),
+      grantId,
+      applicantUserId: req.auth?.sub,
+      applicantName: req.body.applicantName || req.auth?.name || 'Applicant',
+      requestedAmount,
+    });
     await application.save();
+
     await auditReq(req, {
       action: AUDIT_ACTIONS.GRANT_APPLY,
       resourceType: AUDIT_RESOURCE_TYPES.GRANT_APPLICATION,
@@ -1300,7 +1396,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     if (!opportunity) throw notFound('Opportunity');
 
     if (req.auth.role === SEEKER && String(applicant.seekerId) === req.auth.sub) return applicant;
-    if (req.auth.role === HIRER && String(opportunity.createdBy) === req.auth.sub) return applicant;
+    if (req.auth.role === HIRER && (String(opportunity.createdBy) === req.auth.sub || String(opportunity.hirerId) === req.auth.sub)) return applicant;
     
     throw new ApiError(403, 'Insufficient permissions to access this applicant');
   };
@@ -1328,7 +1424,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.use('/grant-applications', collectionRoutes({ Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications', enablePopulate }));
   router.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents', ownerField: 'companyId', enablePopulate }));
-  router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', ownerField: 'authorId', enablePopulate }));
+  router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', ownerField: 'authorId', enablePopulate, readScope: communityPostsReadScope }));
 
   /**
    * Saved items are private to their owner (SEC-026). The path is `/users/me/saved`
@@ -1375,6 +1471,60 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     const { SavedItem } = await import('../models/User.js');
     const savedItems = await SavedItem.find({ userId: req.auth.sub }).sort({ createdAt: -1 });
     listResponse(res, savedItems.map(toClientObject));
+  }));
+
+  /**
+   * SEC-072: Seekers can list their own applications populated with opportunity summary.
+   */
+  router.get('/users/me/applications', requireAuth, asyncHandler(async (req, res) => {
+    const { page, limit, skip } = parsePagination(req.query);
+    const filter = { seekerId: req.auth.sub };
+    const [applications, total] = await Promise.all([
+      Applicant.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+          path: 'opportunityId',
+          select: 'title company type location status moderationStatus',
+        })
+        .lean(),
+      Applicant.countDocuments(filter),
+    ]);
+
+    const formatted = applications.map((app) => ({
+      ...toClientObject(app),
+      opportunity: app.opportunityId ? toClientObject(app.opportunityId) : null,
+    }));
+
+    listResponse(res, formatted, total, page, limit);
+  }));
+
+  /**
+   * SEC-060: Authenticated users can list their own grant applications with populated grant info.
+   */
+  router.get('/users/me/grant-applications', requireAuth, asyncHandler(async (req, res) => {
+    const { page, limit, skip } = parsePagination(req.query);
+    const filter = { applicantUserId: req.auth.sub };
+    const [applications, total] = await Promise.all([
+      GrantApplication.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+          path: 'grantId',
+          select: 'title hirer sector fundingPool status',
+        })
+        .lean(),
+      GrantApplication.countDocuments(filter),
+    ]);
+
+    const formatted = applications.map((app) => ({
+      ...toClientObject(app),
+      grant: app.grantId ? toClientObject(app.grantId) : null,
+    }));
+
+    listResponse(res, formatted, total, page, limit);
   }));
 
   // Event attendees

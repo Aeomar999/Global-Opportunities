@@ -8,72 +8,6 @@ import { useToast } from '../../components/ui/ToastProvider';
 
 // ─── Shared grant data ────────────────────────────────────────────────────────
 
-export const GRANTS_DATA = [
-  {
-    id: '64a1b2c3d4e5f60011223344',
-    title: 'Small Grants for Community WASH Projects in Sub-Saharan Africa and the Middle East & North Africa',
-    org: 'Luena Foundation',
-    logoColor: '#3D2A6B',
-    initial: 'L',
-    description: 'Luena Foundation invites small, locally led organizations across Sub-Saharan Africa and...',
-    applied: '100+ applied',
-    status: 'deadline' as const,
-    deadline: 'May 31, 2026',
-    location: 'Algeria, Angola, Benin, Botswana, Burkina Faso, Burundi, Cameroon, Cape Verde',
-    fundingAgency: 'Other',
-    openStatus: 'Open',
-    budget: 'N/A',
-    awardCeiling: 'USD 1,500',
-    awardFloor: 'USD 1,000',
-    sector: 'Civil Engineering, Water, Sanitation & Hygiene',
-    languages: 'Arabic, English, French, Portuguese',
-    eligibleApplicants: 'NGOs / Nonprofit Organisations',
-    datePosted: 'Apr 22, 2026',
-  },
-  {
-    id: '64a1b2c3d4e5f60011223345',
-    title: 'Social & Criminal Justice',
-    org: 'Charles Hayward Foundation',
-    logoColor: '#1B4332',
-    initial: 'C',
-    description: 'We fund projects which help to prevent people entering the criminal justice system, and...',
-    applied: '100+ applied',
-    status: 'deadline' as const,
-    deadline: 'May 31, 2026',
-    location: 'United Kingdom',
-    fundingAgency: 'Other',
-    openStatus: 'Open',
-    budget: 'N/A',
-    awardCeiling: 'GBP 30,000',
-    awardFloor: 'GBP 5,000',
-    sector: 'Social & Criminal Justice',
-    languages: 'English',
-    eligibleApplicants: 'NGOs / Nonprofit Organisations',
-    datePosted: 'Apr 18, 2026',
-  },
-  {
-    id: '64a1b2c3d4e5f60011223346',
-    title: 'Business Partnership Support',
-    org: 'Ministry for Foreign Affairs of Finland',
-    logoColor: '#1E3A8A',
-    initial: 'M',
-    description: 'Business Partnership Support funds Finnish operators to plan, pilot and develop commercial, long-te...',
-    applied: '100+ applied',
-    status: 'ended' as const,
-    deadline: undefined,
-    location: 'Finland',
-    fundingAgency: 'Government / public bodies',
-    openStatus: 'Closed',
-    budget: 'N/A',
-    awardCeiling: 'EUR 100,000',
-    awardFloor: 'EUR 20,000',
-    sector: 'Business Partnership',
-    languages: 'Finnish, English',
-    eligibleApplicants: 'Private sector',
-    datePosted: 'Mar 10, 2026',
-  },
-];
-
 // ─── Components ───────────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = ['#F87171', '#60A5FA', '#34D399'];
@@ -95,11 +29,17 @@ const AvatarStack = () => (
   </View>
 );
 
-type Grant = (typeof GRANTS_DATA)[number];
-
-/** The fields the card renders; satisfied by both the mock catalogue and live API rows. */
-type GrantCardData = Pick<Grant, 'id' | 'title' | 'org' | 'logoColor' | 'initial' | 'description' | 'applied'>
-  & { status?: Grant['status']; deadline?: string };
+export type GrantCardData = {
+  id: string;
+  title: string;
+  org: string;
+  logoColor?: string;
+  initial?: string;
+  description: string;
+  applied?: string;
+  status?: 'ended' | 'deadline';
+  deadline?: string;
+};
 
 const StatusBadge = ({ grant }: { grant: GrantCardData }) => {
   if (grant.status === 'ended') {
@@ -247,19 +187,17 @@ export default function GrantsScreen() {
     fetchGrants();
   }, [params.query]);
 
-  // Merge live grants with mock grants so the screen isn't empty if the backend has no grants
-  const displayGrants = liveGrants.length > 0 ? liveGrants.map(j => ({
+  const displayGrants: GrantCardData[] = liveGrants.map(j => ({
     id: j.id,
     title: j.title,
-    org: j.company || 'Company',
-    logoColor: j.logoColor || '#FBBF24',
-    initial: j.initial || 'G',
+    org: j.org || j.company || j.funder || 'Organization',
+    logoColor: j.logoColor || '#3D2A6B',
+    initial: (j.org || j.company || j.funder || 'G').charAt(0).toUpperCase(),
     description: j.description || '',
     applied: `${j.applicantsCount || 0} applied`,
-    status: j.status && j.status !== 'open' ? 'ended' as const : 'deadline' as const,
+    status: j.status && j.status !== 'open' ? 'ended' : 'deadline',
     deadline: j.deadline,
-    match: '92% Match',
-  })) : GRANTS_DATA;
+  }));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }} edges={['top', 'left', 'right']}>
@@ -313,13 +251,23 @@ export default function GrantsScreen() {
         </View>
 
         {/* Grant cards */}
-        {displayGrants.map(grant => (
-          <GrantCard
-            key={grant.id}
-            grant={grant}
-            onPress={() => router.push({ pathname: '/grants/[id]', params: { id: grant.id } })}
-          />
-        ))}
+        {isLoading ? (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <Text style={{ color: '#8A8D9F', fontSize: 14 }} className="font-sans">Loading grants...</Text>
+          </View>
+        ) : displayGrants.length > 0 ? (
+          displayGrants.map(grant => (
+            <GrantCard
+              key={grant.id}
+              grant={grant}
+              onPress={() => router.push({ pathname: '/grants/[id]', params: { id: grant.id } })}
+            />
+          ))
+        ) : (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <Text style={{ color: '#8A8D9F', fontSize: 14 }} className="font-sans">No grants available at the moment.</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

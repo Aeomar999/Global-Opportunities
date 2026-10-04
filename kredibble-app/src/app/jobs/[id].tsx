@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Bookmark, Sparkles, Users, MapPin, ChevronDown, ChevronUp, Clock } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { JOBS_DATA } from './index';
+import { getOpportunityById, applyForOpportunity } from '../../lib/api';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { useToast } from '../../components/ui/ToastProvider';
 
@@ -19,20 +19,83 @@ const RESPONSIBILITIES = [
 export default function JobDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const job = JOBS_DATA.find(j => j.id === id) ?? JOBS_DATA[0];
+  const [job, setJob] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [bookmarked, setBookmarked] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [applying, setApplying] = useState(false);
   const { showToast } = useToast();
 
-  const handleApply = () => {
-    if (applied) return;
-    setApplied(true);
-    showToast(`You have successfully applied for the ${job.title} role at ${job.company}!`);
+  useEffect(() => {
+    let isMounted = true;
+    if (!id) return;
+    getOpportunityById(id)
+      .then((data) => {
+        if (!isMounted) return;
+        setJob(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err.message || 'Failed to load job details');
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  const handleApply = async () => {
+    if (applied || applying || !id) return;
+    setApplying(true);
+    try {
+      await applyForOpportunity(id, { coverLetter: 'Applied via Kredibble Mobile' });
+      setApplied(true);
+      showToast(`You have successfully applied for the ${job?.title || 'role'} at ${job?.company || 'Company'}!`);
+    } catch (err: any) {
+      if (err.status === 409 || err.message?.includes('already applied')) {
+        setApplied(true);
+        showToast('You have already applied for this opportunity.');
+      } else {
+        showToast(err.message || 'Application failed. Please try again.');
+      }
+    } finally {
+      setApplying(false);
+    }
   };
 
-  const fullDescription = `${job.description}\n\n${ABOUT}`;
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center' }} edges={['top', 'left', 'right']}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 12, color: Colors.textMuted, fontSize: 14 }} className="font-sans">Loading job details...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !job) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center' }} edges={['top', 'left', 'right']}>
+        <Text style={{ color: Colors.textHeading, fontSize: 16, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }} className="font-sans">
+          {error || 'Job not found'}
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/opportunities')}
+          style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: Colors.primary, borderRadius: 8, marginTop: 12 }}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }} className="font-sans">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const fullDescription = job.description ? `${job.description}\n\n${ABOUT}` : ABOUT;
+  const initial = (job.company || 'J').charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen }} edges={['top', 'left', 'right']}>
@@ -61,9 +124,9 @@ export default function JobDetailScreen() {
         {/* Company Logo Header Section (Centered) */}
         <View style={styles.logoHeaderContainer}>
           <View
-            style={[styles.logoCircle, { backgroundColor: job.logoColor }]}
+            style={[styles.logoCircle, { backgroundColor: job.logoColor || Colors.primary }]}
           >
-            <Text style={styles.logoText}>{job.initial}</Text>
+            <Text style={styles.logoText}>{initial}</Text>
           </View>
           <Text style={styles.companyName} className="font-sans">
             {job.company}

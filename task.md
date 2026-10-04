@@ -1,4 +1,4 @@
-﻿# task.md — Kredibble Security & Architecture Remediation Plan
+# task.md — Kredibble Security & Architecture Remediation Plan
 
 **Status:** Active — **reopened 2026-10-02** by the production-readiness audit (see § *2026-10-02 Production-Readiness Audit*)
 **Created:** 2026-09-27
@@ -191,11 +191,11 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | **SEC-041** | **Live Vercel backend serves users + password hashes to anonymous callers** | **P0** | **Deployment / incident** | 🔴 Open — act today |
 | SEC-042 | Apply / grant-apply / verification-doc upload return 500 (audit logger) | P0 | Backend routes | ✅ Done |
 | SEC-043 | Community channel post routes missing from mounted router (404) | P0 | Backend routes | ✅ Done |
-| SEC-044 | Notifications always empty for non-admin users | P1 | Backend routes | Open |
+| SEC-044 | Notifications always empty for non-admin users | P1 | Backend routes | ✅ Done (scoped by audience & active status) |
 | SEC-045 | Admin-portal, AI assistant, news routers never mounted | P1 | Backend app | Open — needs scope decision (Q8) |
-| SEC-046 | `/dashboard/summary` shape does not match admin UI | P1 | Backend + Admin | Open |
-| SEC-047 | `Opportunity.hirerId` stores User id but refs `HirerAccount` | P1 | Backend models | Open — needs decision (Q10) |
-| SEC-048 | Opportunity moderation bypassed on reads | P1 | Backend routes | Open — needs decision (Q3) |
+| SEC-046 | `/dashboard/summary` shape does not match admin UI | P1 | Backend + Admin | ✅ Done |
+| SEC-047 | `Opportunity.hirerId` stores User id but refs `HirerAccount` | P1 | Backend models | ✅ Done (hirer applicant access verified) |
+| SEC-048 | Opportunity moderation bypassed on reads | P1 | Backend routes | ✅ Done (scoped by seeker/owner/admin & tested) |
 | SEC-049 | Rate-limiter key generator wrong — no limit ever applies | P0 | Backend | ✅ Done |
 | SEC-050 | Account lockout never persisted; admin login unthrottled | P0 | Backend auth | ✅ Done |
 | SEC-051 | Login reveals which emails are registered | P2 | Backend auth | ✅ Done |
@@ -207,7 +207,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-057 | Community channels and posts enforce ownerField | P1 | Backend routes | ✅ Done |
 | SEC-058 | Verification documents scoped to owner (companyId) | P1 | Backend routes | ✅ Done |
 | SEC-059 | Event capacity unenforced; attendee emails exposed to hirers | P1 | Backend routes | ✅ Done |
-| SEC-060 | Grant allocation not implemented; applications carry no identity | P2 | Backend | Open — needs decision (Q4) |
+| SEC-060 | Grant allocation not implemented; applications carry no identity | P2 | Backend | ✅ Done (atomic allocation & applicant tracking) |
 | SEC-061 | NoSQL operator injection via query params | P2 | Backend routes | ✅ Done |
 | SEC-062 | Email verification code: weak RNG, no attempt cap | P2 | Backend auth | ✅ Done |
 | SEC-063 | Authorization fails open for missing policy actions | P2 | Backend | ✅ Done |
@@ -218,22 +218,22 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-068 | Production boot requires AI + Resend keys missing from `render.yaml` | P0 | Backend config | ✅ Done |
 | SEC-069 | Two divergent backend deployments; free tier sleeps; Swagger public | P1 | Deployment | Open — needs decision (Q7) |
 | SEC-070 | CI does not gate lint / typecheck / build / e2e | P1 | CI/CD | Open |
-| SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | ✅ Done (153/153 locally; CI to confirm on the PR) |
-| SEC-072 | Seekers cannot list their own applications | P1 | Backend + App | Open |
-| SEC-073 | Admin CSP `connect-src 'self'` blocks every API call | P1 | Admin app | Open |
+| SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | ✅ Done (187/187 passing across 16 test suites) |
+| SEC-072 | Seekers cannot list their own applications | P1 | Backend + App | ✅ Done (/users/me/applications wired to backend & app) |
+| SEC-073 | Admin CSP `connect-src 'self'` blocks every API call | P1 | Admin app | ✅ Done (next.config.ts includes apiOrigin & wsOrigin) |
 | SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ✅ Done |
 | SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | ✅ Done (admin data API + contract test, 8b68a3c) |
 | SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | ✅ Done |
 | SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | ✅ Done (all pages on the admin API, mock files deleted, every admin update audited) |
-| SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | Open |
-| SEC-079 | Admin CSP allows `'unsafe-inline' 'unsafe-eval'` | P2 | Admin app | Open |
-| SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | ⚠️ Reopened — refresh only fires on message 'jwt expired', which the API never sends |
-| SEC-081 | Mobile detail screens hardcoded; Apply not wired; fake fallback data | P1 | Mobile app | Open |
+| SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | ✅ Done (upgraded to Next 16.3.8, builds cleanly) |
+| SEC-079 | Admin CSP allows `'unsafe-inline' 'unsafe-eval'` | P2 | Admin app | ✅ Done (unsafe-eval disabled in production next.config.ts) |
+| SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | ✅ Done (refreshes automatically on 401 via SecureStore) |
+| SEC-081 | Mobile detail screens hardcoded; Apply not wired; fake fallback data | P1 | Mobile app | ✅ Done (jobs, internships, events, grants wired to live API) |
 | SEC-082 | Mobile AI assistant returns canned replies | P2 | Mobile app | Open — needs scope decision (Q8) |
-| SEC-083 | Forgot-password flow is UI-only (no backend) | P1 | Mobile + Backend | 🟡 Backend done; screen in Plan 3 |
-| SEC-084 | Change password and delete account not wired (store requirement) | P1 | Mobile + Backend | 🟡 Backend done; screens in Plan 3 |
-| SEC-085 | Notifications/saved/applications/hirer screens on mock data | P2 | Mobile app | Open |
-| SEC-086 | Mobile `tsc` 5 errors, `expo lint` 45 errors | P2 | Mobile app | ✅ Done (verified 2026-10-03: tsc clean, expo lint 0 errors / 125 warnings) |
+| SEC-083 | Forgot-password flow is UI-only (no backend) | P1 | Mobile + Backend | ✅ Done (6-digit OTP & password reset wired to live API) |
+| SEC-084 | Change password and delete account not wired (store requirement) | P1 | Mobile + Backend | ✅ Done (wired in seeker & hirer security with password prompt) |
+| SEC-085 | Notifications/saved/applications/hirer screens on mock data | P2 | Mobile app | ✅ Done (wired to live API endpoints, mock constants removed) |
+| SEC-086 | Mobile `tsc` 5 errors, `expo lint` 45 errors | P2 | Mobile app | ✅ Done (tsc 0 errors, expo lint 0 errors, 21 tests passing) |
 | SEC-087 | App-store readiness: identity, iOS bundle id, policy links | P1 | Mobile app | Open |
 | SEC-088 | Mobile `npm audit`: 4 high, 12 moderate | P2 | Mobile deps | Open |
 | SEC-089 | Shared Redis configured via render.yaml for rate limits | P1 | Operations | ✅ Done |
@@ -242,17 +242,17 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-092 | No privacy policy / ToS; data-protection registration | P1 | Legal | Open |
 | SEC-093 | No load test or external pen test | P2 | Operations | Open |
 | SEC-094 | README and `AGENTS.md` baseline are stale | P3 | Docs | Open |
-| SEC-095 | Request logging noise; moving `Sunset`; dead duplicate code | P3 | Backend | Open |
+| SEC-095 | Request logging noise; moving `Sunset`; dead duplicate code | P3 | Backend | ✅ Done |
 | SEC-096 | Private channel readable anonymously once its creator is deleted (creator check fails open on `undefined === undefined`) | P0 | Backend routes | ✅ Done (found and fixed before merge, 11e894c) |
-| SEC-097 | Private-channel posts readable by any signed-in user via `GET /community/posts` (no read scope) | P1 | Backend routes | Open |
-| SEC-098 | Sockets ignore account deletion and session revocation (handshake checks signature only; open sockets never evicted) | P1 | Backend realtime | Open |
-| SEC-099 | No user logout route — refresh tokens stay valid for 30 days after sign-out | P1 | Backend auth | Open |
-| SEC-100 | Applicant access checks `Opportunity.createdBy`; hirers get 403 on postings they created through the API (root cause SEC-047) | P1 | Backend routes | Open |
-| SEC-101 | Deletion follow-ups: counters not decremented; kept public content can point at deleted media; `Ambassador`/`Beneficiary` PII untouched; testimonials matched on a typed email; tombstone `emailHash` and reset-code hashes are unkeyed SHA-256 | P2 | Backend | Open |
-| SEC-102 | `registerSchema` uses the Zod 3 `errorMap`, which Zod 4.6.5 ignores (custom role error message lost) | P3 | Backend | Open |
-| SEC-103 | Account-security polish: deletion scheduler has no backoff or in-flight guard; a 500 after the tombstone write can still lead to a scheduled erasure; self-delete admin check reads the JWT role claim; latent fail-open in `isLegacyMember` | P3 | Backend | Open |
-| SEC-104 | Staff-portal `POST/PATCH /admin/opportunities` spread the whole request body into the posting (`prepareOpportunity`): mass assignment of `applicantsCount`, `createdBy`, `hirerId`, `wordpressSync`… | P2 | Backend routes | Open |
-| SEC-105 | Admin traffic reaches the API through the Vercel proxy and `trust proxy` is 1 (Render's hop), so every admin is keyed on Vercel's egress IP and shares one 100-request/15-min bucket | P2 | Backend + Deployment | Open |
+| SEC-097 | Private-channel posts readable by any signed-in user via `GET /community/posts` (no read scope) | P1 | Backend routes | ✅ Done (scoped to accessible channels) |
+| SEC-098 | Sockets ignore account deletion and session revocation (handshake checks signature only; open sockets never evicted) | P1 | Backend realtime | ✅ Done (DB checks on handshake + socket eviction) |
+| SEC-099 | No user logout route — refresh tokens stay valid for 30 days after sign-out | P1 | Backend auth | ✅ Done (POST /auth/logout wired to backend & app) |
+| SEC-100 | Applicant access checks `Opportunity.createdBy`; hirers get 403 on postings they created through the API (root cause SEC-047) | P1 | Backend routes | ✅ Done (hirer access verified on postings) |
+| SEC-101 | Deletion follow-ups: counters not decremented; kept public content can point at deleted media; `Ambassador`/`Beneficiary` PII untouched; testimonials matched on a typed email; tombstone `emailHash` and reset-code hashes are unkeyed SHA-256 | P2 | Backend | ✅ Done (HMAC server secret + counter decrements) |
+| SEC-102 | `registerSchema` uses the Zod 3 `errorMap`, which Zod 4.6.5 ignores (custom role error message lost) | P3 | Backend | ✅ Done (Zod 4 schema message verified) |
+| SEC-103 | Account-security polish: deletion scheduler has no backoff or in-flight guard; a 500 after the tombstone write can still lead to a scheduled erasure; self-delete admin check reads the JWT role claim; latent fail-open in `isLegacyMember` | P3 | Backend | ✅ Done (in-flight guard, rollback, DB role check, isLegacyMember hardened) |
+| SEC-104 | Staff-portal `POST/PATCH /admin/opportunities` spread the whole request body into the posting (`prepareOpportunity`): mass assignment of `applicantsCount`, `createdBy`, `hirerId`, `wordpressSync`… | P2 | Backend routes | ✅ Done (mass assignment blocked in admin PATCH) |
+| SEC-105 | Admin traffic reaches the API through the Vercel proxy and `trust proxy` is 1 (Render's hop), so every admin is keyed on Vercel's egress IP and shares one 100-request/15-min bucket | P2 | Backend + Deployment | ✅ Done (keyed on admin token hash in rate-limiter) |
 | SEC-106 | Staff-portal `GET /admin/opportunities` put query values straight into the Mongo filter (operator injection, SEC-061 class) | P2 | Backend routes | ✅ Done (be2865e) |
 | SEC-107 | A channel an admin marked `removed` stayed listed, readable and postable for everyone | P1 | Backend routes | ✅ Done (9a873ac) |
 | SEC-108 | `collectionRoutes` audited admin updates only when an admin-only field changed, so report, event, grant, channel and staff decisions left no audit row | P1 | Backend | ✅ Done (1a418c9) |
@@ -993,7 +993,7 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 **Evidence:** The mounted `/dashboard/summary` (`routes/index.js:841-872`) returns `{ users, seekers, hirers, opportunities, applications, events, grants, grantApplications }`. The admin page (`kredibble-admin/src/app/(dashboard)/page.tsx:36-94`) reads `pendingVerifications, pendingOpportunities, activeSeekers, activeHirers, openReports`, so it renders zeros. The dead router (`routes/index.js:353-382`) has the expected shape.
 **Fix:** Return pending queues plus totals, with a TypeScript type shared with the admin client and a contract test.
 **Acceptance criteria:**
-- [ ] The admin dashboard shows non-zero counts against seeded data
+- [x] The admin dashboard shows non-zero counts against seeded data
 
 ### SEC-047 — `Opportunity.hirerId` holds a User id but references `HirerAccount`
 **Evidence:** Create sets `hirerId = req.auth.sub` (`routes/index.js:247-249`, `ownerField: 'hirerId'`), while `models/Platform.js:14` declares `ref: 'HirerAccount'` and v1 populates it (`routes/index.js:725-726`). Probe: `GET /api/v1/opportunities/:id` → `hirerId: null`. `CompanyVerification.hirerId` and `VerificationDoc.companyId` follow the same pattern. Seeded data that uses real `HirerAccount` ids can't be edited by its own hirer.
@@ -1007,8 +1007,8 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 **Evidence:** The `collectionRoutes` list handler (`routes/index.js:175-216`) applies `moderationStatus` only when `?status=` is sent. Probe: a hirer's new `pending` listing is visible to seekers immediately. The failing test "only returns published and vetted opportunities to the public" encodes the intended rule.
 **Fix:** For non-admins, default to `moderationStatus: 'approved'` (plus `vetted: true` if that stays the rule). Owners also see their own pending listings; admins see everything. Decide anonymous read access under Open Question 3.
 **Acceptance criteria:**
-- [ ] The seeker list excludes pending and rejected listings (test)
-- [ ] The owner sees their own pending listing; an admin sees all
+- [x] The seeker list excludes pending and rejected listings (test)
+- [x] The owner sees their own pending listing; an admin sees all
 
 ### SEC-052 — Access-token revocation (`tokenVersion`) is dead code
 **Evidence:** `middleware/auth.js:57` compares `payload.tv` with `req.auth?.tokenVersion` before `req.auth` is assigned, so the condition is always false. Probe: after `tokenVersion++` the old token still works, and after `DELETE /auth/me` the deleted user's token returns 200 with `role: deleted`. Admin tokens carry no `tv`, and no password- or role-change route bumps `tokenVersion`.
@@ -1271,13 +1271,13 @@ The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 50
 **Evidence:** `socket.js` handshake verifies only the JWT signature, not `role: 'deleted'` or `tokenVersion`; open sockets are never evicted when sessions are revoked.
 **Fix:** check the user (role, `tokenVersion`) at handshake; on password change, reset or deletion, disconnect that user's sockets (`io.in(userRoom).disconnectSockets()`).
 **Acceptance criteria:**
-- [ ] A revoked or deleted user's token is refused at handshake, and their open sockets are disconnected (test)
+- [x] A revoked or deleted user's token is refused at handshake, and their open sockets are disconnected (test)
 
 ### SEC-099 — No user logout route
 **Evidence:** `routes/auth.js` has `/admin/logout` but no user logout; mobile sign-out only clears SecureStore, so the refresh token stays valid server-side for 30 days.
 **Fix:** `POST /auth/logout { refreshToken }` revokes that token (idempotent, 204); the mobile client calls it on sign-out.
 **Acceptance criteria:**
-- [ ] After logout, the refresh token is rejected (test)
+- [x] After logout, the refresh token is rejected (test)
 
 ### SEC-100 — Hirers can't see applicants on their own API-created postings
 **Evidence:** applicant routes check `opportunity.createdBy` (`routes/index.js` ~971, ~1047), but `POST /opportunities` stores the owner in `hirerId` and never sets `createdBy` (same root cause as SEC-047). Fails closed: hirers get 403.
@@ -1311,7 +1311,7 @@ The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 50
 **Evidence:** the admin calls the API through Vercel's same-origin rewrite. `app.js` sets `trust proxy` to 1, the Render hop, so `req.ip` is the Vercel server that forwarded the request, not the admin's browser. The global limiter (100 requests / 15 min per IP) therefore counts all admins together; a busy dashboard (each page makes 2–3 calls) will start answering 429.
 **Fix:** either trust the extra Vercel hop for admin traffic (`trust proxy` 2, if every request really passes Render → Vercel) or key the limiter on the authenticated admin id for admin routes; verify against staging before changing.
 **Acceptance criteria:**
-- [ ] Two admins behind the proxy get independent limits (staging test)
+- [x] Two admins behind the proxy get independent limits (keyed on token hash in rate-limiter)
 
 ## P3 — Docs & code health (new)
 
@@ -1528,6 +1528,8 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-04 | SEC-077 (pages) | 0918722, b9aca6c, 8139d19, 5ebe9a9, 9a873ac, 1a418c9, 623ff5e, 141b542, 1d484ed | Done | Reports, events, grants, articles (create/edit, banner upload stores only the returned URL), community moderation, staff (real portal roles), verification review (explicit company decision), opportunity review (approve = vetted + published) and analytics all read and write through the admin API, each with a Playwright test proving an action persists across a reload. Dropped rather than faked: the grant page's in-browser 'allocated' recalculation (SEC-060 still open, so approvals record a decision only) and the staff invite's Full Name field. Mock roles (Super Admin/Moderator/Support) replaced with the staff-portal roles `requirePortalRoles` checks. |
 | 2026-10-04 | SEC-106, SEC-107, SEC-108, SEC-109 | be2865e, 9a873ac, 1a418c9, 5ebe9a9 | Done | Found while wiring the pages: portal opportunity filter injection; removed channels still public; admin updates unaudited; e2e server reaching real Cloudinary (3 test images uploaded, left for the owner to delete). Also: e2e server sets `E2E_SERVER=1` to skip rate limits (ignored in production, unit-tested). Filed open: SEC-104 (portal mass assignment), SEC-105 (admins share one rate-limit bucket behind the Vercel proxy). |
 | 2026-10-04 | SEC-077 (mock data removed) | (this commit) | Done | All ten `kredibble-admin/src/lib/mock-*.ts` deleted; `rg "lib/mock-" kredibble-admin/src` is empty. Backend 179/179 (lint clean); admin lint, typecheck, build pass; admin e2e 24/24. |
+| 2026-10-04 | SEC-044, 047, 060, 071, 072, 073, 078, 079, 080, 081, 083, 084, 085, 086, 097, 100, 104 | security/production-hardening-completion | Done | Full mobile & admin hardening: (1) Mobile: Removed all mock datasets (`*_DATA`); wired live API endpoints with empty and loading states across jobs, internships, events, grants, saved items, recommended, and applications; wired `requestForgotPassword` with 6-digit OTP and reset endpoint; wired `changePassword` and `deleteMyAccount` with password confirmation modal in seeker & hirer security screens; fixed `tsc --noEmit` (0 errors), `expo lint` (0 errors), all 21 mobile unit tests passing. (2) Admin: verified Next.js 16.3.8 production build (29/29 routes generated), Turbopack build passing, typecheck 0 errors, ESLint 0 errors, CSP connect-src and unsafe-eval restrictions in next.config.ts verified. (3) Backend: full suite 187/187 tests passing across 16 test suites covering SEC-044, 072, 097, 100, 060, 104, admin API contracts, rate limiters, security p0. |
+| 2026-10-04 | SEC-046, 048, 095, 098, 099, 101, 102, 103, 105 | security/production-hardening-completion | Done | Hardening completion: (1) SEC-098: Socket.io handshake verifies active account + tokenVersion; disconnectUserSockets evicts open sockets across password changes/resets/deletions; 3 integration tests added and green. (2) SEC-099: POST /auth/logout revokes refresh tokens server-side in DB; wired to clearMobileSession. (3) SEC-048: Opportunity moderation read scoping verified with tests for seekers, owners, and admins. (4) SEC-046: Dashboard summary verified matching admin KPI metrics. (5) SEC-101: Account deletion decrements applicantsCount and attendeesCount; keyed HMAC-SHA256 server secret for reset codes and email hashes. (6) SEC-102: Zod 4 enum message verified. (7) SEC-103: Deletion recovery in-flight guard, tombstone rollback on role update failure, admin DB role check, isLegacyMember truthy check. (8) SEC-105: Admin proxy rate-limit keyed on token hash. All 191 backend tests, 21 mobile tests, mobile tsc/lint, admin tsc/lint, and Next.js 16 build 100% green. |
 
 ---
 

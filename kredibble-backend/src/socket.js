@@ -3,9 +3,15 @@ import jwt from 'jsonwebtoken';
 import { env } from './config/env.js';
 import { socketCorsOptions } from './lib/cors.js';
 import { Channel, CommunityMembership } from './models/Community.js';
+import { User } from './models/User.js';
 import logger from './lib/logger.js';
 
 let io;
+
+export const disconnectUserSockets = (userId) => {
+  if (!io || !userId) return;
+  io.in(`user_${userId}`).disconnectSockets(true);
+};
 
 /**
  * Resolve the caller's identity from the handshake. Socket.io browsers cannot set
@@ -34,7 +40,8 @@ export const initSocket = (server) => {
   // origin could open a socket and join any room. Authenticate the handshake
   // before a connection is accepted, and reuse the HTTP signing key so there is
   // one notion of "a valid session" across REST and realtime.
-  io.use((socket, next) => {
+  // SEC-098: also verify that the account is active and tokenVersion has not been bumped.
+  io.use(async (socket, next) => {
     const token = extractToken(socket);
     if (!token) {
       next(new Error('UNAUTHORIZED: authentication token is required'));
@@ -42,16 +49,29 @@ export const initSocket = (server) => {
     }
     try {
       const payload = jwt.verify(token, env.jwtSecret);
+      const user = await User.findById(payload.sub).select('tokenVersion role').lean();
+      if (!user || user.role === 'deleted') {
+        return next(new Error('UNAUTHORIZED: Account no longer active'));
+      }
+      if (payload.tv !== undefined && payload.tv !== user.tokenVersion) {
+        return next(new Error('UNAUTHORIZED: Token revoked due to security event'));
+      }
+
       socket.data.auth = { sub: String(payload.sub), role: payload.role };
       next();
-    } catch {
+    } catch (err) {
+      if (err.message && err.message.startsWith('UNAUTHORIZED:')) {
+        return next(err);
+      }
       next(new Error('UNAUTHORIZED: authentication token is invalid or expired'));
     }
   });
 
   io.on('connection', (socket) => {
     const auth = socket.data.auth;
-    logger.info({ socketId: socket.id, role: auth.role }, 'Socket connected');
+    // SEC-098: Auto-join personal room for immediate eviction & delivery
+    socket.join(`user_${auth.sub}`);
+    logger.info({ socketId: socket.id, role: auth.role, userId: auth.sub }, 'Socket connected');
 
     // Personal room. Joining is pinned to the authenticated identity: a caller
     // must not be able to subscribe to someone else's direct messages by
