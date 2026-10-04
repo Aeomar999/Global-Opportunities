@@ -1,149 +1,164 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft, FileText, Check, X } from "lucide-react";
-import { pendingCompanies, type DocStatus, type PendingCompany } from "@/lib/mock-data";
+/**
+ * Verification review: one company's submitted documents.
+ * Built on the shared detail template.
+ *
+ * Fields: Website, Company Email, Submitted, recruiter Name / Position / Email, industry, company size,
+ * location, the overall status, and four documents (Business registration, Org ID, Company logo,
+ * Proof of org), each with its file name, status, Approve and Reject.
+ * Header (right): a muted summary derived from the documents ("1 of 4 documents approved").
+ * Actions: Approve and Reject per document (icon buttons with tooltips; Approve is disabled on an approved
+ * document and Reject on a rejected one). Reject asks for confirmation. The overall status is derived:
+ * all approved -> Approved, any rejected -> Rejected, otherwise Pending.
+ * Data: mock companies (src/lib/mock-data.ts), changed in the shared mock store (mock mode) or LOCAL state.
+ *
+ * Per-document actions stay on their own rows (they act on ONE document), so there is no danger-zone card here.
+ */
+import { useCallback } from "react";
+import { useParams } from "next/navigation";
+import { Check, FileText, X } from "lucide-react";
+import { formatDate } from "@/lib/format";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
+import { pendingCompanies, type DocStatus } from "@/lib/mock-data";
+import { useDetailData } from "@/lib/use-detail-data";
+import { DetailHeader } from "@/components/detail/DetailHeader";
+import { DetailPage } from "@/components/detail/DetailPage";
+import { DetailError, DetailNotFound, DetailSkeleton } from "@/components/detail/DetailStates";
+import { InfoCard } from "@/components/detail/InfoCard";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { IconTile } from "@/components/ui/IconTile";
+import { KeyValueList } from "@/components/ui/KeyValueList";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useToast } from "@/components/ui/Toast";
+import { TruncatedText } from "@/components/ui/TruncatedText";
 
 const DOC_KEYS = ["businessReg", "orgId", "companyLogo", "proofOfOrg"] as const;
 
-const STATUS_STYLES: Record<DocStatus, { bg: string; text: string; label: string }> = {
-  pending: { bg: "#FFFBEB", text: "#B7791F", label: "Pending" },
-  approved: { bg: "#F0FDF4", text: "#16A34A", label: "Approved" },
-  rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
-};
-
 export default function VerificationReviewPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const original = pendingCompanies.find((c) => c.id === params.id);
+  const { id } = useParams<{ id: string }>();
+  const load = useCallback(() => Promise.resolve(pendingCompanies.find((c) => c.id === id)), [id]);
+  const { status, record: company, setRecord, error, retry } = useDetailData(load, { collection: "verification" });
+  const toast = useToast();
+  const { confirm, dialog } = useConfirmDialog();
 
-  const [company, setCompany] = useState<PendingCompany | undefined>(original);
+  useBreadcrumbLabel(status === "loading" ? undefined : company ? company.name : "Not found");
 
-  if (!company) {
-    return (
-      <div>
-        <p className="text-sm text-kb-text-muted">Company not found.</p>
-        <Link href="/verification" className="text-sm text-kb-primary font-semibold mt-2 inline-block">
-          Back to Verification Queue
-        </Link>
-      </div>
-    );
-  }
+  if (status === "loading") return <DetailSkeleton />;
+  if (status === "error") return <DetailError message={error ?? "Could not load this company."} onRetry={retry} />;
+  if (!company) return <DetailNotFound noun="Company" listLabel="Verification Queue" listHref="/verification" />;
 
-  const setDocStatus = (key: (typeof DOC_KEYS)[number], status: DocStatus) => {
-    setCompany((prev) => {
-      if (!prev) return prev;
-      const nextDocs = { ...prev.docs, [key]: { ...prev.docs[key], status } };
-      const allApproved = Object.values(nextDocs).every((d) => d.status === "approved");
-      const anyRejected = Object.values(nextDocs).some((d) => d.status === "rejected");
+  const approvedCount = DOC_KEYS.filter((key) => company.docs[key].status === "approved").length;
+
+  const setDocStatus = (key: (typeof DOC_KEYS)[number], next: DocStatus) => {
+    // TODO(backend): persist this change
+    setRecord((prev) => {
+      const docs = { ...prev.docs, [key]: { ...prev.docs[key], status: next } };
+      const allApproved = Object.values(docs).every((d) => d.status === "approved");
+      const anyRejected = Object.values(docs).some((d) => d.status === "rejected");
       const overallStatus: DocStatus = allApproved ? "approved" : anyRejected ? "rejected" : "pending";
-      return { ...prev, docs: nextDocs, overallStatus };
+      return { ...prev, docs, overallStatus };
     });
   };
 
-  const overallStyle = STATUS_STYLES[company.overallStatus];
+  const approve = (key: (typeof DOC_KEYS)[number]) => {
+    setDocStatus(key, "approved");
+    toast.success(`${company.docs[key].label} for ${company.name} was approved.`);
+  };
+
+  const reject = (key: (typeof DOC_KEYS)[number]) => {
+    const doc = company.docs[key];
+    confirm({
+      title: "Reject this document?",
+      description: (
+        <>
+          The <strong className="text-ink">{doc.label}</strong> ({doc.fileName}) from{" "}
+          <strong className="text-ink">{company.name}</strong> will be marked Rejected, and the company&apos;s overall verification will
+          show Rejected.
+        </>
+      ),
+      confirmLabel: "Reject document",
+      onConfirm: () => {
+        setDocStatus(key, "rejected");
+        toast.success(`${doc.label} for ${company.name} was rejected.`);
+      },
+    });
+  };
 
   return (
-    <div>
-      <button
-        onClick={() => router.push("/verification")}
-        className="flex items-center gap-1.5 text-sm text-kb-text-muted hover:text-kb-text-body mb-6"
-      >
-        <ChevronLeft size={16} />
-        Back to Verification Queue
-      </button>
-
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-kb-text-body">{company.name}</h1>
-          <p className="text-sm text-kb-text-muted mt-1">
-            {company.industry} · {company.companySize} · {company.location}
-          </p>
-        </div>
-        <span
-          className="text-xs font-semibold rounded-full px-3 py-1.5"
-          style={{ backgroundColor: overallStyle.bg, color: overallStyle.text }}
-        >
-          {overallStyle.label}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 mb-8">
-        <InfoCard title="Company">
-          <InfoRow label="Website" value={company.website} />
-          <InfoRow label="Company Email" value={company.companyEmail} />
-          <InfoRow label="Submitted" value={company.submittedDate} />
-        </InfoCard>
-        <InfoCard title="Recruiter">
-          <InfoRow label="Name" value={company.recruiterName} />
-          <InfoRow label="Position" value={company.recruiterRole} />
-          <InfoRow label="Email" value={company.recruiterEmail} />
-        </InfoCard>
-      </div>
-
-      <h2 className="text-sm font-bold text-kb-text-body mb-3">Verification Documents</h2>
-      <div className="flex flex-col gap-3">
-        {DOC_KEYS.map((key) => {
-          const doc = company.docs[key];
-          const style = STATUS_STYLES[doc.status];
-          return (
-            <div
-              key={key}
-              className="flex items-center gap-4 bg-kb-bg-card border border-kb-border rounded-2xl p-4"
-            >
-              <div className="w-10 h-10 rounded-lg bg-kb-bg-alt flex items-center justify-center shrink-0">
-                <FileText size={18} className="text-kb-text-muted" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-kb-text-body">{doc.label}</p>
-                <p className="text-xs text-kb-text-muted mt-0.5 truncate">{doc.fileName}</p>
-              </div>
-              <span
-                className="text-xs font-semibold rounded-full px-2.5 py-1 shrink-0"
-                style={{ backgroundColor: style.bg, color: style.text }}
-              >
-                {style.label}
-              </span>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => setDocStatus(key, "approved")}
-                  className="w-8 h-8 rounded-lg bg-green-50 hover:bg-green-100 flex items-center justify-center transition-colors"
-                  title="Approve"
-                >
-                  <Check size={15} color="#16A34A" strokeWidth={2.5} />
-                </button>
-                <button
-                  onClick={() => setDocStatus(key, "rejected")}
-                  className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
-                  title="Reject"
-                >
-                  <X size={15} color="#ED4C5C" strokeWidth={2.5} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder mb-3">{title}</p>
-      <div className="flex flex-col gap-2.5">{children}</div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-xs text-kb-text-muted">{label}</span>
-      <span className="text-sm text-kb-text-body font-medium text-right">{value}</span>
-    </div>
+    <>
+      <DetailPage
+        header={
+          <DetailHeader
+            leading={{ name: company.name }}
+            title={company.name}
+            badges={<StatusBadge status={company.overallStatus} />}
+            meta={`${company.industry} · ${company.companySize} · ${company.location}`}
+            actions={<p className="body-sm text-muted">{approvedCount} of {DOC_KEYS.length} documents approved</p>}
+          />
+        }
+        main={
+          <InfoCard title="Verification Documents">
+            <ul className="space-y-3">
+              {DOC_KEYS.map((key) => {
+                const doc = company.docs[key];
+                return (
+                  <li key={key} className="flex flex-wrap items-center gap-3 rounded-control border border-line p-3">
+                    <IconTile icon={FileText} tone="accent" size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="body-sm font-semibold text-ink">{doc.label}</p>
+                      <TruncatedText text={doc.fileName} className="caption" />
+                    </div>
+                    <StatusBadge status={doc.status} />
+                    <div className="flex shrink-0 items-center gap-2">
+                      <IconButton
+                        label={`Approve ${doc.label}`}
+                        tooltip="Approve document"
+                        icon={Check}
+                        tone="success"
+                        disabled={doc.status === "approved"}
+                        onClick={() => approve(key)}
+                      />
+                      <IconButton
+                        label={`Reject ${doc.label}`}
+                        tooltip="Reject document"
+                        icon={X}
+                        tone="danger"
+                        disabled={doc.status === "rejected"}
+                        onClick={() => reject(key)}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </InfoCard>
+        }
+        side={
+          <>
+            <InfoCard title="Details">
+              <KeyValueList
+                items={[
+                  { label: "Website", value: company.website },
+                  { label: "Company Email", value: company.companyEmail },
+                  { label: "Submitted", value: formatDate(company.submittedDate) },
+                ]}
+              />
+            </InfoCard>
+            <InfoCard title="Recruiter">
+              <KeyValueList
+                items={[
+                  { label: "Name", value: company.recruiterName },
+                  { label: "Position", value: company.recruiterRole },
+                  { label: "Email", value: company.recruiterEmail },
+                ]}
+              />
+            </InfoCard>
+          </>
+        }
+      />
+      {dialog}
+    </>
   );
 }

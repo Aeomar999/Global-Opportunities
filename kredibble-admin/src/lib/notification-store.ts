@@ -4,6 +4,8 @@
  * (authStore, communityStore, profileStore) — in-memory only, no backend.
  */
 
+import { BRAND } from '@/config/brand';
+
 export type Audience = 'seekers' | 'hirers' | 'both';
 
 export interface SentNotification {
@@ -11,28 +13,30 @@ export interface SentNotification {
   title: string;
   message: string;
   audience: Audience;
+  /** ISO date-time. Shown with formatDateTime() (src/lib/format.ts), never as a raw string. */
   sentAt: string;
 }
 
 const initialHistory: SentNotification[] = [
   {
     id: 'sent-1',
-    title: 'Welcome to Kredibble',
+    title: `Welcome to ${BRAND.name}`,
     message: 'Complete your profile to start receiving personalized opportunity matches.',
     audience: 'seekers',
-    sentAt: '1 Jul 2026, 9:00 AM',
+    sentAt: '2026-07-01T09:00:00',
   },
   {
     id: 'sent-2',
     title: 'New verification requirements',
     message: 'All hirer accounts must complete document verification by end of month to keep posting.',
     audience: 'hirers',
-    sentAt: '10 Jul 2026, 2:30 PM',
+    sentAt: '2026-07-10T14:30:00',
   },
 ];
 
 class NotificationBroadcastStore {
-  history: SentNotification[] = [...initialHistory];
+  // Newest first, like every entry added later.
+  history: SentNotification[] = [...initialHistory].sort((a, b) => b.sentAt.localeCompare(a.sentAt));
 
   private listeners: (() => void)[] = [];
 
@@ -53,9 +57,7 @@ class NotificationBroadcastStore {
       title,
       message,
       audience,
-      sentAt: new Date().toLocaleString('en-GB', {
-        day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
-      }),
+      sentAt: new Date().toISOString(),
     };
     this.history = [entry, ...this.history];
     this.notify();

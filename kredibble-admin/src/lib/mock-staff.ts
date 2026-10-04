@@ -1,3 +1,6 @@
+import { BRAND_EMAIL_DOMAIN } from '@/config/brand';
+import { formatDate } from '@/lib/format';
+
 export type StaffRole = 'Super Admin' | 'Moderator' | 'Support';
 export type StaffStatus = 'active' | 'suspended';
 
@@ -14,7 +17,7 @@ const initialStaff: StaffMember[] = [
   {
     id: 'staff-1',
     name: 'Nana Adjei',
-    email: 'nana.adjei@kredibble.com',
+    email: `nana.adjei@${BRAND_EMAIL_DOMAIN}`,
     role: 'Super Admin',
     status: 'active',
     joinedDate: '1 Jan 2026',
@@ -22,7 +25,7 @@ const initialStaff: StaffMember[] = [
   {
     id: 'staff-2',
     name: 'Efua Mensimah',
-    email: 'efua.mensimah@kredibble.com',
+    email: `efua.mensimah@${BRAND_EMAIL_DOMAIN}`,
     role: 'Moderator',
     status: 'active',
     joinedDate: '15 Mar 2026',
@@ -30,7 +33,7 @@ const initialStaff: StaffMember[] = [
   {
     id: 'staff-3',
     name: 'Yaw Antwi',
-    email: 'yaw.antwi@kredibble.com',
+    email: `yaw.antwi@${BRAND_EMAIL_DOMAIN}`,
     role: 'Support',
     status: 'active',
     joinedDate: '2 Jun 2026',
@@ -60,7 +63,7 @@ class StaffStateStore {
       email,
       role,
       status: 'active',
-      joinedDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      joinedDate: formatDate(new Date()),
     };
     this.members = [...this.members, member];
     this.notify();

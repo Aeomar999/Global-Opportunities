@@ -1,0 +1,104 @@
+"use client";
+
+/**
+ * Mock store: ONE in-memory place for the changes an admin makes to mock records (account status,
+ * document statuses, application statuses, capacity, removed channels and posts...).
+ *
+ * Why: the detail pages, the list pages, the sidebar pills, the breadcrumb pill and the Overview
+ * counts must tell the same story. Suspend a seeker and the Seekers list shows Suspended; approve
+ * the last pending document and the Verification Queue row becomes Approved while the pending count
+ * drops by one everywhere.
+ *
+ * How it works
+ * - The mock arrays (mock-seekers.ts and friends) stay untouched: they are the starting data.
+ * - A change is saved here as a full replacement record, keyed by collection and id.
+ * - Readers lay the saved records over the originals: overlayRows(collection, rows) for lists and
+ *   counts, readOverride(...) for one record.
+ * - Module scope only: a full page reload resets everything. Nothing goes to localStorage.
+ * - Mock mode only: useDetailData writes here only when isMockMode() is true. In real-API mode this
+ *   store is never written, so overlayRows returns the rows unchanged.
+ * - useMockStoreVersion() re-renders a component whenever anything in the store changes.
+ */
+import { useSyncExternalStore } from "react";
+import { emptyCollections, type EntityCollections, type EntityName } from "@/lib/mock-entities";
+import { isMockMode } from "@/lib/services/mock-mode";
+
+export type MockCollection =
+  | "seekers"
+  | "hirers"
+  | "verification"
+  | "opportunities"
+  | "reports"
+  | "channels"
+  | "events"
+  | "grants";
+
+const overrides = new Map<string, unknown>();
+const listeners = new Set<() => void>();
+let version = 0;
+
+const keyOf = (collection: MockCollection, id: string) => `${collection}:${id}`;
+
+function emit() {
+  version += 1;
+  listeners.forEach((listener) => listener());
+}
+
+export function subscribeMockStore(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export const getMockStoreVersion = () => version;
+
+/** Re-renders the caller whenever the store changes. Returns a version number (the value itself is not needed). */
+export function useMockStoreVersion(): number {
+  return useSyncExternalStore(subscribeMockStore, getMockStoreVersion, () => 0);
+}
+
+/** The saved version of one record, or `base` when it was never changed. */
+export function readOverride<T>(collection: MockCollection, id: string, base: T): T {
+  const key = keyOf(collection, id);
+  return overrides.has(key) ? (overrides.get(key) as T) : base;
+}
+
+/**
+ * Applies `update` to the current version of a record (saved or original) and saves the result.
+ * TODO(backend): every caller also carries a "persist this change" comment; this store is the stand-in.
+ */
+export function updateOverride<T>(collection: MockCollection, id: string, base: T, update: (previous: T) => T): T {
+  const next = update(readOverride(collection, id, base));
+  overrides.set(keyOf(collection, id), next);
+  emit();
+  return next;
+}
+
+/** A list of records with every saved change laid over it (same order, same length). */
+export function overlayRows<T extends { id: string }>(collection: MockCollection, rows: readonly T[]): T[] {
+  return rows.map((row) => readOverride(collection, row.id, row));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Entity collections (programs, partners, ambassadors, database records, social posts, testimonials,
+// listings, targets). Typed and EMPTY for now; later steps add seed data and screens.
+// Same rules as the overrides above: memory only (a reload resets them), written only in mock mode.
+// ---------------------------------------------------------------------------------------------
+let collections: EntityCollections = emptyCollections();
+
+/** The current rows of one entity collection. */
+export const getMockCollection = <K extends EntityName>(name: K): EntityCollections[K] => collections[name];
+
+/** Replaces a collection (mock mode only: in real-API mode this does nothing). TODO(backend): persist this change. */
+export function setMockCollection<K extends EntityName>(name: K, rows: EntityCollections[K]) {
+  if (!isMockMode()) return;
+  collections = { ...collections, [name]: rows };
+  emit();
+}
+
+/** The rows of a collection; re-renders the caller whenever the store changes. */
+export function useMockCollection<K extends EntityName>(name: K): EntityCollections[K] {
+  useMockStoreVersion();
+  return collections[name];
+}

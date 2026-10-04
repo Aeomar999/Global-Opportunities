@@ -1,14 +1,35 @@
 "use client";
 
+/**
+ * Admin sign-in.
+ *
+ * Layout
+ * - 1024px and up: split screen. Left, the dark violet gradient (the sidebar colours) with the brand mark,
+ *   one value line and a soft orange glow at the bottom. Right, the form card.
+ * - Below 1024px: only the form card, centred, with the brand mark above it.
+ *
+ * Behaviour (unchanged): POST /auth/admin/login through loginAdmin() (src/lib/api.ts), which also checks the
+ * admin role and throws the server's message for every error path (wrong credentials, non-admin role, rate
+ * limit, lockout, network). The message is shown in the banner below.
+ * Added: show/hide password button, a spinner on Sign in while the request runs, an error banner that is
+ * announced (role="alert"), and focus on the email field when the page opens.
+ * There is no signup: access is by invitation only.
+ */
 import { useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { AlertCircle, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { BRAND, BRAND_ADMIN_TITLE } from "@/config/brand";
+import { BrandMark } from "@/components/BrandMark";
 import { loginAdmin } from "@/lib/api";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/form/Field";
+import { Input } from "@/components/ui/form/Input";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,64 +52,83 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-8">
-          <Image src="/logo.png" alt="Kredibble" width={56} height={56} className="rounded-2xl mb-4" />
-          <h1 className="text-2xl font-bold text-kb-text-body">Kredibble Admin</h1>
-          <p className="text-sm text-kb-text-muted mt-1">Sign in to manage the platform</p>
+    <div className="flex flex-1 lg:grid lg:grid-cols-2">
+      {/* Brand panel: 1024px and up only */}
+      <aside className="dark-feature dark-surface relative hidden flex-col justify-between p-12 lg:flex">
+        <div className="flex items-center gap-3">
+          <BrandMark size={44} />
+          <div>
+            <p className="brand-name text-sb-text">{BRAND.name}</p>
+            <p className="brand-sub">{BRAND.sub}</p>
+          </div>
         </div>
+        <div className="max-w-md pb-12">
+          <p className="hero-title text-sb-text">Keep every opportunity on the platform trusted.</p>
+          <p className="body-sm mt-4 text-sb-muted">Review verifications, moderate postings and look after your community from one desk.</p>
+        </div>
+      </aside>
 
-        <form
-          onSubmit={handleLogin}
-          className="bg-kb-bg-card border border-kb-border rounded-2xl p-6 shadow-sm"
-        >
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-kb-text-body mb-2">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@kredibble.com"
-              className="w-full h-11 rounded-lg border border-kb-border-input px-3 text-sm text-kb-text-body outline-none focus:border-kb-primary"
-            />
+      {/* Form */}
+      <main className="flex flex-1 items-center justify-center px-4 py-10">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 flex flex-col items-center text-center lg:items-start lg:text-left">
+            <BrandMark size={56} className="mb-4 lg:hidden" />
+            <h1 data-testid="page-title" className="page-title">{BRAND_ADMIN_TITLE}</h1>
+            <p className="page-subtitle mt-1">{BRAND.sub}: sign in to manage the platform</p>
           </div>
 
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-kb-text-body mb-2">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              className="w-full h-11 rounded-lg border border-kb-border-input px-3 text-sm text-kb-text-body outline-none focus:border-kb-primary"
-            />
-          </div>
+          <form onSubmit={handleLogin} noValidate className="card-surface space-y-4 p-6">
+            <Field label="Email">
+              <Input
+                type="email"
+                autoFocus
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@company.com"
+              />
+            </Field>
 
-          {error && (
-            <p className="mb-4 rounded-lg border border-kb-error/20 bg-kb-error/10 px-3 py-2 text-sm text-kb-error">
-              {error}
+            <Field label="Password">
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute right-0 top-0 inline-flex size-10 items-center justify-center rounded-inset text-muted transition-colors hover:bg-neutral-soft hover:text-ink"
+                >
+                  {showPassword ? <EyeOff size={18} strokeWidth={1.75} aria-hidden="true" /> : <Eye size={18} strokeWidth={1.75} aria-hidden="true" />}
+                </button>
+              </div>
+            </Field>
+
+            {error && (
+              <p role="alert" className="body-sm flex items-start gap-2 rounded-control border border-danger/25 bg-danger-soft px-3 py-2 text-danger">
+                <AlertCircle size={16} strokeWidth={2} aria-hidden="true" className="mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </p>
+            )}
+
+            <Button type="submit" loading={isSubmitting} disabled={!isValid} className="w-full">
+              {isSubmitting ? "Signing in..." : "Sign in"}
+            </Button>
+
+            <p className="caption flex items-center justify-center gap-1.5 text-center">
+              <ShieldCheck size={14} strokeWidth={1.75} aria-hidden="true" />
+              Access is by invitation only.
             </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={!isValid}
-            className="w-full h-11 rounded-lg bg-kb-primary text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-          >
-            {isSubmitting ? "Signing in..." : "Sign in"}
-          </button>
-
-          <p className="mt-4 text-center text-sm text-kb-text-muted">
-            Need an admin account? Ask an existing administrator to provision one
-            server-side with{" "}
-            <code className="rounded bg-kb-bg-muted px-1 py-0.5 text-xs">
-              npm run user:create-admin
-            </code>
-            .
-          </p>
-        </form>
-      </div>
+          </form>
+        </div>
+      </main>
     </div>
   );
 }

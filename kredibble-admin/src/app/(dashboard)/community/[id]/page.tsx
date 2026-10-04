@@ -1,121 +1,163 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft, Trash2, Flag, Ban, RotateCcw } from "lucide-react";
-import { channels, type Channel, type ChannelStatus } from "@/lib/mock-channels";
-
-const STATUS_STYLES: Record<ChannelStatus, { bg: string; text: string; label: string }> = {
-  active: { bg: "#F0FDF4", text: "#16A34A", label: "Active" },
-  flagged: { bg: "#FFFBEB", text: "#B7791F", label: "Flagged" },
-  removed: { bg: "#FEF2F2", text: "#ED4C5C", label: "Removed" },
-};
+/**
+ * Community channel review: one channel and its posts.
+ * Built on the shared detail template.
+ *
+ * Fields: channel name, owner, followers, status, and every post (author, date, text, Flagged marker).
+ * Actions: Remove post (per post, confirm dialog), Remove channel (danger zone, confirm dialog) and
+ * Restore channel (header, when removed).
+ * Data: mock channels (src/lib/mock-channels.ts), changed in LOCAL state only.
+ */
+import { useCallback } from "react";
+import { useParams } from "next/navigation";
+import { Ban, Hash, RotateCcw, Trash2 } from "lucide-react";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
+import { channels } from "@/lib/mock-channels";
+import { useDetailData } from "@/lib/use-detail-data";
+import { DangerZone } from "@/components/detail/DangerZone";
+import { DetailHeader } from "@/components/detail/DetailHeader";
+import { DetailPage } from "@/components/detail/DetailPage";
+import { DetailError, DetailNotFound, DetailSkeleton } from "@/components/detail/DetailStates";
+import { InfoCard } from "@/components/detail/InfoCard";
+import { Button } from "@/components/ui/Button";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { IconButton } from "@/components/ui/IconButton";
+import { KeyValueList } from "@/components/ui/KeyValueList";
+import { MiniStat } from "@/components/ui/MiniStat";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useToast } from "@/components/ui/Toast";
 
 export default function ChannelReviewPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const original = channels.find((c) => c.id === params.id);
-  const [channel, setChannel] = useState<Channel | undefined>(original);
+  const { id } = useParams<{ id: string }>();
+  const load = useCallback(() => Promise.resolve(channels.find((c) => c.id === id)), [id]);
+  const { status, record: channel, setRecord, error, retry } = useDetailData(load, { collection: "channels" });
+  const toast = useToast();
+  const { confirm, dialog } = useConfirmDialog();
 
-  if (!channel) {
-    return (
-      <div>
-        <p className="text-sm text-kb-text-muted">Channel not found.</p>
-        <Link href="/community" className="text-sm text-kb-primary font-semibold mt-2 inline-block">
-          Back to Community Channels
-        </Link>
-      </div>
-    );
-  }
+  useBreadcrumbLabel(status === "loading" ? undefined : channel ? channel.name : "Not found");
 
-  const removePost = (postId: string) => {
-    setChannel((prev) => (prev ? { ...prev, posts: prev.posts.filter((p) => p.id !== postId) } : prev));
-  };
+  if (status === "loading") return <DetailSkeleton />;
+  if (status === "error") return <DetailError message={error ?? "Could not load this channel."} onRetry={retry} />;
+  if (!channel) return <DetailNotFound noun="Channel" listLabel="Community Channels" listHref="/community" />;
 
-  const toggleChannelStatus = () => {
-    setChannel((prev) =>
-      prev ? { ...prev, status: prev.status === "removed" ? "active" : "removed" } : prev
-    );
-  };
-
-  const style = STATUS_STYLES[channel.status];
   const isRemoved = channel.status === "removed";
 
+  const removePost = (postId: string) => {
+    const post = channel.posts.find((p) => p.id === postId);
+    if (!post) return;
+    confirm({
+      title: "Remove this post?",
+      description: (
+        <>
+          The post by <strong className="text-ink">{post.authorName}</strong> ({post.date}) will be removed from{" "}
+          <strong className="text-ink">{channel.name}</strong>.
+        </>
+      ),
+      confirmLabel: "Remove post",
+      onConfirm: () => {
+        // TODO(backend): persist this change
+        setRecord((prev) => ({ ...prev, posts: prev.posts.filter((p) => p.id !== postId) }));
+        toast.success(`The post by ${post.authorName} was removed.`);
+      },
+    });
+  };
+
+  const removeChannel = () =>
+    confirm({
+      title: "Remove this channel?",
+      description: (
+        <>
+          <strong className="text-ink">{channel.name}</strong> (owned by {channel.owner}, {channel.followers} followers) will be marked
+          as Removed. You can restore it later.
+        </>
+      ),
+      confirmLabel: "Remove channel",
+      onConfirm: () => {
+        // TODO(backend): persist this change
+        setRecord((prev) => ({ ...prev, status: "removed" }));
+        toast.success(`${channel.name} was removed.`);
+      },
+    });
+
+  const restoreChannel = () => {
+    // TODO(backend): persist this change
+    setRecord((prev) => ({ ...prev, status: "active" }));
+    toast.success(`${channel.name} was restored.`);
+  };
+
   return (
-    <div>
-      <button
-        onClick={() => router.push("/community")}
-        className="flex items-center gap-1.5 text-sm text-kb-text-muted hover:text-kb-text-body mb-6"
-      >
-        <ChevronLeft size={16} />
-        Back to Community Channels
-      </button>
-
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-kb-text-body">{channel.name}</h1>
-          <p className="text-sm text-kb-text-muted mt-1">
-            {channel.owner} · {channel.followers}
-          </p>
-        </div>
-        <span
-          className="text-xs font-semibold rounded-full px-3 py-1.5"
-          style={{ backgroundColor: style.bg, color: style.text }}
-        >
-          {style.label}
-        </span>
-      </div>
-
-      <h2 className="text-sm font-bold text-kb-text-body mb-3">Posts</h2>
-      <div className="flex flex-col gap-3 mb-6">
-        {channel.posts.length === 0 && (
-          <p className="text-sm text-kb-text-muted">No posts in this channel.</p>
-        )}
-        {channel.posts.map((post) => (
-          <div
-            key={post.id}
-            className={`bg-kb-bg-card border rounded-2xl p-4 ${
-              post.flagged ? "border-red-200" : "border-kb-border"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-4 mb-2">
-              <div>
-                <p className="text-sm font-semibold text-kb-text-body">{post.authorName}</p>
-                <p className="text-xs text-kb-text-muted mt-0.5">{post.date}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {post.flagged && (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 rounded-full px-2.5 py-1">
-                    <Flag size={11} />
-                    Flagged
-                  </span>
-                )}
-                <button
-                  onClick={() => removePost(post.id)}
-                  className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition-colors"
-                  title="Remove post"
-                >
-                  <Trash2 size={14} color="#ED4C5C" />
-                </button>
-              </div>
-            </div>
-            <p className="text-sm text-kb-text-body leading-relaxed">{post.body}</p>
-          </div>
-        ))}
-      </div>
-
-      <button
-        onClick={toggleChannelStatus}
-        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-          isRemoved
-            ? "bg-green-50 hover:bg-green-100 text-green-700"
-            : "bg-red-50 hover:bg-red-100 text-red-600"
-        }`}
-      >
-        {isRemoved ? <RotateCcw size={16} strokeWidth={2.5} /> : <Ban size={16} strokeWidth={2.5} />}
-        {isRemoved ? "Restore channel" : "Remove channel"}
-      </button>
-    </div>
+    <>
+      <DetailPage
+        header={
+          <DetailHeader
+            leading={{ icon: Hash }}
+            title={channel.name}
+            badges={<StatusBadge status={channel.status} />}
+            meta={`${channel.owner} · ${channel.followers} followers`}
+            actions={
+              isRemoved && (
+                <Button variant="secondary" icon={RotateCcw} onClick={restoreChannel}>
+                  Restore channel
+                </Button>
+              )
+            }
+          />
+        }
+        main={
+          <InfoCard title="Posts">
+            {channel.posts.length === 0 ? (
+              <p className="body-sm text-muted">No posts in this channel.</p>
+            ) : (
+              <ul className="space-y-3">
+                {channel.posts.map((post) => (
+                  <li
+                    key={post.id}
+                    className={`rounded-control border p-4 ${post.flagged ? "border-danger" : "border-line"}`}
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="body-sm font-semibold text-ink">{post.authorName}</p>
+                        <p className="caption">{post.date}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {post.flagged && <StatusBadge status="flagged" />}
+                        <IconButton label={`Remove post by ${post.authorName}`} icon={Trash2} tone="danger" onClick={() => removePost(post.id)} />
+                      </div>
+                    </div>
+                    <p className="input-text text-ink">{post.body}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </InfoCard>
+        }
+        side={
+          <>
+            <InfoCard title="Details">
+              <KeyValueList
+                items={[
+                  { label: "Owner", value: channel.owner },
+                  { label: "Followers", value: channel.followers },
+                ]}
+              />
+            </InfoCard>
+            <InfoCard title="Activity">
+              <MiniStat value={channel.posts.length} label="Posts" />
+            </InfoCard>
+          </>
+        }
+        danger={
+          !isRemoved && (
+            <DangerZone explanation="Marks this channel as Removed. You can restore it at any time.">
+              <Button variant="danger" icon={Ban} onClick={removeChannel}>
+                Remove channel
+              </Button>
+            </DangerZone>
+          )
+        }
+      />
+      {dialog}
+    </>
   );
 }

@@ -1,138 +1,88 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ChevronRight, Briefcase, GraduationCap, CalendarDays, HandCoins, Loader2 } from "lucide-react";
-import { getOpportunities } from "@/lib/api";
+/**
+ * Opportunities Queue: Jobs, Internships, Events and Grants posted by hirers, awaiting moderation.
+ * Built on the shared list template; this file holds the column config, the type filter and the
+ * data loader.
+ *
+ * Data: loadOpportunityRows() (mock data in mock mode, GET /opportunities in real mode). Everything
+ * loads once; the type filter and its counts are computed here. A failed request shows inline
+ * with "Try again".
+ */
+import { useMemo, useState } from "react";
+import { Briefcase, CalendarDays, GraduationCap, HandCoins, type LucideIcon } from "lucide-react";
+import { formatDate } from "@/lib/format";
+import { loadOpportunityRows, type OpportunityRow } from "@/lib/services/lists";
+import { subscribeMockStore } from "@/lib/mock-store";
+import { useListData } from "@/lib/use-list-data";
+import { DataTable } from "@/components/list/DataTable";
+import { ListPage } from "@/components/list/ListPage";
+import { TableToolbar } from "@/components/list/TableToolbar";
+import type { Column } from "@/components/list/types";
 
-const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  pending: { bg: "#FFFBEB", text: "#B7791F", label: "Pending" },
-  approved: { bg: "#F0FDF4", text: "#16A34A", label: "Approved" },
-  rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
+const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
+  jobs: { label: "Job", icon: Briefcase },
+  internships: { label: "Internship", icon: GraduationCap },
+  events: { label: "Event", icon: CalendarDays },
+  grants: { label: "Grant", icon: HandCoins },
 };
 
-const TYPE_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  jobs: { label: "Job", icon: Briefcase, color: "#6671E4" },
-  internships: { label: "Internship", icon: GraduationCap, color: "#F59E0B" },
-  events: { label: "Event", icon: CalendarDays, color: "#10B981" },
-  grants: { label: "Grant", icon: HandCoins, color: "#EF4444" },
-};
-
-const FILTERS: { label: string; value: string | "all" }[] = [
-  { label: "All", value: "all" },
-  { label: "Jobs", value: "jobs" },
-  { label: "Internships", value: "internships" },
-  { label: "Events", value: "events" },
-  { label: "Grants", value: "grants" },
+type Filter = "all" | "jobs" | "internships" | "events" | "grants";
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "jobs", label: "Jobs" },
+  { value: "internships", label: "Internships" },
+  { value: "events", label: "Events" },
+  { value: "grants", label: "Grants" },
 ];
 
-interface Opportunity {
-  id: string;
-  type: string;
-  title: string;
-  company: string;
-  date: string;
-  moderationStatus: string;
-  applicantsCount: number;
-}
+const COLUMNS: Column<OpportunityRow>[] = [
+  { key: "title", header: "Title", type: "primary", width: "30%", title: (r) => r.title, subtitle: (r) => `${r.applicantsCount} applied` },
+  { key: "company", header: "Company", type: "text", width: "20%", value: (r) => r.company },
+  {
+    key: "type",
+    header: "Type",
+    type: "text",
+    width: "15%",
+    value: (r) => (TYPE_META[r.type] ?? TYPE_META.jobs).label,
+    icon: (r) => (TYPE_META[r.type] ?? TYPE_META.jobs).icon,
+  },
+  { key: "posted", header: "Posted", type: "text", width: "15%", value: (r) => formatDate(r.date) },
+  { key: "status", header: "Status", type: "status", width: "20%", status: (r) => r.moderationStatus },
+];
 
 export default function OpportunitiesQueuePage() {
-  const [filter, setFilter] = useState<string | "all">("all");
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { rows, isLoading, error, retry } = useListData(loadOpportunityRows, { subscribe: subscribeMockStore });
+  const [filter, setFilter] = useState<Filter>("all");
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(true), 0);
-    getOpportunities<Opportunity>()
-      .then(setOpportunities)
-      .finally(() => setIsLoading(false));
-    return () => clearTimeout(timer);
-  }, []);
-
-  const filtered =
-    filter === "all" ? opportunities : opportunities.filter((o) => o.type === filter);
-
-  const pendingCount = opportunities.filter((o) => o.moderationStatus === "pending").length;
+  const all = useMemo(() => rows ?? [], [rows]);
+  const options = FILTERS.map((f) => ({
+    ...f,
+    count: rows ? (f.value === "all" ? all.length : all.filter((r) => r.type === f.value).length) : undefined,
+  }));
+  const visible = filter === "all" ? all : all.filter((r) => r.type === filter);
+  const pendingCount = all.filter((r) => r.moderationStatus === "pending").length;
 
   return (
-    <div>
-      <h1 className="text-xl font-bold text-kb-text-body mb-1">Opportunities Queue</h1>
-      <p className="text-sm text-kb-text-muted mb-6">
-        Review Jobs, Internships, Events, and Grants posted by hirers. {pendingCount} awaiting review.
-      </p>
-
-      <div className="flex items-center gap-2 mb-5">
-        {FILTERS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setFilter(f.value)}
-            className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
-              filter === f.value
-                ? "bg-kb-primary text-white"
-                : "bg-kb-bg-card border border-kb-border text-kb-text-muted hover:text-kb-text-body"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-[2fr_1.3fr_1fr_1fr_1fr_20px] gap-4 px-5 py-3 border-b border-kb-border text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder">
-          <span>Title</span>
-          <span>Company</span>
-          <span>Type</span>
-          <span>Posted</span>
-          <span>Status</span>
-          <span />
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-kb-primary" />
-          </div>
-        ) : (
-          filtered.map((opp) => {
-            const type = TYPE_META[opp.type] || TYPE_META.jobs;
-            const status = STATUS_STYLES[opp.moderationStatus] || STATUS_STYLES.pending;
-            const Icon = type.icon;
-
-            return (
-              <Link
-                key={opp.id}
-                href={`/opportunities/${opp.id}`}
-                className="grid grid-cols-[2fr_1.3fr_1fr_1fr_1fr_20px] gap-4 px-5 py-4 items-center border-b border-kb-border last:border-b-0 hover:bg-kb-bg-alt transition-colors"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-kb-text-body truncate" title={opp.title}>
-                    {opp.title}
-                  </p>
-                  <p className="text-xs text-kb-text-muted mt-0.5">{opp.applicantsCount} applied</p>
-                </div>
-                <span className="text-sm text-kb-text-muted truncate">{opp.company}</span>
-                <span className="flex items-center gap-1.5 text-sm text-kb-text-muted w-fit min-w-0">
-                  <Icon size={14} color={type.color} className="shrink-0" />
-                  <span className="truncate">{type.label}</span>
-                </span>
-                <span className="text-sm text-kb-text-muted truncate">{opp.date}</span>
-                <span
-                  className="inline-flex w-fit text-xs font-semibold rounded-full px-2.5 py-1"
-                  style={{ backgroundColor: status.bg, color: status.text }}
-                >
-                  {status.label}
-                </span>
-                <ChevronRight size={18} className="text-kb-text-placeholder justify-self-end" />
-              </Link>
-            );
-          })
-        )}
-
-        {!isLoading && filtered.length === 0 && (
-          <div className="px-5 py-10 text-center text-sm text-kb-text-muted">
-            No opportunities in this category.
-          </div>
-        )}
-      </div>
-    </div>
+    <ListPage
+      title="Opportunities Queue"
+      subtitle={`Review Jobs, Internships, Events, and Grants posted by hirers.${rows ? ` ${pendingCount} awaiting review.` : ""}`}
+      toolbar={<TableToolbar filters={{ options, value: filter, onChange: setFilter, label: "Filter by type" }} />}
+    >
+      <DataTable
+        label="Opportunities"
+        columns={COLUMNS}
+        rows={visible}
+        getRowKey={(r) => r.id}
+        getRowHref={(r) => `/opportunities/${r.id}`}
+        loading={isLoading}
+        error={error}
+        onRetry={retry}
+        isFiltered={filter !== "all"}
+        resetKey={filter}
+        emptyNoData={{ icon: Briefcase, title: "No opportunities posted yet", description: "Postings from hirers appear here for moderation." }}
+        emptyNoResults={{ icon: Briefcase, title: "No opportunities in this category", description: "Try another type, or choose All." }}
+      />
+    </ListPage>
   );
 }

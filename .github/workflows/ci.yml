@@ -110,6 +110,14 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
         working-directory: kredibble-admin
+      # A throwaway admin for this run: the in-memory API seeds it and the tests sign in with it. The password is
+      # random per run and masked, so nothing secret is stored in the repository.
+      - name: Create throwaway e2e admin credentials
+        run: |
+          PASSWORD="$(openssl rand -base64 24)"
+          echo "::add-mask::$PASSWORD"
+          echo "E2E_ADMIN_EMAIL=ci-admin@example.com" >> "$GITHUB_ENV"
+          echo "E2E_ADMIN_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
       # playwright.config.ts starts the in-memory API and the admin dev server itself.
       - name: Run Playwright
         run: npx playwright test
