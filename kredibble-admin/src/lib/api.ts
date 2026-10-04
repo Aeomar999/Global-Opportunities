@@ -11,9 +11,11 @@ export type SeekerProfile = {
   id: string;
   userId: string;
   fullName: string;
+  name?: string;
   email: string;
   phone?: string;
   profession?: string;
+  country?: string;
   verified: boolean;
   createdAt: string;
   updatedAt: string;
@@ -155,7 +157,7 @@ export type AuthResponse = {
   user: AuthUser;
 };
 
-type Paginated<T> = { data: T[]; meta: { page: number; limit: number; total: number; pages: number } };
+export type Paginated<T> = { data: T[]; meta: { page: number; limit: number; total: number; pages: number } };
 
 const getApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;

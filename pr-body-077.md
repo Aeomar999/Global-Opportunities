@@ -1,6 +1,6 @@
 ## Summary
 
-Partial progress on SEC-077: Added admin API routes for admin pages to replace mock data.
+Partial progress on SEC-077: Added admin API routes for admin pages to replace mock data, and wired up the seekers and hirers pages to use these new APIs.
 
 ## Changes
 
@@ -31,18 +31,25 @@ All routes use `requireAdminOrStaffAuth` middleware (accepts admin cookie/JWT or
   - `getCommunityChannelPosts`
   - `getVerificationCompanies`, `getVerificationCompanyById`, `updateVerificationCompany`
   - `getVerificationCompanyDocuments`, `getVerificationDocuments`, `getVerificationDocumentById`, `updateVerificationDocument`, `createVerificationDocument`, `deleteVerificationDocument`
+  - Added type definitions for all new resources
+
+### Admin Pages Updated
+- **seekers/page.tsx**: Now uses `getSeekers` API with pagination, search, and loading/error states
+- **seekers/[id]/page.tsx**: Now uses `getSeekerById` API with loading/error states
+- **hirers/page.tsx**: Now uses `getHirers` API with pagination, search, and loading/error states
+- **hirers/[id]/page.tsx**: Now uses `getHirerById` API with loading/error states
 
 ### Testing
 - All 153 backend tests pass
-- Backend lint passes
-- Backend server starts successfully
+- Backend lint clean
+- Admin lint clean
 
 ### Remaining Work (SEC-077)
-- Wire admin pages to use these new API methods instead of mock data
+- Wire remaining admin pages to use new API methods instead of mock data
 - Delete mock files (`src/lib/mock-*.ts`)
-- Add loading, error, and empty states to admin pages
+- Add loading/error/empty states to remaining admin pages
 - Add audit logging for admin mutations
-- Update admin pages: analytics, community, content/articles, events, grants, hirers, opportunities/[id], reports, seekers, staff, verification
+- Update admin pages: analytics, community, content/articles, events, grants, opportunities/[id], reports, seekers, staff, verification
 
 ## Related
 - SEC-075 (admin cookie accepted by data routes) - PR #23 ✅
