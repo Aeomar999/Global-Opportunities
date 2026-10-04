@@ -486,6 +486,63 @@ const publicTestimonial = (testimonial) => {
   return visible;
 };
 
+const ADMIN_USER_FIELDS = 'name email avatarUrl emailVerified createdAt';
+
+/** Search a profile collection by its own fields and by its owner's name or email. */
+const searchProfilesByUser = (fields) => async (pattern) => {
+  const owners = await User.find({ $or: [{ name: pattern }, { email: pattern }] }).select('_id').limit(500).lean();
+  return {
+    $or: [
+      ...fields.map((field) => ({ [field]: pattern })),
+      { userId: { $in: owners.map((owner) => owner._id) } },
+    ],
+  };
+};
+
+/** Lift the populated owner onto the record: the shape the admin pages read (`name`, `email`, `user`). */
+const flattenProfileUser = (item) => {
+  const user = item.userId && typeof item.userId === 'object' ? item.userId : null;
+  return {
+    ...item,
+    userId: user ? String(user.id ?? user._id) : item.userId,
+    user,
+    name: user?.name,
+    email: user?.email,
+  };
+};
+
+/**
+ * Add each hirer's verification case and posting count, with two queries per
+ * page. Records point at a hirer by HirerAccount id or by the owner's User id
+ * (SEC-047), so both are matched.
+ */
+const decorateHirers = async (items) => {
+  const hirers = items.map(flattenProfileUser);
+  const keysOf = (hirer) => [hirer.id, hirer.userId].filter((id) => mongoose.isValidObjectId(id)).map(String);
+  const objectIds = [...new Set(hirers.flatMap(keysOf))].map((id) => new mongoose.Types.ObjectId(id));
+
+  const [cases, postings] = await Promise.all([
+    CompanyVerification.find({ hirerId: { $in: objectIds } }).select('hirerId overallStatus').lean(),
+    Opportunity.aggregate([
+      { $match: { $or: [{ hirerId: { $in: objectIds } }, { createdBy: { $in: objectIds } }] } },
+      { $group: { _id: { $ifNull: ['$hirerId', '$createdBy'] }, count: { $sum: 1 } } },
+    ]),
+  ]);
+  const caseByHirer = new Map(cases.map((entry) => [String(entry.hirerId), entry]));
+  const countByHirer = new Map(postings.map((entry) => [String(entry._id), entry.count]));
+
+  return hirers.map((hirer) => {
+    const keys = keysOf(hirer);
+    const verification = keys.map((key) => caseByHirer.get(key)).find(Boolean);
+    return {
+      ...hirer,
+      overallStatus: verification?.overallStatus ?? null,
+      linkedVerificationId: verification ? String(verification._id) : null,
+      postingsCount: keys.reduce((sum, key) => sum + (countByHirer.get(key) || 0), 0),
+    };
+  });
+};
+
 /**
  * SEC-075 / SEC-077: the admin dashboard's data API. Every route takes only an
  * admin session (admin secret and audience, via cookie or Bearer). A user
@@ -494,14 +551,88 @@ const publicTestimonial = (testimonial) => {
  * the two together.
  */
 const mountAdminDataRoutes = (router) => {
+  // Nested lists first, so the collection mounts' `/:id` never sees them.
+  router.get('/admin/verification/companies/:companyId/documents', requireAdminAuth, asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.companyId)) throw notFound('Company verification');
+    const verification = await CompanyVerification.findById(req.params.companyId).select('hirerId').lean();
+    if (!verification) throw notFound('Company verification');
+    // A document points at its case, or only at the hirer (`companyId`).
+    const filter = {
+      $or: [
+        { verificationCaseId: verification._id },
+        ...(verification.hirerId ? [{ companyId: verification.hirerId }] : []),
+      ],
+    };
+    const { page, limit, skip } = parsePagination(req.query);
+    const [docs, total] = await Promise.all([
+      VerificationDoc.find(filter).sort({ _id: -1 }).skip(skip).limit(limit),
+      VerificationDoc.countDocuments(filter),
+    ]);
+    listResponse(res, docs.map(toClientObject), total, page, limit);
+  }));
+
+  router.get('/admin/community/channels/:channelId/posts', requireAdminAuth, asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.channelId)) throw notFound('Channel');
+    const filter = { channelId: req.params.channelId };
+    const { page, limit, skip } = parsePagination(req.query);
+    const [posts, total] = await Promise.all([
+      ChannelPost.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit)
+        .populate({ path: 'authorId', select: 'name email avatarUrl' }),
+      ChannelPost.countDocuments(filter),
+    ]);
+    listResponse(res, posts.map(toClientObject), total, page, limit);
+  }));
+
   const adminCollection = (path, options) => router.use(
     `/admin${path}`,
     collectionRoutes({ ...options, authenticate: requireAdminAuth, populateAlways: true }),
   );
 
+  adminCollection('/seekers', {
+    Model: SeekerProfile, resourceName: 'Seeker', policyKey: 'seekers',
+    populate: { path: 'userId', select: ADMIN_USER_FIELDS },
+    searchFilter: searchProfilesByUser(['profession', 'university', 'country']),
+    filterFields: ['verified', 'status', 'country'],
+    decorate: async (items) => items.map(flattenProfileUser),
+  });
+  adminCollection('/hirers', {
+    Model: HirerAccount, resourceName: 'Hirer', policyKey: 'hirers',
+    populate: { path: 'userId', select: ADMIN_USER_FIELDS },
+    searchFilter: searchProfilesByUser(['companyName', 'industry', 'location', 'companyEmail']),
+    filterFields: ['verified', 'status', 'industry'],
+    decorate: decorateHirers,
+  });
+  adminCollection('/verification/companies', {
+    Model: CompanyVerification, resourceName: 'Company verification', policyKey: 'verification/companies',
+    searchFields: ['name', 'industry', 'companyEmail'], filterFields: ['overallStatus'],
+  });
+  adminCollection('/verification/documents', {
+    Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents',
+    searchFields: ['label', 'fileName'], filterFields: ['status'],
+  });
   adminCollection('/events', {
     Model: Event, resourceName: 'Event', policyKey: 'events',
     searchFields: ['title', 'location', 'hirer'], filterFields: ['status'],
+  });
+  adminCollection('/grants', {
+    Model: Grant, resourceName: 'Grant', policyKey: 'grants',
+    searchFields: ['title', 'sector', 'hirer'], filterFields: ['status', 'sector'],
+  });
+  adminCollection('/articles', {
+    Model: Article, resourceName: 'Article', policyKey: 'articles',
+    searchFields: ['title', 'category'], filterFields: ['status', 'category'],
+  });
+  adminCollection('/staff', {
+    Model: StaffMember, resourceName: 'Staff', policyKey: 'staff',
+    searchFields: ['name', 'email'], filterFields: ['role', 'status'],
+  });
+  adminCollection('/reports', {
+    Model: Report, resourceName: 'Report', policyKey: 'reports',
+    searchFields: ['reason', 'details', 'targetLabel'], filterFields: ['status', 'targetType'],
+  });
+  adminCollection('/community/channels', {
+    Model: Channel, resourceName: 'Channel', policyKey: 'community/channels',
+    searchFields: ['name', 'category'], filterFields: ['status', 'category', 'visibility'],
   });
 };
 
