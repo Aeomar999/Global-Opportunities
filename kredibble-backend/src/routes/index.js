@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { authRouter } from './auth.js';
-import { uploadRouter } from './upload.js';
+import { uploadRouter, createUploadRouter, IMAGE_MIME_TYPES } from './upload.js';
 import { assistantRouter } from './assistant.js';
 import { newsRouter } from './news.js';
 import { adminApiRouter } from './admin-api.js';
 import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination } from '../utils/http.js';
 import { requireAuth, requireAdminAuth, optionalAuth } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { staffInviteSchema } from '../schemas/admin.js';
 import {
   RESOURCE_POLICIES,
   ADMIN,
@@ -331,9 +333,9 @@ const collectionRoutes = ({
       );
       if (!item) throw notFound(resourceName);
 
-      // SEC-017: audit log for admin mutations
-      const isAdminMutation = req.auth?.role === ADMIN && policy.adminUpdateFields && Object.keys(data).some(k => policy.adminUpdateFields.includes(k));
-      if (isAdminMutation) {
+      // SEC-017 / SEC-077: every admin update is audited, not only admin-only fields
+      // (a report decision or a staff role change touches ordinary fields).
+      if (req.auth?.role === ADMIN) {
         await auditReq(req, {
           action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
           resourceType: AUDIT_RESOURCE_TYPES[resourceName.toUpperCase().replace(/ /g, '_')] || resourceName.toLowerCase().replace(/ /g, '_'),
@@ -452,6 +454,11 @@ const canManageChannel = async (channel, user) => {
   return membership?.status === 'active' && membership.role === 'admin';
 };
 
+/** SEC-077: a channel an admin removed is gone for everyone else, owner included. */
+const assertChannelVisible = (channel, user) => {
+  if (channel.status === 'removed' && user?.role !== ADMIN) throw notFound('Channel');
+};
+
 const requireChannelAdmin = async (channel, user) => {
   if (!await canManageChannel(channel, user)) throw new ApiError(403, 'Only a community admin can manage this group');
 };
@@ -551,6 +558,59 @@ const decorateHirers = async (items) => {
  * the two together.
  */
 const mountAdminDataRoutes = (router) => {
+  router.get('/admin/analytics', requireAdminAuth, asyncHandler(async (req, res) => {
+    const [seekers, activeSeekers, hirers, verifiedHirers, applications, reports, openReports, byType] = await Promise.all([
+      SeekerProfile.countDocuments(),
+      SeekerProfile.countDocuments({ status: 'active' }),
+      HirerAccount.countDocuments(),
+      HirerAccount.countDocuments({ verified: true }),
+      Applicant.countDocuments(),
+      Report.countDocuments(),
+      Report.countDocuments({ status: 'open' }),
+      Opportunity.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
+    ]);
+    itemResponse(res, {
+      seekers: { total: seekers, active: activeSeekers },
+      hirers: { total: hirers, verified: verifiedHirers },
+      applications: { total: applications },
+      reports: { total: reports, open: openReports },
+      opportunitiesByType: byType.map(({ _id, count }) => ({ type: _id, count })),
+    });
+  }));
+
+  // Staff are existing Kredibble accounts; there is no email-invite flow (2026-10-04 decision).
+  router.post('/admin/staff/invite', requireAdminAuth, validate(staffInviteSchema), asyncHandler(async (req, res) => {
+    const user = await User.findOne({ emailNormalized: req.body.email.trim().toLowerCase(), role: { $ne: 'deleted' } });
+    if (!user) throw new ApiError(404, 'No Kredibble account uses that email. Ask them to sign up first.');
+    if (await StaffMember.exists({ userId: user._id })) {
+      throw new ApiError(409, 'That account is already on the staff list');
+    }
+    const staff = await StaffMember.create({
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      role: req.body.role,
+      status: 'active',
+      joinedDate: new Date().toISOString().slice(0, 10),
+    });
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+      metadata: { staffInvite: true, role: req.body.role },
+    });
+    res.status(201).json({ data: toClientObject(staff) });
+  }));
+
+  // Article banners: images only, stored outside any user's folder.
+  router.use('/admin/upload', createUploadRouter({
+    authenticate: requireAdminAuth,
+    purposes: ['article-banner'],
+    folderFor: (req, purpose) => `kredibble/admin/${purpose}`,
+    allowedMimeTypes: IMAGE_MIME_TYPES,
+  }));
+
   // Nested lists first, so the collection mounts' `/:id` never sees them.
   router.get('/admin/verification/companies/:companyId/documents', requireAdminAuth, asyncHandler(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.companyId)) throw notFound('Company verification');
@@ -634,6 +694,23 @@ const mountAdminDataRoutes = (router) => {
     Model: Channel, resourceName: 'Channel', policyKey: 'community/channels',
     searchFields: ['name', 'category'], filterFields: ['status', 'category', 'visibility'],
   });
+  adminCollection('/community/posts', {
+    Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts',
+    populate: { path: 'authorId', select: 'name email avatarUrl' },
+    searchFields: ['title', 'body'], filterFields: ['channelId', 'flagged'],
+  });
+  adminCollection('/grant-applications', {
+    Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications',
+    searchFields: ['applicantName'], filterFields: ['grantId', 'status'],
+  });
+
+  // The staff-portal router has list/update/delete for postings but no read by id.
+  router.get('/admin/opportunities/:id', requireAdminAuth, asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) throw notFound('Opportunity');
+    const opportunity = await Opportunity.findById(req.params.id);
+    if (!opportunity) throw notFound('Opportunity');
+    itemResponse(res, toClientObject(opportunity));
+  }));
 };
 
 /**
@@ -847,6 +924,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       ? { $or: [{ visibility: 'public' }, { createdBy: req.auth.sub }, { memberIds: req.auth.sub }, { _id: { $in: membershipChannelIds } }] }
       : { visibility: 'public' };
     const clauses = [visible];
+    if (req.auth?.role !== ADMIN) clauses.push({ status: { $ne: 'removed' } });
     if (req.query.visibility) clauses.push({ visibility: String(req.query.visibility) });
     const pattern = searchPattern(req.query.q);
     if (pattern) clauses.push({ $or: [{ name: pattern }, { category: pattern }] });
@@ -890,6 +968,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.get('/community/channels/:channelId', optionalAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     itemResponse(res, toClientObject(channel));
   }));
@@ -985,6 +1064,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.get('/community/channels/:channelId/posts', optionalAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     const { page, limit, skip } = parsePagination(req.query);
     const filter = { channelId: channel._id };
@@ -997,6 +1077,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.post('/community/channels/:channelId/posts', requireAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     const author = await User.findById(req.auth.sub);
     // SEC-007: author identity comes from the token; only content fields come from the body.

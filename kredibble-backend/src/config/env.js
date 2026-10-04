@@ -12,6 +12,12 @@ const parseOrigins = (value) =>
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 
+/**
+ * The admin Playwright server (scripts/e2e-server.js) sets E2E_SERVER=1 so a whole
+ * suite from one IP isn't throttled. It is never honoured in production.
+ */
+export const e2eModeEnabled = (vars) => vars.NODE_ENV !== 'production' && vars.E2E_SERVER === '1';
+
 const assertStrongEnough = (name, value) => {
   if (value.length < 32) {
     throw new Error(`CRITICAL SECURITY ERROR: ${name} must be at least 32 characters (got ${value.length}). Generate one with: openssl rand -base64 48`);
@@ -45,6 +51,7 @@ const env = {
   nodeEnv,
   isDevelopment: !isProduction,
   isTest: nodeEnv === 'test',
+  isE2E: e2eModeEnabled({ NODE_ENV: nodeEnv, E2E_SERVER: process.env.E2E_SERVER }),
   port: Number(process.env.PORT || 4000),
   corsOrigins: parseOrigins(process.env.CORS_ORIGIN),
   databaseUrl: process.env.DATABASE_URL || process.env.MONGODB_URI || process.env.MONGO_URI,
