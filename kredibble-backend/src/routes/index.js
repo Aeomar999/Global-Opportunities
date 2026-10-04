@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { authRouter } from './auth.js';
-import { uploadRouter } from './upload.js';
+import { uploadRouter, createUploadRouter, IMAGE_MIME_TYPES } from './upload.js';
 import { assistantRouter } from './assistant.js';
 import { newsRouter } from './news.js';
 import { adminApiRouter } from './admin-api.js';
 import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination } from '../utils/http.js';
 import { requireAuth, requireAdminAuth, optionalAuth } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { staffInviteSchema } from '../schemas/admin.js';
 import {
   RESOURCE_POLICIES,
   ADMIN,
@@ -551,6 +553,59 @@ const decorateHirers = async (items) => {
  * the two together.
  */
 const mountAdminDataRoutes = (router) => {
+  router.get('/admin/analytics', requireAdminAuth, asyncHandler(async (req, res) => {
+    const [seekers, activeSeekers, hirers, verifiedHirers, applications, reports, openReports, byType] = await Promise.all([
+      SeekerProfile.countDocuments(),
+      SeekerProfile.countDocuments({ status: 'active' }),
+      HirerAccount.countDocuments(),
+      HirerAccount.countDocuments({ verified: true }),
+      Applicant.countDocuments(),
+      Report.countDocuments(),
+      Report.countDocuments({ status: 'open' }),
+      Opportunity.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
+    ]);
+    itemResponse(res, {
+      seekers: { total: seekers, active: activeSeekers },
+      hirers: { total: hirers, verified: verifiedHirers },
+      applications: { total: applications },
+      reports: { total: reports, open: openReports },
+      opportunitiesByType: byType.map(({ _id, count }) => ({ type: _id, count })),
+    });
+  }));
+
+  // Staff are existing Kredibble accounts; there is no email-invite flow (2026-10-04 decision).
+  router.post('/admin/staff/invite', requireAdminAuth, validate(staffInviteSchema), asyncHandler(async (req, res) => {
+    const user = await User.findOne({ emailNormalized: req.body.email.trim().toLowerCase(), role: { $ne: 'deleted' } });
+    if (!user) throw new ApiError(404, 'No Kredibble account uses that email. Ask them to sign up first.');
+    if (await StaffMember.exists({ userId: user._id })) {
+      throw new ApiError(409, 'That account is already on the staff list');
+    }
+    const staff = await StaffMember.create({
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      role: req.body.role,
+      status: 'active',
+      joinedDate: new Date().toISOString().slice(0, 10),
+    });
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+      metadata: { staffInvite: true, role: req.body.role },
+    });
+    res.status(201).json({ data: toClientObject(staff) });
+  }));
+
+  // Article banners: images only, stored outside any user's folder.
+  router.use('/admin/upload', createUploadRouter({
+    authenticate: requireAdminAuth,
+    purposes: ['article-banner'],
+    folderFor: (req, purpose) => `kredibble/admin/${purpose}`,
+    allowedMimeTypes: IMAGE_MIME_TYPES,
+  }));
+
   // Nested lists first, so the collection mounts' `/:id` never sees them.
   router.get('/admin/verification/companies/:companyId/documents', requireAdminAuth, asyncHandler(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.companyId)) throw notFound('Company verification');

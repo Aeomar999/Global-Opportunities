@@ -6,23 +6,6 @@ import { requireAuth } from '../middleware/auth.js';
 import { uploadLimiter as uploadRateLimiter } from '../lib/rate-limiters.js';
 import { ApiError, asyncHandler } from '../utils/http.js';
 
-export const uploadRouter = Router();
-
-// Configure multer to store files in memory
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-  // Reject disallowed types before buffering them. Shares the SEC-013 allowlist
-  // and wording with the handler so the client sees one message either way.
-  fileFilter(req, file, callback) {
-    const allowed = ALLOWED_MIME_TYPES.has(file.mimetype);
-    callback(allowed ? null : new ApiError(400, `File type ${file.mimetype} not allowed. Allowed: PDF, PNG, JPEG, WebP`), allowed);
-  },
-});
-
 // SEC-013: MIME type allowlist
 const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
@@ -30,6 +13,19 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
   'image/webp',
 ]);
+
+/** Images only: the admin dashboard uploads article banners, never documents. */
+export const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+const MIME_LABELS = {
+  'application/pdf': 'PDF',
+  'image/png': 'PNG',
+  'image/jpeg': 'JPEG',
+  'image/webp': 'WebP',
+};
+
+const notAllowedMessage = (mimeType, allowedMimeTypes) =>
+  `File type ${mimeType} not allowed. Allowed: ${[...allowedMimeTypes].map((type) => MIME_LABELS[type]).join(', ')}`;
 
 // SEC-013: Magic bytes for each allowed type
 const MAGIC_BYTES = {
@@ -53,9 +49,6 @@ const UPLOAD_PURPOSE_VALUES = Object.values(UPLOAD_PURPOSE);
 // Redis-backed factory in production.
 const uploadLimiter = uploadRateLimiter;
 
-uploadRouter.use(requireAuth);
-uploadRouter.use(uploadLimiter);
-
 /**
  * Validates file buffer against magic bytes
  */
@@ -72,60 +65,92 @@ function validateMagicBytes(buffer, declaredMimeType) {
 }
 
 /**
- * Upload endpoint
- * Expects: file in 'file' field, optional 'purpose' in query (must be one of UPLOAD_PURPOSE values)
- * Server derives folder from user ID and purpose
+ * Build an upload router.
+ * Expects: file in 'file' field, optional 'purpose' in query (one of `purposes`;
+ * anything else falls back to the first). The server derives the folder.
+ *
+ * @param {object} options
+ * @param {Function} options.authenticate - auth middleware for the mount
+ * @param {string[]} options.purposes - allowed purposes; the first is the default
+ * @param {(req, purpose: string) => string} options.folderFor - Cloudinary folder for an upload
+ * @param {Set<string>} [options.allowedMimeTypes] - defaults to the SEC-013 allowlist
  */
-uploadRouter.post(
-  '/',
-  upload.single('file'),
-  asyncHandler(async (req, res) => {
-    if (!req.file) {
-      throw new ApiError(400, 'No file uploaded');
-    }
+export const createUploadRouter = ({ authenticate, purposes, folderFor, allowedMimeTypes = ALLOWED_MIME_TYPES }) => {
+  const router = Router();
 
-    // SEC-013: Validate declared MIME type is in allowlist
-    const declaredMimeType = req.file.mimetype;
-    if (!ALLOWED_MIME_TYPES.has(declaredMimeType)) {
-      throw new ApiError(400, `File type ${declaredMimeType} not allowed. Allowed: PDF, PNG, JPEG, WebP`);
-    }
+  // Configure multer to store files in memory
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit
+    },
+    // Reject disallowed types before buffering them. Shares the SEC-013 allowlist
+    // and wording with the handler so the client sees one message either way.
+    fileFilter(req, file, callback) {
+      const allowed = allowedMimeTypes.has(file.mimetype);
+      callback(allowed ? null : new ApiError(400, notAllowedMessage(file.mimetype, allowedMimeTypes)), allowed);
+    },
+  });
 
-    // SEC-013: Validate magic bytes match declared type
-    if (!validateMagicBytes(req.file.buffer, declaredMimeType)) {
-      throw new ApiError(400, 'File content does not match declared type');
-    }
+  router.use(authenticate);
+  router.use(uploadLimiter);
 
-    // SEC-013: Use file-type as secondary validation
-    const detected = await fileTypeFromBuffer(req.file.buffer);
-    if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
-      throw new ApiError(400, 'File type detection failed or type not allowed');
-    }
-    if (detected.mime !== declaredMimeType) {
-      throw new ApiError(400, 'File content does not match declared MIME type');
-    }
+  router.post(
+    '/',
+    upload.single('file'),
+    asyncHandler(async (req, res) => {
+      if (!req.file) {
+        throw new ApiError(400, 'No file uploaded');
+      }
 
-    // SEC-013: Purpose must be one of the enum values
-    const purposeParam = req.query.purpose;
-    const purpose = UPLOAD_PURPOSE_VALUES.includes(purposeParam)
-      ? purposeParam
-      : UPLOAD_PURPOSE.CV; // default fallback
+      // SEC-013: Validate declared MIME type is in allowlist
+      const declaredMimeType = req.file.mimetype;
+      if (!allowedMimeTypes.has(declaredMimeType)) {
+        throw new ApiError(400, notAllowedMessage(declaredMimeType, allowedMimeTypes));
+      }
 
-    // SEC-013: Server derives folder from user ID and purpose
-    const folder = `kredibble/${req.auth.sub}/${purpose}`;
+      // SEC-013: Validate magic bytes match declared type
+      if (!validateMagicBytes(req.file.buffer, declaredMimeType)) {
+        throw new ApiError(400, 'File content does not match declared type');
+      }
 
-    // SEC-013: Upload to Cloudinary with random filename
-    const result = await uploadBufferToCloudinary(req.file.buffer, folder);
+      // SEC-013: Use file-type as secondary validation
+      const detected = await fileTypeFromBuffer(req.file.buffer);
+      if (!detected || !allowedMimeTypes.has(detected.mime)) {
+        throw new ApiError(400, 'File type detection failed or type not allowed');
+      }
+      if (detected.mime !== declaredMimeType) {
+        throw new ApiError(400, 'File content does not match declared MIME type');
+      }
 
-    res.json({
-      data: {
-        url: result.secure_url,
-        publicId: result.public_id,
-        format: result.format,
-        bytes: result.bytes,
-        folder: result.folder,
-        originalName: req.file.originalname,
-        mimeType: req.file.mimetype,
-      },
-    });
-  })
-);
+      // SEC-013: Purpose must be one of the allowed values
+      const purposeParam = req.query.purpose;
+      const purpose = purposes.includes(purposeParam) ? purposeParam : purposes[0];
+
+      // SEC-013: Upload to Cloudinary with random filename
+      const result = await uploadBufferToCloudinary(req.file.buffer, folderFor(req, purpose));
+
+      res.json({
+        data: {
+          url: result.secure_url,
+          publicId: result.public_id,
+          format: result.format,
+          bytes: result.bytes,
+          folder: result.folder,
+          originalName: req.file.originalname,
+          mimeType: req.file.mimetype,
+        },
+      });
+    })
+  );
+
+  return router;
+};
+
+export const uploadRouter = createUploadRouter({
+  authenticate: requireAuth,
+  // CV first: it is the default when no purpose is given.
+  purposes: [UPLOAD_PURPOSE.CV, ...UPLOAD_PURPOSE_VALUES.filter((purpose) => purpose !== UPLOAD_PURPOSE.CV)],
+  // SEC-013: Server derives folder from user ID and purpose
+  folderFor: (req, purpose) => `kredibble/${req.auth.sub}/${purpose}`,
+});
