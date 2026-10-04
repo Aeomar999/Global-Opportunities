@@ -14,7 +14,7 @@ export default function SeekersDirectoryPage() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
-  const [data, setData] = useState<Paginated<SeekerProfile> | null>(null);
+  const [data, setData] = useState<Paginated<ExtendedSeekerProfile> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

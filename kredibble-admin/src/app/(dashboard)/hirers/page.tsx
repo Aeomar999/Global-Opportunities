@@ -20,7 +20,7 @@ export default function HirersDirectoryPage() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
-  const [data, setData] = useState<Paginated<HirerAccount> | null>(null);
+  const [data, setData] = useState<Paginated<ExtendedHirerAccount> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -142,7 +142,7 @@ export default function HirersDirectoryPage() {
                 );
               })}
 
-              {data?.data.length > 0 && totalPages > 1 && (
+              {data?.data && data.data.length > 0 && totalPages > 1 && (
                 <div className="flex items-center justify-between px-5 py-3 border-t border-kb-border">
                   <span className="text-sm text-kb-text-muted">
                     Page {page} of {totalPages} ({total} total)
