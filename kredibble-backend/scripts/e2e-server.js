@@ -39,6 +39,16 @@ await User.create({
   passwordHash: await bcrypt.hash(process.env.E2E_ADMIN_PASSWORD || 'Password123', 12),
 });
 
+const { SeekerProfile, HirerAccount } = await import('../src/models/Profiles.js');
+const { CompanyVerification } = await import('../src/models/Platform.js');
+
+// One of each record the dashboard's directory pages list (tests/admin.e2e.spec.ts).
+const seeker = await User.create({ name: 'E2E Seeker', email: 'e2e-seeker@kredibble.com', role: 'seeker', passwordHash: 'x' });
+await SeekerProfile.create({ userId: seeker._id, profession: 'Data Analyst', country: 'Ghana' });
+const hirer = await User.create({ name: 'E2E Recruiter', email: 'e2e-hirer@kredibble.com', role: 'hirer', passwordHash: 'x' });
+const account = await HirerAccount.create({ userId: hirer._id, companyName: 'E2E Holdings', industry: 'Finance', location: 'Accra' });
+await CompanyVerification.create({ hirerId: account._id, name: 'E2E Holdings', overallStatus: 'pending' });
+
 const server = http.createServer(app).listen(env.port, () => {
   console.log(`e2e API listening on http://localhost:${env.port}/api`);
 });

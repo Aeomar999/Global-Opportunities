@@ -204,3 +204,27 @@ test.describe('Admin API Integration', () => {
     expect(response.status()).toBe(401);
   });
 });
+
+test.describe('Directory pages show real data', () => {
+  test('seekers page lists the seeded seeker', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+    await page.goto(`${BASE_URL}/seekers`);
+    await expect(page.getByText('E2E Seeker')).toBeVisible();
+    await expect(page.getByText('e2e-seeker@kredibble.com')).toBeVisible();
+  });
+
+  test('hirers page lists the seeded company', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+    await page.goto(`${BASE_URL}/hirers`);
+    await expect(page.getByText('E2E Holdings')).toBeVisible();
+  });
+
+  test('verification page lists the pending company', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+    await page.goto(`${BASE_URL}/verification`);
+    await expect(page.getByText('E2E Holdings')).toBeVisible();
+  });
+});
