@@ -1,6 +1,7 @@
 import { existsSync } from 'fs';
 import { defineConfig, devices } from '@playwright/test';
 import { AUTH_FILE } from './tests/global-setup';
+import { ADMIN_PORT, MOCK_RUN, defaultBaseUrl } from './tests/mode';
 
 /**
  * Test credentials: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD are read from .env.test.local in the project root
@@ -20,8 +21,12 @@ if (existsSync('.env.test.local')) process.loadEnvFile('.env.test.local');
  *
  * Locally, already-running servers on those ports are reused. Set E2E_BASE_URL and E2E_API_URL to run
  * against a deployed environment instead (no servers are started then).
+ *
+ * Two runs (tests/mode.ts): `npm run test:e2e` drives the real API on port 3000; `npm run test:e2e:mock`
+ * starts the dev server with NEXT_PUBLIC_USE_MOCKS=true on port 3100. Different ports keep a reused server
+ * from answering in the wrong mode.
  */
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000';
+const BASE_URL = defaultBaseUrl();
 const API_URL = process.env.E2E_API_URL || 'http://localhost:4000/api';
 const external = Boolean(process.env.E2E_BASE_URL);
 
@@ -63,9 +68,9 @@ export default defineConfig({
           stdout: 'pipe',
         },
         {
-          command: 'npm run dev',
+          command: `npm run dev -- -p ${ADMIN_PORT}`,
           url: `${BASE_URL}/login`,
-          env: { NEXT_PUBLIC_API_URL: API_URL },
+          env: { NEXT_PUBLIC_API_URL: API_URL, NEXT_PUBLIC_USE_MOCKS: MOCK_RUN ? 'true' : 'false' },
           reuseExistingServer: !process.env.CI,
           timeout: 180_000,
         },

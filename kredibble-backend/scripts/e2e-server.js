@@ -5,7 +5,7 @@
  *
  *   E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD  admin to seed (defaults match tests/admin.e2e.spec.ts)
  *   PORT                                  defaults to 4000
- *   CORS_ORIGIN                           defaults to the admin dev server, http://localhost:3000
+ *   CORS_ORIGIN                           defaults to the admin dev servers: :3000 (real API run) and :3100 (mock run)
  *
  * Test-only: it refuses to run with NODE_ENV=production.
  */
@@ -23,7 +23,7 @@ const mongo = await MongoMemoryServer.create();
 process.env.NODE_ENV = 'development';
 process.env.DATABASE_URL = mongo.getUri();
 process.env.PORT ||= '4000';
-process.env.CORS_ORIGIN ||= 'http://localhost:3000';
+process.env.CORS_ORIGIN ||= 'http://localhost:3000,http://localhost:3100';
 // One Playwright suite from one IP would otherwise trip the API rate limits (see env.isE2E).
 process.env.E2E_SERVER = '1';
 // Never reach real third-party services from the e2e API, whatever .env holds:

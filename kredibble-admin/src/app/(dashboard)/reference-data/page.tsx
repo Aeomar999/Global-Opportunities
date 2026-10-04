@@ -17,6 +17,7 @@ import { REFERENCE_GROUPS, type ReferenceGroupKey } from "@/lib/reference-data";
 import { ReferenceListEditor } from "@/components/reference/ReferenceListEditor";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Tabs, tabId, tabPanelId } from "@/components/ui/Tabs";
+import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 
 const GROUP_PARAM = "tab";
 
@@ -49,6 +50,8 @@ export default function ReferenceDataPage() {
         <h1 data-testid="page-title" className="page-title">Reference data</h1>
         <p className="page-subtitle mt-1">{group.description}</p>
       </header>
+
+      <NotConnectedNotice />
 
       <SegmentedControl
         ariaLabel="Reference data group"

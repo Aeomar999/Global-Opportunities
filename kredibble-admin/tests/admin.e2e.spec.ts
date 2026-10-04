@@ -9,9 +9,10 @@ import { joinList } from '../src/lib/format';
 import { emptyCollections } from '../src/lib/mock-entities';
 import { PERMISSIONS, describeRole, rolePermissionsStore } from '../src/lib/role-permissions';
 import { getAdminCredentials } from './credentials';
+import { MOCK_RUN, defaultBaseUrl } from './mode';
 import { MOCK_COUNTS } from '../src/lib/services/mock-counts';
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000';
+const BASE_URL = defaultBaseUrl();
 const API_URL = process.env.E2E_API_URL || 'http://localhost:4000/api';
 
 // Every test starts signed in (session saved once by tests/global-setup.ts). Tests that must start
@@ -541,7 +542,7 @@ test.describe('Handled errors', () => {
   // The two queues show mock data by default in dev, so the inline error is reached with the
   // dev-only ?state=error switch (the real 401 path is covered by the unit-level behaviour:
   // errors are kept in component state). Handled errors must not throw or call console.error.
-  test.skip(process.env.E2E_PROD === '1', 'the ?state= switch does not exist in production builds');
+  test.skip(!MOCK_RUN, 'the ?state= switch does not exist in production builds');
 
   for (const path of ['/opportunities', '/verification']) {
     test(`${path}?state=error shows an inline error and throws nothing`, async ({ page }) => {
@@ -587,7 +588,10 @@ test.describe('Overview', () => {
     await expect(attention.getByRole('link', { name: /Pending verifications/ })).toHaveAttribute('href', '/verification');
     await expect(attention.getByRole('link', { name: /Open reports/ })).toHaveAttribute('href', '/reports');
     await expect(attention.getByRole('link', { name: 'Review now' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Recent activity' }).getByRole('listitem')).toHaveCount(4);
+    const activity = page.getByRole('region', { name: 'Recent activity' }).getByRole('listitem');
+    // The mock data has exactly four events; the real API shows whatever the seeded records produce.
+    if (MOCK_RUN) await expect(activity).toHaveCount(4);
+    else await expect(activity.first()).toBeVisible();
   });
 
   test('the New submissions chart switches range without a new request', async ({ page }) => {
@@ -608,7 +612,7 @@ test.describe('Overview', () => {
 
 // Dev-only ?state= switch (mock mode, never in production builds): every state keeps the final layout.
 test.describe('Overview ?state= switch (dev server, mock mode)', () => {
-  test.skip(process.env.E2E_PROD === '1', 'the ?state= switch does not exist in production builds');
+  test.skip(!MOCK_RUN, 'the ?state= switch does not exist in production builds');
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('?state=401 shows the session-expired banner with a Sign in button', async ({ page }) => {
@@ -705,7 +709,7 @@ test.describe('List pages: smoke', () => {
   for (const { path, title, mockOnly, detailBase = path } of LIST_PAGES) {
     test(`${title}: renders, logs no console errors, and a row opens its detail page`, async ({ page }) => {
       // The two queues call the real API outside mock mode (and then show an inline error instead of rows).
-      test.skip(!!mockOnly && process.env.E2E_PROD === '1', 'the queues need mock mode for rows');
+      test.skip(!!mockOnly && !MOCK_RUN, 'the queues need mock mode for rows');
       const problems: string[] = [];
       page.on('pageerror', (error) => problems.push(error.message));
       page.on('console', (message) => {
@@ -735,6 +739,8 @@ test.describe('List pages: template', () => {
     await page.goto(`${BASE_URL}/seekers`);
     const rows = page.locator('main tbody tr');
     await expect(rows.first()).toBeVisible();
+    // Count only once the data has replaced the loading skeleton (the footer appears with it).
+    await expect(page.getByText(/^Showing 1-\d+ of \d+$/)).toBeVisible();
     const n = await rows.count();
     expect(Math.round((await page.locator('main thead tr').boundingBox())!.height)).toBe(36);
     for (let i = 0; i < n; i++) expect(Math.round((await rows.nth(i).boundingBox())!.height)).toBe(56);
@@ -745,7 +751,7 @@ test.describe('List pages: template', () => {
   });
 
   test('filters show counts and narrow the rows (Verification)', async ({ page }) => {
-    test.skip(process.env.E2E_PROD === '1', 'needs mock mode');
+    test.skip(!MOCK_RUN, 'needs mock mode');
     await page.goto(`${BASE_URL}/verification`);
     await expect(page.locator('main tbody tr a').first()).toBeVisible();
     const all = await page.locator('main tbody tr').count();
@@ -764,14 +770,14 @@ test.describe('List pages: template', () => {
     await page.getByRole('searchbox', { name: 'Search seekers' }).fill('zzzz-no-such-person');
     await expect(page.getByText('No seekers match your search')).toBeVisible();
 
-    test.skip(process.env.E2E_PROD === '1', 'the ?state= switch does not exist in production builds');
+    test.skip(!MOCK_RUN, 'the ?state= switch does not exist in production builds');
     await page.goto(`${BASE_URL}/seekers?state=empty`);
     await expect(page.getByText('No seeker accounts yet')).toBeVisible();
     await expect(page.getByText('No seekers match your search')).toHaveCount(0);
   });
 
   test('?state=loading shows skeleton rows with the header band and keeps them', async ({ page }) => {
-    test.skip(process.env.E2E_PROD === '1', 'the ?state= switch does not exist in production builds');
+    test.skip(!MOCK_RUN, 'the ?state= switch does not exist in production builds');
     await page.goto(`${BASE_URL}/events?state=loading`);
     await expect(page.locator('main table[aria-busy="true"]')).toBeVisible();
     expect(await page.locator('main tbody tr').count()).toBe(5);
@@ -833,7 +839,7 @@ test.describe('List pages: mobile', () => {
 });
 
 test.describe('Mock counts agree everywhere', () => {
-  test.skip(process.env.E2E_PROD === '1', 'mock counts only exist in mock mode');
+  test.skip(!MOCK_RUN, 'mock counts only exist in mock mode');
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('sidebar pills, breadcrumb pill, KPI cards, attention card and the lists show the same numbers', async ({ page }) => {
@@ -924,7 +930,7 @@ test.describe('Detail pages: template', () => {
 
   for (const { path } of DETAIL_PAGES) {
     test(`${path}: title, breadcrumb with the entity name, no console errors`, async ({ page }) => {
-      test.skip(process.env.E2E_PROD === '1', 'detail pages use mock records');
+      test.skip(!MOCK_RUN, 'detail pages use mock records');
       const problems: string[] = [];
       page.on('pageerror', (error) => problems.push(error.message));
       page.on('console', (message) => {
@@ -952,6 +958,7 @@ test.describe('Detail pages: template', () => {
   });
 
   test('a destructive action: dialog opens, Esc cancels, confirm updates the badge and shows a toast', async ({ page }) => {
+    test.skip(!MOCK_RUN, 'uses the mock record seeker-1 (the real-API suspend test is Plan 2c Task 5)');
     await page.goto(`${BASE_URL}/seekers/seeker-1`, { timeout: 30_000 });
     const summary = page.getByRole('region', { name: 'Summary' });
     await expect(summary.getByText('Active', { exact: true })).toBeVisible();
@@ -977,7 +984,7 @@ test.describe('Detail pages: template', () => {
 // Verification detail: icon buttons and derived summary
 // ---------------------------------------------------------------------------
 test.describe('Verification detail: document actions', () => {
-  test.skip(process.env.E2E_PROD === '1', 'detail pages use mock records');
+  test.skip(!MOCK_RUN, 'detail pages use mock records');
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('icon buttons are named per document, have a tooltip and a 40px hit area', async ({ page }) => {
@@ -1016,7 +1023,7 @@ test.describe('Verification detail: document actions', () => {
 // Shared mock store, toast, progress cells
 // ---------------------------------------------------------------------------
 test.describe('Shared mock store', () => {
-  test.skip(process.env.E2E_PROD === '1', 'the mock store only exists in mock mode');
+  test.skip(!MOCK_RUN, 'the mock store only exists in mock mode');
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('suspending a seeker shows Suspended in the Seekers list', async ({ page }) => {
@@ -1530,7 +1537,7 @@ test.describe('Tabs: no scrollbar, nothing overflows', () => {
 });
 
 test.describe('Dev badge hygiene on the merged pages (mock mode)', () => {
-  test.skip(process.env.E2E_PROD === '1', 'mock mode only');
+  test.skip(!MOCK_RUN, 'mock mode only');
   test('walking Reference data, Notifications and Team logs no console error or warning and throws no unhandled error', async ({ page }) => {
     const problems: string[] = [];
     page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
@@ -1691,7 +1698,7 @@ test.describe('joinList and role descriptions', () => {
 // Insights and Login
 // ---------------------------------------------------------------------------
 test.describe('Insights', () => {
-  test.skip(process.env.E2E_PROD === '1', 'mock data');
+  test.skip(!MOCK_RUN, 'mock data');
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('one stat row, segmented bars with legends, a highlight bar chart, hidden tables and a month note', async ({ page }) => {
@@ -1808,9 +1815,9 @@ const AUDIT_ROUTES: { path: string; mockOnly?: boolean }[] = [
   { path: '/reports' },
   { path: '/reports/report-1' },
   { path: '/seekers' },
-  { path: '/seekers/seeker-1' },
+  { path: '/seekers/seeker-1', mockOnly: true },
   { path: '/hirers' },
-  { path: '/hirers/hirer-1' },
+  { path: '/hirers/hirer-1', mockOnly: true },
   { path: '/community' },
   { path: '/community/ch-1' },
   { path: '/content/articles' },
@@ -1846,7 +1853,7 @@ test.describe('Smoke: every audited route renders its title with no console erro
   test.use({ viewport: { width: 1440, height: 900 } });
   for (const { path, mockOnly } of AUDIT_ROUTES) {
     test(`${path}`, async ({ page }) => {
-      test.skip(!!mockOnly && process.env.E2E_PROD === '1', 'this queue reads the real API outside mock mode, which needs a bearer token the test session does not have');
+      test.skip(!!mockOnly && !MOCK_RUN, 'this queue reads the real API outside mock mode, which needs a bearer token the test session does not have');
       const problems = trackProblems(page);
       await page.goto(`${BASE_URL}${path}`, { timeout: 30_000 });
       const title = page.getByTestId('page-title');
@@ -1883,6 +1890,7 @@ test.describe('Test ids', () => {
   });
 
   test('confirm dialog buttons and toast', async ({ page }) => {
+    test.skip(!MOCK_RUN, 'uses the mock record seeker-2');
     await page.goto(`${BASE_URL}/seekers/seeker-2`, { timeout: 30_000 });
     await page.getByRole('button', { name: 'Suspend account' }).click();
     await expect(page.getByTestId('confirm-dialog-cancel')).toBeFocused();
@@ -1892,11 +1900,15 @@ test.describe('Test ids', () => {
   });
 });
 
+// Detail paths that open a mock record id: they exist only in the mock run.
+const MOCK_RECORD_PATHS = ['/seekers/seeker-1', '/verification/comp-1', '/events/event-1'];
+
 test.describe('Mobile: no horizontal scroll on any page type (434px and 390px)', () => {
   const pages = ['/', '/seekers', '/seekers/seeker-1', '/staff/invite', '/content/articles/new', '/team', '/team?tab=roles', '/reference-data', '/notifications', '/notifications?tab=history', '/analytics', '/verification/comp-1', '/events/event-1'];
   for (const width of [434, 390]) {
     for (const path of pages) {
       test(`${path} @${width}`, async ({ page }) => {
+        test.skip(!MOCK_RUN && MOCK_RECORD_PATHS.includes(path), 'opens a mock record id');
         await page.setViewportSize({ width, height: 900 });
         await page.goto(`${BASE_URL}${path}`, { timeout: 30_000 });
         await expect(page.getByTestId('page-title')).toBeVisible();
@@ -2059,7 +2071,7 @@ const DETAIL_ROUTES: [string, string][] = [
 ];
 
 test.describe('Phone (434px): list cards', () => {
-  test.skip(process.env.E2E_PROD === '1', 'mock rows');
+  test.skip(!MOCK_RUN, 'mock rows');
   test.use({ viewport: { width: 434, height: 900 } });
 
   for (const path of LIST_ROUTES) {
@@ -2123,7 +2135,7 @@ test.describe('Phone (434px): list cards', () => {
 });
 
 test.describe('Phone (434px): detail pages', () => {
-  test.skip(process.env.E2E_PROD === '1', 'mock records');
+  test.skip(!MOCK_RUN, 'mock records');
   test.use({ viewport: { width: 434, height: 900 } });
 
   for (const [path, list] of DETAIL_ROUTES) {
@@ -2562,7 +2574,7 @@ const asRoles = async (context: import('@playwright/test').BrowserContext, roles
   context.addCookies([{ name: 'god_dev_roles', value: roles, url: BASE_URL }]);
 
 test.describe('Roles: gated navigation (dev role cookie, mock mode)', () => {
-  test.skip(process.env.E2E_PROD === '1', 'the dev role switcher only exists in development with mock data');
+  test.skip(!MOCK_RUN, 'the dev role switcher only exists in development with mock data');
   test.use({ viewport: { width: 1440, height: 900 } });
 
   for (const [roles, expected] of Object.entries(EXPECTED_NAV)) {
@@ -2775,5 +2787,20 @@ test.describe('Directory pages show real data (E2E_REAL_DATA=1)', () => {
   test('verification page lists the pending company', async ({ page }) => {
     await page.goto(`${BASE_URL}/verification`, { timeout: 30_000 });
     await expect(page.getByText('E2E Holdings')).toBeVisible();
+  });
+});
+
+test.describe('Not connected yet', () => {
+  test('a page without a backend says it shows sample data (real API run only)', async ({ page }) => {
+    test.skip(MOCK_RUN, 'the notice only shows outside mock mode');
+    await page.goto(`${BASE_URL}/team`);
+    await expect(page.getByTestId('not-connected-notice')).toBeVisible();
+  });
+
+  test('mock mode shows no notice, since everything is sample data on purpose', async ({ page }) => {
+    test.skip(!MOCK_RUN, 'mock mode only');
+    await page.goto(`${BASE_URL}/team`);
+    await expect(page.getByTestId('page-title')).toHaveText('Team');
+    await expect(page.getByTestId('not-connected-notice')).toHaveCount(0);
   });
 });

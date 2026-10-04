@@ -18,13 +18,14 @@ import { chromium } from '@playwright/test';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { getAdminCredentials } from './credentials';
+import { AUTH_FILE, defaultBaseUrl } from './mode';
 
-export const AUTH_FILE = 'playwright/.auth/admin.json';
-
+// One saved session per run (real API or mock mode): see tests/mode.ts.
+export { AUTH_FILE };
 
 export default async function globalSetup() {
   // Read inside the function: playwright.config.ts loads .env.test.local after importing this file.
-  const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000';
+  const BASE_URL = defaultBaseUrl();
   mkdirSync(dirname(AUTH_FILE), { recursive: true });
 
   // E2E_REUSE_SESSION=1 keeps the saved session instead of logging in again (no login request at all).

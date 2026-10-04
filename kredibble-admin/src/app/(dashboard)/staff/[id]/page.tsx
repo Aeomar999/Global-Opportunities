@@ -27,6 +27,7 @@ import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { KeyValueList } from "@/components/ui/KeyValueList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
+import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 
 const ROLES: StaffRole[] = ["Super Admin", "Moderator", "Support"];
 
@@ -80,6 +81,7 @@ export default function StaffDetailPage() {
 
   return (
     <>
+      <NotConnectedNotice className="mb-4" />
       <DetailPage
         header={
           <DetailHeader

@@ -24,6 +24,7 @@ import { StickyActionBar } from "@/components/ui/form/StickyActionBar";
 import { focusFirstInvalid, useTouched } from "@/components/ui/form/use-touched";
 import { useUnsavedGuard } from "@/components/ui/form/use-unsaved-guard";
 import { useToast } from "@/components/ui/Toast";
+import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 
 const LIST_HREF = "/team";
 
@@ -70,6 +71,8 @@ export default function InviteStaffPage() {
       <div className="max-w-160">
         <h1 data-testid="page-title" className="page-title">Invite Staff</h1>
         <p className="page-subtitle mt-1 mb-6">Add a new admin/support account and assign their permission tier.</p>
+
+        <NotConnectedNotice className="mb-4" />
 
         <Card>
           <FormSection title="Account" description="Who is joining the team.">
