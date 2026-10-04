@@ -10,14 +10,15 @@ Covers SEC-065, SEC-075, SEC-077, SEC-081, SEC-083, SEC-084, SEC-087, SEC-090 an
 | Account deletion (SEC-065, Q11) | Delete private data (profile, CV, applications, bookings, saved items, uploads, company records). Keep public content (community posts, channels, closed postings) with the person removed. Close the user's live job postings. |
 | Monitoring (SEC-090) | Sentry for errors (backend, admin, mobile); Better Stack for uptime |
 | Legal (SEC-092) | Claude drafts the privacy policy and terms from what the app collects, under Ghana's Act 843; published as public pages on the admin site. A lawyer reviews before launch. |
-| Admin API namespace (SEC-075) | `/api/v1/console/*`, guarded by `requireAdminAuth`. `/api/v1/admin/*` stays with the staff portal router, whose contract is documented for the WordPress developer (`kredibble-backend/docs/ADMIN_PORTAL_API.md`). |
+| Admin API namespace (SEC-075) | `/api/v1/admin/*`, shared with the staff portal (`requireAdminOrStaffAuth`, chosen 2026-10-03 in PR #23). Dashboard data routes take admin sessions only (`requireAdminAuth`). |
 
 ## Plans, in order
 
 | # | Plan | Items | Depends on | Status |
 |---|---|---|---|---|
-| 1 | [Backend account security](PLAN-1-account-security.md) | SEC-083, SEC-084 (backend), SEC-065, plus the 3 lint errors that keep CI red | — | In review (PR pending) |
-| 2 | Admin on real data | SEC-075, SEC-076, SEC-077 (all 20 pages) | Plan 1 merged (CI green) | Not written |
+| 1 | [Backend account security](PLAN-1-account-security.md) | SEC-083, SEC-084 (backend), SEC-065, plus the 3 lint errors that keep CI red | — | Merged (PR #22) |
+| 2a | [Admin data API](PLAN-2a-admin-data-api.md) | SEC-075 routes, contract test | — | In review (PR pending) |
+| 2b | Admin pages on real data | SEC-077 remaining 16 pages | 2a | Not written |
 | 3 | Mobile launch surface | SEC-081, SEC-083/084 screens, SEC-087, legal links | Plan 1; SEC-072 for "my applications" | Not written |
 | 4 | Operations and legal | SEC-090, SEC-092 | Plan 3 for in-app links | Not written |
 
