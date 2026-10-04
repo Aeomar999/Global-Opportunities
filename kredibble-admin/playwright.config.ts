@@ -1,18 +1,20 @@
+import { existsSync } from 'fs';
 import { defineConfig, devices } from '@playwright/test';
+import { AUTH_FILE } from './tests/global-setup';
 
 /**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
+ * Test credentials: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD are read from .env.test.local in the project root
+ * (gitignored by the `.env*` rule). Values already set in the shell win over the file.
  */
-// import dotenv from 'dotenv';
-// import path from 'path';
-// dotenv.config({ path: path.resolve(__dirname, '.env') });
+if (existsSync('.env.test.local')) process.loadEnvFile('.env.test.local');
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
   testDir: './tests',
+  // Log in once per run and save the session (see tests/global-setup.ts).
+  globalSetup: './tests/global-setup.ts',
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -25,11 +27,13 @@ export default defineConfig({
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
+    // Every test starts signed in with the session saved by the global setup.
+    storageState: AUTH_FILE,
     /* Base URL to use in actions like `await page.goto('')`. */
     // baseURL: 'http://localhost:3000',
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    // Traces are OFF on purpose: they keep every typed value, and the login test types the real password.
+    trace: 'off',
   },
 
   /* Configure projects for major browsers */

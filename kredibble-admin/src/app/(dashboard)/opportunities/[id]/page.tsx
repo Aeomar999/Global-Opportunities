@@ -1,148 +1,143 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft, Briefcase, GraduationCap, CalendarDays, HandCoins, Check, X } from "lucide-react";
-import {
-  postedOpportunities,
-  type ModerationStatus,
-  type OpportunityType,
-  type PostedOpportunity,
-} from "@/lib/mock-opportunities";
+/**
+ * Opportunity review: one posting awaiting moderation.
+ * Built on the shared detail template.
+ *
+ * Fields: type, title, company, location, status, Description, Posted, Applicants, Work Type (when
+ * present), Salary (when present), and for events / grants an Event Details or Grant Details card
+ * (Date & Time, Category, Budget, Sector, each when present).
+ * Actions: Approve (header) and Reject (danger zone, with a confirm dialog).
+ * Data: mock postings (src/lib/mock-opportunities.ts), changed in LOCAL state only.
+ */
+import { useCallback } from "react";
+import { useParams } from "next/navigation";
+import { Briefcase, CalendarDays, Check, GraduationCap, HandCoins, X, type LucideIcon } from "lucide-react";
+import { formatDate } from "@/lib/format";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
+import { postedOpportunities, type OpportunityType } from "@/lib/mock-opportunities";
+import { useDetailData } from "@/lib/use-detail-data";
+import { DangerZone } from "@/components/detail/DangerZone";
+import { DetailHeader } from "@/components/detail/DetailHeader";
+import { DetailPage } from "@/components/detail/DetailPage";
+import { DetailError, DetailNotFound, DetailSkeleton } from "@/components/detail/DetailStates";
+import { InfoCard } from "@/components/detail/InfoCard";
+import { Button } from "@/components/ui/Button";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { KeyValueList } from "@/components/ui/KeyValueList";
+import { MiniStat } from "@/components/ui/MiniStat";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { TagPill } from "@/components/ui/TagPill";
+import { useToast } from "@/components/ui/Toast";
 
-const STATUS_STYLES: Record<ModerationStatus, { bg: string; text: string; label: string }> = {
-  pending: { bg: "#FFFBEB", text: "#B7791F", label: "Pending" },
-  approved: { bg: "#F0FDF4", text: "#16A34A", label: "Approved" },
-  rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
-};
-
-const TYPE_META: Record<OpportunityType, { label: string; icon: typeof Briefcase; color: string }> = {
-  jobs: { label: "Job", icon: Briefcase, color: "#6671E4" },
-  internships: { label: "Internship", icon: GraduationCap, color: "#F59E0B" },
-  events: { label: "Event", icon: CalendarDays, color: "#10B981" },
-  grants: { label: "Grant", icon: HandCoins, color: "#EF4444" },
+const TYPE_META: Record<OpportunityType, { label: string; icon: LucideIcon }> = {
+  jobs: { label: "Job", icon: Briefcase },
+  internships: { label: "Internship", icon: GraduationCap },
+  events: { label: "Event", icon: CalendarDays },
+  grants: { label: "Grant", icon: HandCoins },
 };
 
 export default function OpportunityReviewPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const original = postedOpportunities.find((o) => o.id === params.id);
+  const { id } = useParams<{ id: string }>();
+  const load = useCallback(() => Promise.resolve(postedOpportunities.find((o) => o.id === id)), [id]);
+  const { status, record: opp, setRecord, error, retry } = useDetailData(load, { collection: "opportunities" });
+  const toast = useToast();
+  const { confirm, dialog } = useConfirmDialog();
 
-  const [opp, setOpp] = useState<PostedOpportunity | undefined>(original);
+  useBreadcrumbLabel(status === "loading" ? undefined : opp ? opp.title : "Not found");
 
-  if (!opp) {
-    return (
-      <div>
-        <p className="text-sm text-kb-text-muted">Opportunity not found.</p>
-        <Link href="/opportunities" className="text-sm text-kb-primary font-semibold mt-2 inline-block">
-          Back to Opportunities Queue
-        </Link>
-      </div>
-    );
-  }
-
-  const setStatus = (moderationStatus: ModerationStatus) => {
-    setOpp((prev) => (prev ? { ...prev, moderationStatus } : prev));
-  };
+  if (status === "loading") return <DetailSkeleton />;
+  if (status === "error") return <DetailError message={error ?? "Could not load this opportunity."} onRetry={retry} />;
+  if (!opp) return <DetailNotFound noun="Opportunity" listLabel="Opportunities Queue" listHref="/opportunities" />;
 
   const type = TYPE_META[opp.type];
-  const status = STATUS_STYLES[opp.moderationStatus];
-  const Icon = type.icon;
+  const hasExtraDetails = opp.eventDateTime || opp.eventCategory || opp.grantBudgetRange || opp.grantSector;
+
+  const approve = () => {
+    // TODO(backend): persist this change
+    setRecord((prev) => ({ ...prev, moderationStatus: "approved" }));
+    toast.success(`${opp.title} from ${opp.company} was approved.`);
+  };
+
+  const reject = () =>
+    confirm({
+      title: "Reject this opportunity?",
+      description: (
+        <>
+          <strong className="text-ink">{opp.title}</strong> from <strong className="text-ink">{opp.company}</strong> will be marked
+          Rejected in the moderation queue.
+        </>
+      ),
+      confirmLabel: "Reject opportunity",
+      onConfirm: () => {
+        // TODO(backend): persist this change
+        setRecord((prev) => ({ ...prev, moderationStatus: "rejected" }));
+        toast.success(`${opp.title} from ${opp.company} was rejected.`);
+      },
+    });
 
   return (
-    <div>
-      <button
-        onClick={() => router.push("/opportunities")}
-        className="flex items-center gap-1.5 text-sm text-kb-text-muted hover:text-kb-text-body mb-6"
-      >
-        <ChevronLeft size={16} />
-        Back to Opportunities Queue
-      </button>
+    <>
+      <DetailPage
+        header={
+          <DetailHeader
+            leading={{ icon: type.icon }}
+            eyebrow={<TagPill icon={type.icon}>{type.label}</TagPill>}
+            title={opp.title}
+            badges={<StatusBadge status={opp.moderationStatus} />}
+            meta={`${opp.company} · ${opp.location}`}
+            actions={
+              <Button icon={Check} onClick={approve} disabled={opp.moderationStatus === "approved"}>
+                Approve
+              </Button>
+            }
+          />
+        }
+        main={
+          <>
+            <InfoCard title="Description">
+              <p className="input-text text-ink">{opp.description}</p>
+            </InfoCard>
 
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span
-              className="flex items-center gap-1.5 text-xs font-semibold rounded-full px-2.5 py-1"
-              style={{ backgroundColor: `${type.color}1A`, color: type.color }}
-            >
-              <Icon size={13} />
-              {type.label}
-            </span>
-          </div>
-          <h1 className="text-xl font-bold text-kb-text-body">{opp.title}</h1>
-          <p className="text-sm text-kb-text-muted mt-1">
-            {opp.company} · {opp.location}
-          </p>
-        </div>
-        <span
-          className="text-xs font-semibold rounded-full px-3 py-1.5"
-          style={{ backgroundColor: status.bg, color: status.text }}
-        >
-          {status.label}
-        </span>
-      </div>
-
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5 mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder mb-3">
-          Description
-        </p>
-        <p className="text-sm text-kb-text-body leading-relaxed">{opp.description}</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <InfoCard title="Posting Details">
-          <InfoRow label="Posted" value={opp.date} />
-          <InfoRow label="Applicants" value={String(opp.applicantsCount)} />
-          {opp.workType && <InfoRow label="Work Type" value={opp.workType} />}
-          {opp.salary && <InfoRow label="Salary" value={opp.salary} />}
-        </InfoCard>
-
-        {(opp.eventDateTime || opp.eventCategory || opp.grantBudgetRange || opp.grantSector) && (
-          <InfoCard title={opp.type === "events" ? "Event Details" : "Grant Details"}>
-            {opp.eventDateTime && <InfoRow label="Date & Time" value={opp.eventDateTime} />}
-            {opp.eventCategory && <InfoRow label="Category" value={opp.eventCategory} />}
-            {opp.grantBudgetRange && <InfoRow label="Budget" value={opp.grantBudgetRange} />}
-            {opp.grantSector && <InfoRow label="Sector" value={opp.grantSector} />}
-          </InfoCard>
-        )}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setStatus("approved")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-50 hover:bg-green-100 text-sm font-semibold text-green-700 transition-colors"
-        >
-          <Check size={16} strokeWidth={2.5} />
-          Approve
-        </button>
-        <button
-          onClick={() => setStatus("rejected")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-sm font-semibold text-red-600 transition-colors"
-        >
-          <X size={16} strokeWidth={2.5} />
-          Reject
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder mb-3">{title}</p>
-      <div className="flex flex-col gap-2.5">{children}</div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-xs text-kb-text-muted">{label}</span>
-      <span className="text-sm text-kb-text-body font-medium text-right">{value}</span>
-    </div>
+            {hasExtraDetails && (
+              <InfoCard title={opp.type === "events" ? "Event Details" : "Grant Details"}>
+                <KeyValueList
+                  items={[
+                    { label: "Date & Time", value: opp.eventDateTime },
+                    { label: "Category", value: opp.eventCategory },
+                    { label: "Budget", value: opp.grantBudgetRange },
+                    { label: "Sector", value: opp.grantSector },
+                  ]}
+                />
+              </InfoCard>
+            )}
+          </>
+        }
+        side={
+          <>
+            <InfoCard title="Details">
+              <KeyValueList
+                items={[
+                  { label: "Posted", value: formatDate(opp.date) },
+                  { label: "Work Type", value: opp.workType },
+                  { label: "Salary", value: opp.salary },
+                ]}
+              />
+            </InfoCard>
+            <InfoCard title="Activity">
+              <MiniStat value={opp.applicantsCount} label="Applicants" />
+            </InfoCard>
+          </>
+        }
+        danger={
+          <DangerZone explanation="Marks this posting as Rejected in the moderation queue. You can still approve it afterwards.">
+            <Button variant="danger" icon={X} onClick={reject} disabled={opp.moderationStatus === "rejected"}>
+              Reject opportunity
+            </Button>
+          </DangerZone>
+        }
+      />
+      {dialog}
+    </>
   );
 }

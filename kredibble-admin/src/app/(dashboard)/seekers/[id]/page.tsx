@@ -1,103 +1,120 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft, Ban, RotateCcw } from "lucide-react";
-import { seekerAccounts, type SeekerAccount } from "@/lib/mock-seekers";
+/**
+ * Seeker detail: one seeker account.
+ * Built on the shared detail template (DetailPage + DetailHeader + InfoCard + KeyValueList + MiniStat).
+ *
+ * Fields: Email, University, Country, Joined, Applications submitted, Saved opportunities, status.
+ * Actions: Suspend account (danger zone, with a confirm dialog) and Reinstate account (header).
+ * Data: mock seeker accounts (src/lib/mock-seekers.ts), changed in LOCAL state only.
+ */
+import { useCallback } from "react";
+import { useParams } from "next/navigation";
+import { RotateCcw, Ban } from "lucide-react";
+import { formatDate } from "@/lib/format";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
+import { seekerAccounts } from "@/lib/mock-seekers";
+import { useDetailData } from "@/lib/use-detail-data";
+import { DangerZone } from "@/components/detail/DangerZone";
+import { DetailHeader } from "@/components/detail/DetailHeader";
+import { DetailPage } from "@/components/detail/DetailPage";
+import { DetailError, DetailNotFound, DetailSkeleton } from "@/components/detail/DetailStates";
+import { InfoCard } from "@/components/detail/InfoCard";
+import { Button } from "@/components/ui/Button";
+import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { KeyValueList } from "@/components/ui/KeyValueList";
+import { MiniStat } from "@/components/ui/MiniStat";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useToast } from "@/components/ui/Toast";
 
 export default function SeekerDetailPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const original = seekerAccounts.find((s) => s.id === params.id);
-  const [seeker, setSeeker] = useState<SeekerAccount | undefined>(original);
+  const { id } = useParams<{ id: string }>();
+  const load = useCallback(() => Promise.resolve(seekerAccounts.find((s) => s.id === id)), [id]);
+  const { status, record: seeker, setRecord, error, retry } = useDetailData(load, { collection: "seekers" });
+  const toast = useToast();
+  const { confirm, dialog } = useConfirmDialog();
 
-  if (!seeker) {
-    return (
-      <div>
-        <p className="text-sm text-kb-text-muted">Seeker not found.</p>
-        <Link href="/seekers" className="text-sm text-kb-primary font-semibold mt-2 inline-block">
-          Back to Seekers Directory
-        </Link>
-      </div>
-    );
-  }
+  // undefined = loading (skeleton segment), otherwise the entity name shown in the breadcrumb.
+  useBreadcrumbLabel(status === "loading" ? undefined : seeker ? seeker.name : "Not found");
 
-  const toggleStatus = () => {
-    setSeeker((prev) =>
-      prev ? { ...prev, status: prev.status === "active" ? "suspended" : "active" } : prev
-    );
-  };
+  if (status === "loading") return <DetailSkeleton />;
+  if (status === "error") return <DetailError message={error ?? "Could not load this seeker."} onRetry={retry} />;
+  if (!seeker) return <DetailNotFound noun="Seeker" listLabel="Seekers Directory" listHref="/seekers" />;
 
   const isActive = seeker.status === "active";
 
+  const suspend = () =>
+    confirm({
+      title: "Suspend this account?",
+      description: (
+        <>
+          <strong className="text-ink">{seeker.name}</strong> ({seeker.email}) will be marked as Suspended. You can reinstate the
+          account later.
+        </>
+      ),
+      confirmLabel: "Suspend account",
+      onConfirm: () => {
+        // TODO(backend): persist this change
+        setRecord((prev) => ({ ...prev, status: "suspended" }));
+        toast.success(`${seeker.name} was suspended.`);
+      },
+    });
+
+  const reinstate = () => {
+    // TODO(backend): persist this change
+    setRecord((prev) => ({ ...prev, status: "active" }));
+    toast.success(`${seeker.name} was reinstated.`);
+  };
+
   return (
-    <div>
-      <button
-        onClick={() => router.push("/seekers")}
-        className="flex items-center gap-1.5 text-sm text-kb-text-muted hover:text-kb-text-body mb-6"
-      >
-        <ChevronLeft size={16} />
-        Back to Seekers Directory
-      </button>
-
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-kb-text-body">{seeker.name}</h1>
-          <p className="text-sm text-kb-text-muted mt-1">{seeker.profession}</p>
-        </div>
-        <span
-          className="text-xs font-semibold rounded-full px-3 py-1.5"
-          style={
-            isActive ? { backgroundColor: "#F0FDF4", color: "#16A34A" } : { backgroundColor: "#FEF2F2", color: "#ED4C5C" }
-          }
-        >
-          {isActive ? "Active" : "Suspended"}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <InfoCard title="Account">
-          <InfoRow label="Email" value={seeker.email} />
-          <InfoRow label="University" value={seeker.university} />
-          <InfoRow label="Country" value={seeker.country} />
-          <InfoRow label="Joined" value={seeker.joinedDate} />
-        </InfoCard>
-        <InfoCard title="Activity">
-          <InfoRow label="Applications submitted" value={String(seeker.applicationsCount)} />
-          <InfoRow label="Saved opportunities" value={String(seeker.savedCount)} />
-        </InfoCard>
-      </div>
-
-      <button
-        onClick={toggleStatus}
-        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-          isActive
-            ? "bg-red-50 hover:bg-red-100 text-red-600"
-            : "bg-green-50 hover:bg-green-100 text-green-700"
-        }`}
-      >
-        {isActive ? <Ban size={16} strokeWidth={2.5} /> : <RotateCcw size={16} strokeWidth={2.5} />}
-        {isActive ? "Suspend account" : "Reinstate account"}
-      </button>
-    </div>
-  );
-}
-
-function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-kb-bg-card border border-kb-border rounded-2xl p-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder mb-3">{title}</p>
-      <div className="flex flex-col gap-2.5">{children}</div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-xs text-kb-text-muted">{label}</span>
-      <span className="text-sm text-kb-text-body font-medium text-right">{value}</span>
-    </div>
+    <>
+      <DetailPage
+        header={
+          <DetailHeader
+            leading={{ name: seeker.name }}
+            title={seeker.name}
+            badges={<StatusBadge status={seeker.status} />}
+            meta={seeker.profession}
+            actions={
+              !isActive && (
+                <Button variant="secondary" icon={RotateCcw} onClick={reinstate}>
+                  Reinstate account
+                </Button>
+              )
+            }
+          />
+        }
+        main={
+          <InfoCard title="Activity">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <MiniStat value={seeker.applicationsCount} label="Applications submitted" />
+              <MiniStat value={seeker.savedCount} label="Saved opportunities" />
+            </div>
+          </InfoCard>
+        }
+        side={
+          <InfoCard title="Details">
+            <KeyValueList
+              items={[
+                { label: "Email", value: seeker.email },
+                { label: "University", value: seeker.university },
+                { label: "Country", value: seeker.country },
+                { label: "Joined", value: formatDate(seeker.joinedDate) },
+              ]}
+            />
+          </InfoCard>
+        }
+        danger={
+          isActive && (
+            <DangerZone explanation="Marks this seeker's account as Suspended. You can reinstate it at any time.">
+              <Button variant="danger" icon={Ban} onClick={suspend}>
+                Suspend account
+              </Button>
+            </DangerZone>
+          )
+        }
+      />
+      {dialog}
+    </>
   );
 }

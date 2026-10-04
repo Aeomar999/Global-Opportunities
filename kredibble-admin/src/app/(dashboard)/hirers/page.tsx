@@ -1,95 +1,65 @@
 "use client";
 
+/**
+ * Hirers Directory: every hirer / company account, with text search.
+ * Built on the shared list template; this file holds the column config, the search and the data.
+ * Data: mock hirer accounts (src/lib/mock-hirers.ts), unchanged.
+ */
 import { useState } from "react";
-import Link from "next/link";
-import { Search, ChevronRight } from "lucide-react";
-import { hirerAccounts, type VerificationSummary } from "@/lib/mock-hirers";
+import { Building2 } from "lucide-react";
+import { hirerAccounts, type HirerAccount } from "@/lib/mock-hirers";
+import { overlayRows, subscribeMockStore } from "@/lib/mock-store";
+import { useListData } from "@/lib/use-list-data";
+import { DataTable } from "@/components/list/DataTable";
+import { ListPage } from "@/components/list/ListPage";
+import { TableToolbar } from "@/components/list/TableToolbar";
+import type { Column } from "@/components/list/types";
 
-const VERIFICATION_STYLES: Record<VerificationSummary, { bg: string; text: string; label: string }> = {
-  verified: { bg: "#F0FDF4", text: "#16A34A", label: "Verified" },
-  pending: { bg: "#FFFBEB", text: "#B7791F", label: "Pending" },
-  rejected: { bg: "#FEF2F2", text: "#ED4C5C", label: "Rejected" },
-};
+// Mock records with this session's changes (see mock-store.ts) laid over them.
+const loadHirers = () => Promise.resolve(overlayRows("hirers", hirerAccounts));
+
+const COLUMNS: Column<HirerAccount>[] = [
+  { key: "company", header: "Company", type: "primary", width: "22%", title: (r) => r.companyName, subtitle: (r) => r.location },
+  { key: "recruiter", header: "Recruiter", type: "text", width: "17%", value: (r) => r.recruiterName },
+  { key: "industry", header: "Industry", type: "text", width: "15%", value: (r) => r.industry },
+  { key: "postings", header: "Postings", type: "number", width: "10%", value: (r) => r.postingsCount },
+  { key: "verification", header: "Verification", type: "status", width: "18%", status: (r) => r.verification },
+  { key: "status", header: "Status", type: "status", width: "18%", status: (r) => r.status },
+];
 
 export default function HirersDirectoryPage() {
+  const { rows, isLoading, error, retry } = useListData(loadHirers, { subscribe: subscribeMockStore });
   const [query, setQuery] = useState("");
 
-  const filtered = hirerAccounts.filter((h) =>
-    `${h.companyName} ${h.recruiterName} ${h.recruiterEmail} ${h.industry}`
-      .toLowerCase()
-      .includes(query.toLowerCase())
+  const q = query.trim().toLowerCase();
+  const visible = (rows ?? []).filter((h) =>
+    `${h.companyName} ${h.recruiterName} ${h.recruiterEmail} ${h.industry}`.toLowerCase().includes(q),
   );
 
   return (
-    <div>
-      <h1 className="text-xl font-bold text-kb-text-body mb-1">Hirers Directory</h1>
-      <p className="text-sm text-kb-text-muted mb-6">
-        {hirerAccounts.length} hirer/company accounts registered on the platform.
-      </p>
-
-      <div className="relative mb-5 max-w-sm">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-kb-text-placeholder" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by company, recruiter, industry..."
-          className="w-full h-10 rounded-lg border border-kb-border-input bg-kb-bg-card pl-9 pr-3 text-sm text-kb-text-body outline-none focus:border-kb-primary"
+    <ListPage
+      title="Hirers Directory"
+      subtitle={rows ? `${rows.length} hirer/company accounts registered on the platform.` : "Hirer/company accounts registered on the platform."}
+      toolbar={
+        <TableToolbar
+          search={{ value: query, onChange: setQuery, placeholder: "Search by company, recruiter, industry...", label: "Search hirers" }}
         />
-      </div>
-
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-[1.6fr_1.4fr_1fr_0.8fr_1fr_1fr_20px] gap-4 px-5 py-3 border-b border-kb-border text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder">
-          <span>Company</span>
-          <span>Recruiter</span>
-          <span>Industry</span>
-          <span>Postings</span>
-          <span>Verification</span>
-          <span>Status</span>
-          <span />
-        </div>
-
-        {filtered.map((hirer) => {
-          const v = VERIFICATION_STYLES[hirer.verification];
-          return (
-            <Link
-              key={hirer.id}
-              href={`/hirers/${hirer.id}`}
-              className="grid grid-cols-[1.6fr_1.4fr_1fr_0.8fr_1fr_1fr_20px] gap-4 px-5 py-4 items-center border-b border-kb-border last:border-b-0 hover:bg-kb-bg-alt transition-colors"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-kb-text-body truncate">{hirer.companyName}</p>
-                <p className="text-xs text-kb-text-muted mt-0.5 truncate" title={hirer.location}>
-                  {hirer.location}
-                </p>
-              </div>
-              <span className="text-sm text-kb-text-muted truncate">{hirer.recruiterName}</span>
-              <span className="text-sm text-kb-text-muted truncate">{hirer.industry}</span>
-              <span className="text-sm text-kb-text-muted truncate">{hirer.postingsCount}</span>
-              <span
-                className="inline-flex w-fit text-xs font-semibold rounded-full px-2.5 py-1"
-                style={{ backgroundColor: v.bg, color: v.text }}
-              >
-                {v.label}
-              </span>
-              <span
-                className="inline-flex w-fit text-xs font-semibold rounded-full px-2.5 py-1"
-                style={
-                  hirer.status === "active"
-                    ? { backgroundColor: "#F0FDF4", color: "#16A34A" }
-                    : { backgroundColor: "#FEF2F2", color: "#ED4C5C" }
-                }
-              >
-                {hirer.status === "active" ? "Active" : "Suspended"}
-              </span>
-              <ChevronRight size={18} className="text-kb-text-placeholder justify-self-end" />
-            </Link>
-          );
-        })}
-
-        {filtered.length === 0 && (
-          <div className="px-5 py-10 text-center text-sm text-kb-text-muted">No hirers match your search.</div>
-        )}
-      </div>
-    </div>
+      }
+    >
+      <DataTable
+        label="Hirers"
+        columns={COLUMNS}
+        rows={visible}
+        getRowKey={(r) => r.id}
+        getRowHref={(r) => `/hirers/${r.id}`}
+        loading={isLoading}
+        error={error}
+        onRetry={retry}
+        isFiltered={q !== ""}
+        resetKey={q}
+        emptyNoData={{ icon: Building2, title: "No hirer accounts yet", description: "Companies appear here once they register." }}
+        emptyNoResults={{ icon: Building2, title: "No hirers match your search", description: "Check the spelling, or try a company, recruiter or industry." }}
+      />
+    </ListPage>
   );
 }

@@ -38,6 +38,18 @@ const getStoredUser = () =>
 
 export const hasAdminSession = () => Boolean(getStoredUser());
 
+// Frontend-only read of the user saved at login (used by the top bar).
+// Returns null when there is no session or the stored value is unreadable.
+export const getAdminUser = (): AuthUser | null => {
+  const raw = getStoredUser();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+};
+
 export const saveAdminUser = (user: AuthUser) => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -53,6 +65,23 @@ const defaultFetchOpts: RequestInit = {
   headers: { "Content-Type": "application/json" },
 };
 
+/**
+ * Error thrown for any non-2xx API response. Keeps the server message as
+ * `message` (unchanged behaviour) and adds the HTTP status and, for 429
+ * responses, the Retry-After value in seconds so the UI can react.
+ */
+export class ApiError extends Error {
+  status: number;
+  retryAfter?: number;
+
+  constructor(message: string, status: number, retryAfter?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...defaultFetchOpts,
@@ -67,7 +96,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const errorMsg = payload?.error?.message || `Request failed with status ${response.status}`;
-    throw new Error(errorMsg);
+    const retryAfter = Number(response.headers.get("Retry-After"));
+    throw new ApiError(errorMsg, response.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined);
   }
 
   return payload.data as T;
@@ -79,7 +109,7 @@ export const getDashboardSummary = async () => {
 
 export const getVerifications = async (status?: string) => {
   const query = status ? `?status=${status}` : "";
-  return request<Record<string, unknown>[]>(`/verification/companies${query}`);
+  return request<unknown[]>(`/verification/companies${query}`);
 };
 
 export const updateVerificationStatus = async (companyId: string, status: string) => {
@@ -91,7 +121,7 @@ export const updateVerificationStatus = async (companyId: string, status: string
 
 export const getOpportunities = async (status?: string) => {
   const query = status ? `?status=${status}` : "";
-  return request<Record<string, unknown>[]>(`/opportunities${query}`);
+  return request<unknown[]>(`/opportunities${query}`);
 };
 
 export const loginAdmin = async (email: string, password: string) => {

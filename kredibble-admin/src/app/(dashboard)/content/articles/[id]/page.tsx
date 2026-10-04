@@ -1,175 +1,194 @@
 "use client";
 
-import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, ImagePlus, X } from "lucide-react";
+/**
+ * Career Resources editor: New article (/content/articles/new) and Edit article (/content/articles/[id]).
+ * Built on the shared form system (src/components/ui/form).
+ *
+ * Fields (all kept from the old page, with the same required rules):
+ * - Title (required), Summary (required), Body (required; the same plain textarea as before)
+ * - Publishing: Draft or Published
+ * - Details: Category (required), Read time (optional)
+ * - Cover image (optional): was "Banner Image"
+ *
+ * Behaviour: errors show after a field is left and on submit; Save shows a spinner while saving, then a
+ * toast and back to the list; leaving with unsaved changes asks first (see useUnsavedGuard).
+ * Data: mock articles (src/lib/mock-articles.ts). Nothing is persisted yet.
+ */
+import { useRef, useState, type FormEvent } from "react";
+import { useParams } from "next/navigation";
+import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
 import { articles, type ArticleStatus } from "@/lib/mock-articles";
+import { DetailNotFound } from "@/components/detail/DetailStates";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { Field } from "@/components/ui/form/Field";
+import { FileDrop } from "@/components/ui/form/FileDrop";
+import { Input } from "@/components/ui/form/Input";
+import { StickyActionBar } from "@/components/ui/form/StickyActionBar";
+import { Switch } from "@/components/ui/form/Switch";
+import { Textarea } from "@/components/ui/form/Textarea";
+import { focusFirstInvalid, useTouched } from "@/components/ui/form/use-touched";
+import { useUnsavedGuard } from "@/components/ui/form/use-unsaved-guard";
+import { useToast } from "@/components/ui/Toast";
 
-export default function ArticleEditorPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const isNew = params.id === "new";
-  const existing = isNew ? undefined : articles.find((a) => a.id === params.id);
+const LIST_HREF = "/content/articles";
 
-  const [title, setTitle] = useState(existing?.title ?? "");
-  const [category, setCategory] = useState(existing?.category ?? "");
-  const [duration, setDuration] = useState(existing?.duration ?? "");
-  const [summary, setSummary] = useState(existing?.summary ?? "");
-  const [content, setContent] = useState(existing?.content ?? "");
-  const [status, setStatus] = useState<ArticleStatus>(existing?.status ?? "draft");
-  const [bannerImage, setBannerImage] = useState<string | undefined>(existing?.bannerImage);
-
-  const pickBannerImage = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = (e: Event) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) setBannerImage(URL.createObjectURL(file));
-    };
-    input.click();
-  };
-
-  if (!isNew && !existing) {
-    return <p className="text-sm text-kb-text-muted">Article not found.</p>;
-  }
-
-  const isValid = title.trim() && category.trim() && summary.trim() && content.trim();
-
-  const handleSave = () => {
-    if (!isValid) return;
-    // No backend yet — this mock demo just returns to the list.
-    router.push("/content/articles");
-  };
-
-  return (
-    <div className="max-w-2xl">
-      <button
-        onClick={() => router.push("/content/articles")}
-        className="flex items-center gap-1.5 text-sm text-kb-text-muted hover:text-kb-text-body mb-6"
-      >
-        <ChevronLeft size={16} />
-        Back to Career Resources
-      </button>
-
-      <h1 className="text-xl font-bold text-kb-text-body mb-6">
-        {isNew ? "New Article" : "Edit Article"}
-      </h1>
-
-      <div className="flex flex-col gap-4">
-        <Field label="Banner Image">
-          {bannerImage ? (
-            <div className="relative rounded-lg overflow-hidden border border-kb-border-input h-40">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={bannerImage} alt="Article banner" className="w-full h-full object-cover" />
-              <button
-                onClick={() => setBannerImage(undefined)}
-                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-black/75 flex items-center justify-center transition-colors"
-                title="Remove banner"
-              >
-                <X size={14} color="#FFFFFF" />
-              </button>
-              <button
-                onClick={pickBannerImage}
-                className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-black/60 hover:bg-black/75 text-white text-xs font-semibold transition-colors"
-              >
-                Replace
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={pickBannerImage}
-              className="flex flex-col items-center justify-center gap-2 w-full h-40 rounded-lg border border-dashed border-kb-border-input bg-kb-bg-alt hover:border-kb-primary transition-colors"
-            >
-              <ImagePlus size={22} className="text-kb-text-placeholder" />
-              <span className="text-sm text-kb-text-muted">Click to upload a banner image</span>
-            </button>
-          )}
-        </Field>
-
-        <Field label="Title">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. How to write a developer resume that gets noticed"
-            className="w-full h-11 rounded-lg border border-kb-border-input px-3 text-sm text-kb-text-body outline-none focus:border-kb-primary"
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Category">
-            <input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="e.g. Resume Writing"
-              className="w-full h-11 rounded-lg border border-kb-border-input px-3 text-sm text-kb-text-body outline-none focus:border-kb-primary"
-            />
-          </Field>
-          <Field label="Read Time">
-            <input
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              placeholder="e.g. 5 min read"
-              className="w-full h-11 rounded-lg border border-kb-border-input px-3 text-sm text-kb-text-body outline-none focus:border-kb-primary"
-            />
-          </Field>
-        </div>
-
-        <Field label="Summary">
-          <textarea
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            rows={2}
-            placeholder="One or two sentences shown in the article list"
-            className="w-full rounded-lg border border-kb-border-input px-3 py-2.5 text-sm text-kb-text-body outline-none focus:border-kb-primary resize-none"
-          />
-        </Field>
-
-        <Field label="Content">
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            rows={10}
-            placeholder="Full article body"
-            className="w-full rounded-lg border border-kb-border-input px-3 py-2.5 text-sm text-kb-text-body outline-none focus:border-kb-primary resize-none"
-          />
-        </Field>
-
-        <Field label="Status">
-          <div className="flex gap-2">
-            {(["draft", "published"] as ArticleStatus[]).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatus(s)}
-                className={`px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
-                  status === s
-                    ? "bg-kb-primary text-white"
-                    : "bg-kb-bg-card border border-kb-border text-kb-text-muted"
-                }`}
-              >
-                {s === "draft" ? "Draft" : "Published"}
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        <button
-          onClick={handleSave}
-          disabled={!isValid}
-          className="mt-2 h-11 rounded-lg bg-kb-primary text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-        >
-          {isNew ? "Publish Article" : "Save Changes"}
-        </button>
-      </div>
-    </div>
-  );
+interface ArticleForm {
+  title: string;
+  summary: string;
+  content: string;
+  status: ArticleStatus;
+  category: string;
+  duration: string;
+  bannerImage: string | undefined;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+const EMPTY_FORM: ArticleForm = { title: "", summary: "", content: "", status: "draft", category: "", duration: "", bannerImage: undefined };
+
+/** The required-field rules (same as before: each must have text once trimmed). */
+function validate(form: ArticleForm) {
+  const errors: Partial<Record<"title" | "summary" | "content" | "category", string>> = {};
+  if (!form.title.trim()) errors.title = "Enter a title.";
+  if (!form.summary.trim()) errors.summary = "Enter a summary.";
+  if (!form.content.trim()) errors.content = "Enter the article body.";
+  if (!form.category.trim()) errors.category = "Enter a category.";
+  return errors;
+}
+
+export default function ArticleEditorPage() {
+  const { id } = useParams<{ id: string }>();
+  const isNew = id === "new";
+  const existing = isNew ? undefined : articles.find((a) => a.id === id);
+
+  const initial: ArticleForm = existing
+    ? {
+        title: existing.title,
+        summary: existing.summary,
+        content: existing.content,
+        status: existing.status,
+        category: existing.category,
+        duration: existing.duration,
+        bannerImage: existing.bannerImage,
+      }
+    : EMPTY_FORM;
+
+  const [form, setForm] = useState<ArticleForm>(initial);
+  const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const { show, touch, touchAll } = useTouched();
+  const toast = useToast();
+
+  const dirty = (Object.keys(form) as (keyof ArticleForm)[]).some((key) => form[key] !== initial[key]);
+  const guard = useUnsavedGuard(dirty && !saving);
+  const errors = validate(form);
+
+  useBreadcrumbLabel(isNew ? "New article" : existing ? existing.title : "Not found");
+
+  if (!isNew && !existing) {
+    return <DetailNotFound noun="Article" listLabel="Career Resources" listHref={LIST_HREF} />;
+  }
+
+  const set = <K extends keyof ArticleForm>(key: K, value: ArticleForm[K]) => setForm((current) => ({ ...current, [key]: value }));
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    touchAll();
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalid(formRef.current);
+      return;
+    }
+    setSaving(true);
+    // TODO(backend): persist this change (create or update the article). Until then this only waits briefly,
+    // like a request would, and returns to the list.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    toast.success(isNew ? (form.status === "published" ? "The article was published." : "The draft was saved.") : "Your changes were saved.");
+    guard.leaveNow(LIST_HREF);
+  };
+
+  const saveLabel = isNew ? (form.status === "published" ? "Publish article" : "Save draft") : "Save changes";
+
   return (
-    <div>
-      <label className="block text-sm font-medium text-kb-text-body mb-1.5">{label}</label>
-      {children}
-    </div>
+    <form ref={formRef} onSubmit={submit} noValidate className="flex flex-1 flex-col">
+      <div className="mb-6">
+        <h1 data-testid="page-title" className="page-title">{isNew ? "New article" : "Edit article"}</h1>
+        <p className="page-subtitle mt-1">
+          {isNew ? "Write a Career Resources article for seekers." : "Update this Career Resources article."}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Main column: the writing */}
+        <Card className="space-y-5 lg:col-span-2">
+          <Field label="Title" error={show("title") ? errors.title : undefined}>
+            <Input
+              large
+              value={form.title}
+              onChange={(event) => set("title", event.target.value)}
+              onBlur={() => touch("title")}
+              placeholder="e.g. How to write a developer resume that gets noticed"
+            />
+          </Field>
+          <Field label="Summary" helper="One or two sentences shown in the article list." error={show("summary") ? errors.summary : undefined}>
+            <Textarea
+              rows={2}
+              value={form.summary}
+              onChange={(event) => set("summary", event.target.value)}
+              onBlur={() => touch("summary")}
+              placeholder="e.g. Practical tips for a resume that stands out"
+            />
+          </Field>
+          <Field label="Body" error={show("content") ? errors.content : undefined}>
+            {/* The same plain textarea as the old page; only its container changed. */}
+            <Textarea
+              rows={14}
+              value={form.content}
+              onChange={(event) => set("content", event.target.value)}
+              onBlur={() => touch("content")}
+              placeholder="Full article body"
+            />
+          </Field>
+        </Card>
+
+        {/* Side column: publishing, details, cover image */}
+        <div className="space-y-4 lg:col-span-1">
+          <Card>
+            <CardHeader title="Publishing" />
+            <Switch
+              checked={form.status === "published"}
+              onChange={(checked) => set("status", checked ? "published" : "draft")}
+              label="Published"
+              statusText={form.status === "published" ? "Published" : "Draft"}
+              description="Visible to seekers when on. Saved as a draft when off."
+            />
+          </Card>
+
+          <Card>
+            <CardHeader title="Details" />
+            <div className="space-y-4">
+              <Field label="Category" error={show("category") ? errors.category : undefined}>
+                <Input
+                  value={form.category}
+                  onChange={(event) => set("category", event.target.value)}
+                  onBlur={() => touch("category")}
+                  placeholder="e.g. Resume Writing"
+                />
+              </Field>
+              <Field label="Read time" optional>
+                <Input value={form.duration} onChange={(event) => set("duration", event.target.value)} placeholder="e.g. 5 min read" />
+              </Field>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Cover image" />
+            <Field label="Image" optional helper="Shown at the top of the article.">
+              <FileDrop value={form.bannerImage} onChange={(url) => set("bannerImage", url)} alt="Article cover image" />
+            </Field>
+          </Card>
+        </div>
+      </div>
+
+      <StickyActionBar dirty={dirty} saving={saving} saveLabel={saveLabel} onCancel={() => guard.leave(LIST_HREF)} />
+      {guard.dialog}
+    </form>
   );
 }
