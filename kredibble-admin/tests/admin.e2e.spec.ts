@@ -1805,19 +1805,21 @@ test.describe('Login page', () => {
 // Final quality pass: smoke over every route, test ids, mobile, drawer, skip link, dead-code guard
 // ---------------------------------------------------------------------------
 // Every route in docs/ui-audit.md (sample ids for the [id] routes). Old URLs follow their redirect.
-const AUDIT_ROUTES: { path: string; mockOnly?: boolean }[] = [
+// mockOnly: why the real-API run skips the route. A mock record id is "not found" on the real API; those pages are
+// covered there by their "(real API)" tests, which open seeded records.
+const AUDIT_ROUTES: { path: string; mockOnly?: string }[] = [
   { path: '/' },
   { path: '/analytics' },
-  { path: '/verification', mockOnly: true },
-  { path: '/verification/comp-1' },
-  { path: '/opportunities', mockOnly: true },
+  { path: '/verification' },
+  { path: '/verification/comp-1', mockOnly: 'comp-1 is a mock record id' },
+  { path: '/opportunities' },
   { path: '/opportunities/opp-1' },
   { path: '/reports' },
   { path: '/reports/report-1' },
   { path: '/seekers' },
-  { path: '/seekers/seeker-1', mockOnly: true },
+  { path: '/seekers/seeker-1', mockOnly: 'seeker-1 is a mock record id' },
   { path: '/hirers' },
-  { path: '/hirers/hirer-1', mockOnly: true },
+  { path: '/hirers/hirer-1', mockOnly: 'hirer-1 is a mock record id' },
   { path: '/community' },
   { path: '/community/ch-1' },
   { path: '/content/articles' },
@@ -1853,7 +1855,7 @@ test.describe('Smoke: every audited route renders its title with no console erro
   test.use({ viewport: { width: 1440, height: 900 } });
   for (const { path, mockOnly } of AUDIT_ROUTES) {
     test(`${path}`, async ({ page }) => {
-      test.skip(!!mockOnly && !MOCK_RUN, 'this queue reads the real API outside mock mode, which needs a bearer token the test session does not have');
+      test.skip(!!mockOnly && !MOCK_RUN, mockOnly ?? '');
       const problems = trackProblems(page);
       await page.goto(`${BASE_URL}${path}`, { timeout: 30_000 });
       const title = page.getByTestId('page-title');
@@ -2021,6 +2023,8 @@ test.describe('Touch targets and the skip link (desktop)', () => {
 
   test('the first Tab stop is "Skip to content" and it moves focus to the page', async ({ page }) => {
     await page.goto(`${BASE_URL}/team`, { timeout: 30_000 });
+    // Wait for the shell: while the session check runs, only a loading screen is rendered and it has no skip link.
+    await expect(page.getByTestId('page-title')).toHaveText('Team');
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.keyboard.press('Tab');
     // In development the Next.js dev-tools badge is a tab stop before the page; skip it (it is absent in production).
@@ -2787,6 +2791,61 @@ test.describe('Directory pages show real data (E2E_REAL_DATA=1)', () => {
   test('verification page lists the pending company', async ({ page }) => {
     await page.goto(`${BASE_URL}/verification`, { timeout: 30_000 });
     await expect(page.getByText('E2E Holdings')).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Verification detail on the real API (SEC-077, Plan 2c Task 3)
+// ---------------------------------------------------------------------------
+test.describe('Verification detail (real API)', () => {
+  test.skip(MOCK_RUN, 'real API only');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  // Seeded by kredibble-backend/scripts/e2e-server.js: a pending case with all four documents pending.
+  const DOCUMENTS = ['E2E Business Registration', 'E2E Organisation ID', 'E2E Company Logo', 'E2E Proof of Organisation'];
+
+  test('approving every document approves the company, after a reload and in the queue', async ({ page }) => {
+    await page.goto(`${BASE_URL}/verification`, { timeout: 30_000 });
+    await page.locator('main tbody tr').filter({ hasText: 'E2E Verify Co' }).getByRole('link').first().click();
+    await expect(page.getByTestId('page-title')).toHaveText('E2E Verify Co');
+    await expect(page.getByText('Logistics · 11-50 · Tema')).toBeVisible();
+    await expect(page.getByText('hr@verify.example.com')).toBeVisible();
+    await expect(page.getByText('0 of 4 documents approved')).toBeVisible();
+
+    for (const label of DOCUMENTS) {
+      const approve = page.getByRole('button', { name: `Approve ${label}` });
+      await approve.click();
+      await expect(page.getByText(`${label} for E2E Verify Co was approved.`)).toBeVisible();
+      await expect(approve).toHaveAttribute('aria-disabled', 'true');
+    }
+    await expect(page.getByText('4 of 4 documents approved')).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText('4 of 4 documents approved')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Summary' }).getByTestId('status-badge')).toHaveText('Approved');
+
+    await page.goto(`${BASE_URL}/verification`, { timeout: 30_000 });
+    await expect(page.locator('main tbody tr').filter({ hasText: 'E2E Verify Co' })).toContainText('Approved');
+  });
+
+  test('a refused change shows the server message and keeps the document as it was', async ({ page }) => {
+    // Only this page's document updates fail, so the test holds in any order next to the one above.
+    await page.route('**/admin/verification/documents/*', (route) =>
+      route.request().method() === 'PATCH'
+        ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { message: 'E2E: the document could not be saved.' } }) })
+        : route.continue(),
+    );
+    await page.goto(`${BASE_URL}/verification`, { timeout: 30_000 });
+    await page.locator('main tbody tr').filter({ hasText: 'E2E Verify Co' }).getByRole('link').first().click();
+    await expect(page.getByTestId('page-title')).toHaveText('E2E Verify Co');
+    const logo = page.getByRole('listitem').filter({ hasText: 'E2E Company Logo' });
+    const before = await logo.getByTestId('status-badge').innerText();
+
+    await page.getByRole('button', { name: 'Reject E2E Company Logo' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Reject document' }).click();
+    await expect(page.getByTestId('toast')).toContainText('E2E: the document could not be saved.');
+    await expect(logo.getByTestId('status-badge')).toHaveText(before);
+    await expect(page.getByRole('button', { name: 'Reject E2E Company Logo' })).not.toHaveAttribute('aria-disabled', 'true');
   });
 });
 

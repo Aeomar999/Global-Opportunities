@@ -151,6 +151,8 @@ await Opportunity.create({
 await VerificationDoc.create([
   { companyId: reviewAccount._id, verificationCaseId: reviewCase._id, key: 'businessReg', label: 'E2E Business Registration', fileName: 'registration.pdf' },
   { companyId: reviewAccount._id, verificationCaseId: reviewCase._id, key: 'orgId', label: 'E2E Organisation ID', fileName: 'org-id.pdf' },
+  { companyId: reviewAccount._id, verificationCaseId: reviewCase._id, key: 'companyLogo', label: 'E2E Company Logo', fileName: 'logo.png' },
+  { companyId: reviewAccount._id, verificationCaseId: reviewCase._id, key: 'proofOfOrg', label: 'E2E Proof of Organisation', fileName: 'tax-certificate.pdf' },
 ]);
 
 const server = http.createServer(app).listen(env.port, () => {

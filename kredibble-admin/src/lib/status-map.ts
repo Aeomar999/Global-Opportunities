@@ -7,7 +7,7 @@
  *   success  Active, Verified, Published, Approved, Upcoming, Open (opportunities, grants)
  *   warning  Pending, Flagged, Open (reports), In review
  *   danger   Rejected, Suspended, Removed, Cancelled
- *   neutral  Draft, Past, Closed, Resolved, Dismissed
+ *   neutral  Draft, Past, Closed, Resolved, Dismissed, Not submitted
  *
  * "Open" is the one word that means two things: an open opportunity or grant is
  * good (success) but an open REPORT is waiting on a person (warning). Pass
@@ -48,6 +48,7 @@ const STATUS_MAP: Record<string, StatusMeta> = {
   closed: { tone: "neutral", label: "Closed" },
   resolved: { tone: "neutral", label: "Resolved" },
   dismissed: { tone: "neutral", label: "Dismissed" },
+  not_submitted: { tone: "neutral", label: "Not submitted" },
 };
 
 const KIND_OVERRIDES: Record<StatusKind, Record<string, StatusMeta>> = {
