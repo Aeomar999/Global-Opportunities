@@ -2,7 +2,7 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 import { signToken, signAdminToken } from '../src/middleware/auth.js';
 import { User } from '../src/models/User.js';
-import { Opportunity, Applicant, Grant, GrantApplication } from '../src/models/Platform.js';
+import { Opportunity, Applicant, Grant } from '../src/models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership } from '../src/models/Community.js';
 import { Notification } from '../src/models/Content.js';
 

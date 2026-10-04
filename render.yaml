@@ -21,16 +21,28 @@ services:
         sync: false
       - key: PORT
         value: 4000
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: AI_ENABLED
+        value: "false"
       - key: AI_PROVIDER
         value: openai
       - key: OPENAI_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: EMAIL_ENABLED
+        value: "false"
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM_EMAIL
         value: verify@kredibble.com
+      - key: WORDPRESS_SYNC_ENABLED
+        value: "false"
       - key: WORDPRESS_SYNC_BASE_URL
         sync: false
       - key: WORDPRESS_API_KEY

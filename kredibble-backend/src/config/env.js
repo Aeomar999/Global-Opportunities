@@ -66,17 +66,20 @@ const env = {
     return this._adminJwtSecret ??= resolveSecret('ADMIN_JWT_SECRET');
   },
   // AI Provider config
+  aiEnabled: process.env.AI_ENABLED === 'true' || Boolean(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY),
   aiProvider: process.env.AI_PROVIDER || 'openai',
   openaiApiKey: process.env.OPENAI_API_KEY,
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
   // WordPress integration
+  wordpressSyncEnabled: process.env.WORDPRESS_SYNC_ENABLED === 'true' || Boolean(process.env.WORDPRESS_SYNC_BASE_URL),
   insightGhanaWordpressUrl: process.env.INSIGHT_GHANA_WORDPRESS_URL,
   africanJournalWordpressUrl: process.env.AFRICAN_JOURNAL_WORDPRESS_URL,
   // Email service
+  emailEnabled: process.env.EMAIL_ENABLED === 'true' || Boolean(process.env.RESEND_API_KEY),
   resendApiKey: process.env.RESEND_API_KEY,
-  resendFromEmail: process.env.RESEND_FROM_EMAIL,
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || 'verify@kredibble.com',
   emailVerificationCodeTtlMinutes: Number(process.env.EMAIL_VERIFICATION_CODE_TTL_MINUTES || 10),
   outboundRequestTimeoutMs: Number(process.env.OUTBOUND_REQUEST_TIMEOUT_MS || 10000),
   aiSystemPrompt: process.env.AI_SYSTEM_PROMPT || 'You are the Global Opportunities assistant. Give accurate, helpful opportunity guidance.',
@@ -103,14 +106,22 @@ if (isProduction) {
   if (!Number.isFinite(env.outboundRequestTimeoutMs) || env.outboundRequestTimeoutMs < 1000) {
     throw new Error('CRITICAL ERROR: OUTBOUND_REQUEST_TIMEOUT_MS must be at least 1000.');
   }
-  const providerKey = env.aiProvider === 'anthropic' ? env.anthropicApiKey : env.openaiApiKey;
-  if (!providerKey || providerKey.includes('placeholder')) {
-    throw new Error(`CRITICAL ERROR: the configured ${env.aiProvider} API key is missing.`);
+  if (env.aiEnabled) {
+    const providerKey = env.aiProvider === 'anthropic' ? env.anthropicApiKey : env.openaiApiKey;
+    if (!providerKey || providerKey.includes('placeholder')) {
+      throw new Error(`CRITICAL ERROR: the configured ${env.aiProvider} API key is missing.`);
+    }
   }
-  if (!env.resendApiKey || env.resendApiKey.includes('placeholder') || !env.resendFromEmail) {
-    throw new Error('CRITICAL ERROR: Resend must be configured in production.');
+  if (env.emailEnabled) {
+    if (!env.resendApiKey || env.resendApiKey.includes('placeholder') || !env.resendFromEmail) {
+      throw new Error('CRITICAL ERROR: Resend must be configured in production when email is enabled.');
+    }
   }
-  if (Boolean(env.wordpressSyncBaseUrl) !== Boolean(env.wordpressApiKey)) {
+  if (env.wordpressSyncEnabled) {
+    if (!env.wordpressSyncBaseUrl || !env.wordpressApiKey) {
+      throw new Error('CRITICAL ERROR: WORDPRESS_SYNC_BASE_URL and WORDPRESS_API_KEY must be configured together when WordPress sync is enabled.');
+    }
+  } else if (Boolean(env.wordpressSyncBaseUrl) !== Boolean(env.wordpressApiKey)) {
     throw new Error('CRITICAL ERROR: WORDPRESS_SYNC_BASE_URL and WORDPRESS_API_KEY must be configured together.');
   }
 }

@@ -34,6 +34,12 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - name: Verify production build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NEXT_PUBLIC_API_URL: /api
+          API_PROXY_TARGET: https://kredibble-api.onrender.com/api
 
   deploy:
     name: Deploy to Vercel
