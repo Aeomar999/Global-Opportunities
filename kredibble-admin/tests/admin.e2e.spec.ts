@@ -185,7 +185,7 @@ test.describe('Admin API Integration', () => {
     expect(Array.isArray(data.data.kpis)).toBeTruthy();
     expect(data.data.kpis.length).toBeGreaterThan(0);
     // Verify some expected KPIs are present
-    const kpiMetrics = data.data.kpis.map((k: any) => k.metric);
+    const kpiMetrics = data.data.kpis.map((k: { metric: string }) => k.metric);
     expect(kpiMetrics).toContain('opportunitiesPublished');
     expect(kpiMetrics).toContain('programsActive');
   });
