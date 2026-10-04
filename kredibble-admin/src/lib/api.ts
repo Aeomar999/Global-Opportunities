@@ -722,6 +722,12 @@ export const getAnalytics = async () => {
 };
 
 // Opportunity moderation
+/** One page of postings, newest first; `meta` carries the real totals, so a caller can read every page. */
+export const getOpportunityPage = async (params: { page: number; limit: number }) => {
+  const queryString = `?${new URLSearchParams({ page: String(params.page), limit: String(params.limit) }).toString()}`;
+  return requestPage<OpportunityRecord>(`/admin/opportunities${queryString}`);
+};
+
 export const getOpportunityById = async (id: string) => {
   return request<OpportunityRecord>(`/admin/opportunities/${id}`);
 };

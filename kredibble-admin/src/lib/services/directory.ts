@@ -11,32 +11,12 @@
  * the client, as they do for the mock data. Errors reject with the server's message and the pages show them
  * inline with a retry button. A missing record resolves with undefined (the pages show "not found").
  */
-import { ApiError, getHirerById, getHirers, getSeekerById, getSeekers, type HirerAccount as ApiHirer, type Paginated, type SeekerProfile } from "@/lib/api";
+import { getHirerById, getHirers, getSeekerById, getSeekers, type HirerAccount as ApiHirer, type SeekerProfile } from "@/lib/api";
 import { hirerAccounts, type HirerAccount } from "@/lib/mock-hirers";
 import { seekerAccounts, type SeekerAccount } from "@/lib/mock-seekers";
 import { overlayRows } from "@/lib/mock-store";
+import { MISSING, fetchAll, orMissing } from "./api-helpers";
 import { isMockMode } from "./mock-mode";
-
-const PAGE_SIZE = 100;
-const MAX_PAGES = 20;
-const MISSING = "—";
-
-/** Reads every page of an API list (up to MAX_PAGES x PAGE_SIZE records). */
-async function fetchAll<T>(getPage: (page: number) => Promise<Paginated<T>>): Promise<T[]> {
-  const rows: T[] = [];
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const result = await getPage(page);
-    rows.push(...result.data);
-    if (page >= (result.meta?.pages ?? 1)) break;
-  }
-  return rows;
-}
-
-/** A 404 from the API means "no such record"; anything else is a real error. */
-const orMissing = <T>(error: unknown): T | undefined => {
-  if (error instanceof ApiError && error.status === 404) return undefined;
-  throw error;
-};
 
 function toSeeker(profile: SeekerProfile): SeekerAccount {
   return {
@@ -54,7 +34,9 @@ function toSeeker(profile: SeekerProfile): SeekerAccount {
 }
 
 function toHirer(account: ApiHirer): HirerAccount {
-  const summary = account.overallStatus === "verified" || account.overallStatus === "rejected" || account.overallStatus === "pending" ? account.overallStatus : account.verified ? "verified" : "pending";
+  // The review page approves a case as "approved"; on a hirer that reads "verified".
+  const caseStatus = account.overallStatus === "approved" ? "verified" : account.overallStatus;
+  const summary = caseStatus === "verified" || caseStatus === "rejected" || caseStatus === "pending" ? caseStatus : account.verified ? "verified" : "pending";
   return {
     id: account.id,
     companyName: account.companyName,
@@ -72,7 +54,7 @@ function toHirer(account: ApiHirer): HirerAccount {
 
 export async function loadSeekerRows(): Promise<SeekerAccount[]> {
   if (isMockMode()) return overlayRows("seekers", seekerAccounts);
-  return (await fetchAll((page) => getSeekers({ page, limit: PAGE_SIZE }))).map(toSeeker);
+  return (await fetchAll((page, limit) => getSeekers({ page, limit }))).map(toSeeker);
 }
 
 export async function loadSeeker(id: string): Promise<SeekerAccount | undefined> {
@@ -82,7 +64,7 @@ export async function loadSeeker(id: string): Promise<SeekerAccount | undefined>
 
 export async function loadHirerRows(): Promise<HirerAccount[]> {
   if (isMockMode()) return overlayRows("hirers", hirerAccounts);
-  return (await fetchAll((page) => getHirers({ page, limit: PAGE_SIZE }))).map(toHirer);
+  return (await fetchAll((page, limit) => getHirers({ page, limit }))).map(toHirer);
 }
 
 export async function loadHirer(id: string): Promise<HirerAccount | undefined> {

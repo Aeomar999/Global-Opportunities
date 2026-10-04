@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test",
+    "test:e2e:mock": "cross-env E2E_MOCKS=1 playwright test",
     "check:https": "node ../scripts/check-https.js",
     "typecheck": "tsc --noEmit"
   },
@@ -27,6 +28,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",

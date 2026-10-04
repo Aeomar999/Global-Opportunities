@@ -86,7 +86,7 @@ jobs:
   admin-e2e:
     name: Admin (Playwright end-to-end)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30  # two Playwright runs (real API + mock mode)
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -119,11 +119,19 @@ jobs:
           echo "E2E_ADMIN_EMAIL=ci-admin@example.com" >> "$GITHUB_ENV"
           echo "E2E_ADMIN_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
       # playwright.config.ts starts the in-memory API and the admin dev server itself.
-      - name: Run Playwright
+      # Two runs (tests/mode.ts): against the real API (what ships), then with NEXT_PUBLIC_USE_MOCKS=true on port 3100
+      # for the checks that need mock records, the mock store or the dev-only ?state= switch.
+      - name: Run Playwright (real API)
         run: npx playwright test
         working-directory: kredibble-admin
         env:
           NEXT_TELEMETRY_DISABLED: 1
+      - name: Run Playwright (mock mode)
+        run: npx playwright test
+        working-directory: kredibble-admin
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          E2E_MOCKS: '1'
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

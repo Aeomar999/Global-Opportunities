@@ -14,6 +14,7 @@ import { NotificationComposer } from "@/components/notifications/NotificationCom
 import { NotificationHistory } from "@/components/notifications/NotificationHistory";
 import { Tabs, tabId, tabPanelId } from "@/components/ui/Tabs";
 import { cn } from "@/lib/cn";
+import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 
 type NotificationsTab = "compose" | "history";
 const ID_PREFIX = "notifications";
@@ -31,6 +32,8 @@ export default function NotificationsPage() {
         <h1 data-testid="page-title" className="page-title">Notifications</h1>
         <p className="page-subtitle mt-1">Send a broadcast message into the recipients&apos; in-app notification feed.</p>
       </header>
+
+      <NotConnectedNotice />
 
       {/* Below 1024px only: the two panels become tabs. */}
       <Tabs

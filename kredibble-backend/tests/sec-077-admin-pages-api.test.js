@@ -73,6 +73,23 @@ describe('SEC-077: admin single opportunity', () => {
 
     expect(res.status).toBe(400);
   });
+
+  it('reports real page counts on the staff-portal opportunity list, so the queue can read every page', async () => {
+    const cookie = adminCookie(await createAdmin());
+    await Opportunity.create([1, 2, 3].map((n) => ({ ...postingFields, title: `Engineer ${n}` })));
+
+    const first = await request(app).get(api('/admin/opportunities?limit=2')).set('Cookie', cookie);
+    const second = await request(app).get(api('/admin/opportunities?limit=2&page=2')).set('Cookie', cookie);
+    const pending = await request(app).get(api('/admin/opportunities?moderationStatus=published')).set('Cookie', cookie);
+
+    expect(first.status).toBe(200);
+    expect(first.body.data).toHaveLength(2);
+    expect(first.body.meta).toEqual({ page: 1, limit: 2, total: 3, pages: 2 });
+    expect(second.body.data).toHaveLength(1);
+    expect(second.body.meta).toMatchObject({ page: 2, total: 3 });
+    // The total follows the filter.
+    expect(pending.body.meta).toMatchObject({ total: 0, pages: 1 });
+  });
 });
 
 describe('SEC-077: admin analytics', () => {
