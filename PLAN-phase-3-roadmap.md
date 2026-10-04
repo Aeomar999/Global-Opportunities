@@ -18,7 +18,7 @@ Covers SEC-065, SEC-075, SEC-077, SEC-081, SEC-083, SEC-084, SEC-087, SEC-090 an
 |---|---|---|---|---|
 | 1 | [Backend account security](PLAN-1-account-security.md) | SEC-083, SEC-084 (backend), SEC-065, plus the 3 lint errors that keep CI red | — | Merged (PR #22) |
 | 2a | [Admin data API](PLAN-2a-admin-data-api.md) | SEC-075 routes, contract test | — | Merged (PR #26) |
-| 2b | [Admin pages on real data](PLAN-2b-admin-pages.md) | SEC-077 remaining 16 pages | 2a | In review (PR pending) |
+| 2b | [Admin pages on real data](PLAN-2b-admin-pages.md) | SEC-077 remaining 16 pages | 2a | In review (PR #28) |
 | 3 | Mobile launch surface | SEC-081, SEC-083/084 screens, SEC-087, legal links | Plan 1; SEC-072 for "my applications" | Not written |
 | 4 | Operations and legal | SEC-090, SEC-092 | Plan 3 for in-app links | Not written |
 
