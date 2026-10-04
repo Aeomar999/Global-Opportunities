@@ -6,21 +6,24 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "channel": "development"
+      "channel": "development",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dev.api.globalopportunitydesk.com/api"
+      }
     },
-    "preview": {
+    "staging": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://kredibble-api.onrender.com/api"
+        "EXPO_PUBLIC_API_URL": "https://staging.api.globalopportunitydesk.com/api"
       },
-      "channel": "preview"
+      "channel": "staging"
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://kredibble-api.onrender.com/api"
+        "EXPO_PUBLIC_API_URL": "https://api.globalopportunitydesk.com/api"
       },
       "channel": "production"
     }

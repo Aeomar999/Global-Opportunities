@@ -2,16 +2,17 @@ name: CD Backend
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging, dev]
     paths:
       - 'kredibble-backend/**'
       - '.nvmrc'
       - '.github/workflows/cd-backend.yml'
+      - 'docker-compose.prod.yml'
   workflow_dispatch:
 
 # Never run two deploys of the same service at once; let an in-flight one finish.
 concurrency:
-  group: cd-backend
+  group: cd-backend-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -59,14 +60,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # metadata-action lowercases the image name; GHCR rejects the mixed-case
-      # owner/repo that github.repository contains ("Aeomar999/Global-Opportunities").
       - id: meta
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}/kredibble-backend
           tags: |
             type=raw,value=latest
+            type=ref,event=branch
             type=sha,format=long
       - uses: docker/build-push-action@v7
         with:
@@ -77,19 +77,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy-render:
-    name: Trigger Render deploy
+  deploy-vps:
+    name: Deploy to Hostinger VPS
     needs: image
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    # Map branch to GitHub Environment
+    environment: 
+      name: ${{ github.ref == 'refs/heads/main' && 'Production' || github.ref == 'refs/heads/staging' && 'Staging' || 'Development' }}
     steps:
-      - name: Call deploy hook
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-        run: |
-          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo "::notice title=Render deploy skipped::RENDER_DEPLOY_HOOK_URL is not set. Render's own GitHub auto-deploy (if enabled) still deploys main."
-            exit 0
-          fi
-          curl --fail --silent --show-error --max-time 60 -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
-          echo "Render deploy triggered."
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Pull latest image based on branch
+            docker pull ghcr.io/${{ github.repository }}/kredibble-backend:${{ github.ref_name }}
+            # Restart docker compose services
+            cd /opt/kredibble-${{ github.ref_name }}
+            docker-compose -f docker-compose.prod.yml up -d --force-recreate kredibble-backend

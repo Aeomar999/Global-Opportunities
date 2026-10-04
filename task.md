@@ -237,7 +237,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-087 | App-store readiness: identity, iOS bundle id, policy links | P1 | Mobile app | Open |
 | SEC-088 | Mobile `npm audit`: 4 high, 12 moderate | P2 | Mobile deps | Open |
 | SEC-089 | Shared Redis configured via render.yaml for rate limits | P1 | Operations | ✅ Done |
-| SEC-090 | No error tracking or uptime monitoring | P1 | Operations | Open |
+| SEC-090 | Error tracking, uptime monitoring, VPS/Docker infrastructure | P1 | Operations | ✅ Done |
 | SEC-091 | Transactional email domain not verified (SPF/DKIM) | P2 | Operations | Open |
 | SEC-092 | No privacy policy / ToS; data-protection registration | P1 | Legal | Open |
 | SEC-093 | No load test or external pen test | P2 | Operations | Open |

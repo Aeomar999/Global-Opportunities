@@ -1,0 +1,24 @@
+#!/bin/bash
+# MongoDB Dump Script
+# Usage: ./db-dump.sh <DATABASE_URL> <OUTPUT_DIR>
+
+if [ -z "$1" ] || [ -z "$2" ]; then
+  echo "Usage: ./db-dump.sh <DATABASE_URL> <OUTPUT_DIR>"
+  exit 1
+fi
+
+DB_URL=$1
+OUTPUT_DIR=$2
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_PATH="$OUTPUT_DIR/dump_$DATE"
+
+echo "Dumping database..."
+mongodump --uri="$DB_URL" --out="$BACKUP_PATH"
+
+echo "Creating tarball..."
+tar -czf "$BACKUP_PATH.tar.gz" -C "$OUTPUT_DIR" "dump_$DATE"
+
+echo "Cleaning up raw dump..."
+rm -rf "$BACKUP_PATH"
+
+echo "Backup complete: $BACKUP_PATH.tar.gz"
