@@ -42,6 +42,15 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test -- --ci
+      - name: Production boot smoke test (SEC-068)
+        run: |
+          NODE_ENV=production \
+          DATABASE_URL="mongodb://127.0.0.1:27017/kredibble" \
+          JWT_SECRET="012345678901234567890123456789012345678901234567" \
+          ADMIN_JWT_SECRET="abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef" \
+          CORS_ORIGIN="https://admin.kredibble.com,https://app.kredibble.com" \
+          PORT=4000 \
+          node -e "import('./src/config/env.js').then(() => console.log('Boot smoke test passed!'))"
 
   backend-image:
     name: Backend (Docker image builds)

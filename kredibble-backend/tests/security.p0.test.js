@@ -264,8 +264,33 @@ describe('SEC-006: production must refuse to boot on weak or shared secrets', ()
       JWT_SECRET: 'c'.repeat(64),
       ADMIN_JWT_SECRET: 'd'.repeat(64),
       DATABASE_URL: 'mongodb://127.0.0.1:27017/kredibble',
+      CORS_ORIGIN: 'https://admin.kredibble.com',
     });
     expect(result.stderr).not.toContain('CRITICAL SECURITY ERROR');
+  });
+
+  it('SEC-068: boots in production with standard deploy vars without optional AI/Resend keys', () => {
+    const result = runEnv({
+      JWT_SECRET: 'c'.repeat(64),
+      ADMIN_JWT_SECRET: 'd'.repeat(64),
+      DATABASE_URL: 'mongodb://127.0.0.1:27017/kredibble',
+      CORS_ORIGIN: 'https://admin.kredibble.com,https://app.kredibble.com',
+      PORT: '4000',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.stderr).not.toContain('CRITICAL ERROR');
+  });
+
+  it('SEC-068: requires AI key in production when AI_ENABLED=true', () => {
+    const result = runEnv({
+      JWT_SECRET: 'c'.repeat(64),
+      ADMIN_JWT_SECRET: 'd'.repeat(64),
+      DATABASE_URL: 'mongodb://127.0.0.1:27017/kredibble',
+      CORS_ORIGIN: 'https://admin.kredibble.com',
+      AI_ENABLED: 'true',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain('configured openai API key is missing');
   });
 
   it('never hardcodes a secret fallback for a missing variable', () => {
@@ -934,6 +959,28 @@ describe('SEC-013: upload validation', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.data.folder).toContain(`kredibble/${user.id}/avatars`);
     expect(res.body.data.url).toMatch(/cloudinary/);
+  });
+});
+
+describe('SEC-045: AI assistant and news routes', () => {
+  it('assistant chat requires authentication', async () => {
+    const res = await request(app).post('/api/v1/assistant/chat').send({ message: 'Hello' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('assistant chat returns 503 when AI is not enabled', async () => {
+    const { token } = await makeUser({ email: 'ai-tester@example.com' });
+    const res = await request(app)
+      .post('/api/v1/assistant/chat')
+      .set(...AUTH_BEARER(token))
+      .send({ message: 'Hello' });
+    expect(res.statusCode).toBe(503);
+    expect(res.body.error.message).toMatch(/AI assistant service is currently unavailable/i);
+  });
+
+  it('news endpoint is mounted and public', async () => {
+    const res = await request(app).get('/api/v1/news');
+    expect(res.statusCode).not.toBe(404);
   });
 });
 
