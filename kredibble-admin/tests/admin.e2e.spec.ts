@@ -2849,6 +2849,64 @@ test.describe('Verification detail (real API)', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Opportunity detail on the real API (SEC-077, Plan 2c Task 4)
+// ---------------------------------------------------------------------------
+test.describe('Opportunity detail (real API)', () => {
+  test.skip(MOCK_RUN, 'real API only');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  // Seeded by kredibble-backend/scripts/e2e-server.js: a pending, unvetted job.
+  const openPosting = async (page: import('@playwright/test').Page) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await page.locator('main tbody tr').filter({ hasText: 'E2E Pending Role' }).getByRole('link').first().click();
+    await expect(page.getByTestId('page-title')).toHaveText('E2E Pending Role');
+  };
+
+  test('approving a pending posting publishes it, after a reload and in the queue', async ({ page }) => {
+    await openPosting(page);
+    const summary = page.getByRole('region', { name: 'Summary' });
+    await expect(summary).toContainText('Job');
+    await expect(summary).toContainText('E2E Holdings · Accra');
+    await expect(summary.getByTestId('status-badge')).toHaveText('Pending');
+    await expect(page.getByText('E2E posting description')).toBeVisible();
+    await expect(page.getByText('GHS 5,000')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect(page.getByText('E2E Pending Role from E2E Holdings was approved.')).toBeVisible();
+    await expect(summary.getByTestId('status-badge')).toHaveText('Published');
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeDisabled();
+
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Summary' }).getByTestId('status-badge')).toHaveText('Published');
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeDisabled();
+
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await page.getByRole('radio', { name: /^Jobs/ }).click(); // the API's "job" is listed under Jobs
+    const row = page.locator('main tbody tr').filter({ hasText: 'E2E Pending Role' });
+    await expect(row).toContainText('Published');
+    await expect(row).toContainText('Job');
+  });
+
+  test('a refused change shows the server message and keeps the posting as it was', async ({ page }) => {
+    // Only this page's updates fail, so the test holds in any order next to the one above.
+    await page.route('**/admin/opportunities/*', (route) =>
+      route.request().method() === 'PATCH'
+        ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { message: 'E2E: the posting could not be saved.' } }) })
+        : route.continue(),
+    );
+    await openPosting(page);
+    const badge = page.getByRole('region', { name: 'Summary' }).getByTestId('status-badge');
+    const before = await badge.innerText();
+
+    await page.getByRole('button', { name: 'Reject opportunity' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Reject opportunity' }).click();
+    await expect(page.getByTestId('toast')).toContainText('E2E: the posting could not be saved.');
+    await expect(badge).toHaveText(before);
+    await expect(page.getByRole('button', { name: 'Reject opportunity' })).toBeEnabled();
+  });
+});
+
 test.describe('Not connected yet', () => {
   test('a page without a backend says it shows sample data (real API run only)', async ({ page }) => {
     test.skip(MOCK_RUN, 'the notice only shows outside mock mode');
