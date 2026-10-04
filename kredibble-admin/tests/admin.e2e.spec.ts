@@ -439,3 +439,22 @@ test.describe('Opportunity review', () => {
     await expect(page.getByRole('link', { name: /E2E Pending Role/ }).getByText('Published')).toBeVisible();
   });
 });
+
+test.describe('Analytics', () => {
+  // Only counts no other test changes: report status and posting moderation vary with test order.
+  test('shows the seeded platform counts', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/analytics`);
+    const card = (label: string) => page.locator('div.rounded-2xl').filter({ hasText: label });
+
+    await expect(card('Active Seekers').getByText('1', { exact: true })).toBeVisible();
+    await expect(card('Active Seekers')).toContainText('of 1 total');
+    await expect(card('Verified Hirers').getByText('0', { exact: true })).toBeVisible();
+    await expect(card('Verified Hirers')).toContainText('of 2 total');
+    await expect(card('Total Applications').getByText('0', { exact: true })).toBeVisible();
+    await expect(card('Open Reports')).toContainText('of 1 total');
+    await expect(page.getByTestId('postings-job')).toHaveText('1');
+  });
+});
