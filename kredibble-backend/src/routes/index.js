@@ -182,6 +182,16 @@ const collectionRoutes = ({
   redact = (item) => item,
   // Inspects the raw body before the allowlist runs; throws to reject the write outright.
   assertWritable = () => {},
+  // Replaces the default token check (e.g. requireAdminAuth for the admin dashboard's mounts).
+  authenticate = null,
+  // Query params that filter the list by exact value; "true"/"false" become booleans.
+  filterFields = [],
+  // async (pattern) => Mongo filter for `?q=`; replaces the `searchFields` $or.
+  searchFilter = null,
+  // Populate list and single reads, whatever `enablePopulate` says.
+  populateAlways = false,
+  // async (items, req) => items; runs on presented items for GET / and GET /:id.
+  decorate = null,
 }) => {
   const router = Router();
   const policy = RESOURCE_POLICIES[policyKey] || null;
@@ -189,9 +199,9 @@ const collectionRoutes = ({
 
   // SEC-002: nothing in a collection is readable without a valid token, unless the
   // resource is explicitly public-read - and even then writes still need one.
-  router.use(publicRead
+  router.use(authenticate || (publicRead
     ? (req, res, next) => (req.method === 'GET' ? optionalAuth : requireAuth)(req, res, next)
-    : requireAuth);
+    : requireAuth));
 
   // SEC-023: strip PII fields for non-owners/non-admins
   const present = (item, req) => {
@@ -220,10 +230,20 @@ const collectionRoutes = ({
 
       if (type && resourceName === 'Opportunity') filter.type = type;
 
+      for (const field of filterFields) {
+        const value = req.query[field];
+        if (value === undefined) continue;
+        // SEC-061: a filter value is a plain string, never an operator object.
+        if (typeof value !== 'string') throw new ApiError(400, 'Invalid query parameters');
+        filter[field] = value === 'true' ? true : value === 'false' ? false : value;
+      }
+
       if (q) {
         // Escaped: `?q=a{999999}` would otherwise be a ReDoS payload.
         const pattern = searchPattern(q);
-        if (pattern) {
+        if (pattern && searchFilter) {
+          Object.assign(filter, await searchFilter(pattern));
+        } else if (pattern && searchFields.length) {
           filter.$or = searchFields.map((field) => ({ [field]: pattern }));
         }
       }
@@ -234,12 +254,13 @@ const collectionRoutes = ({
       }
 
       const scoped = withScope(filter, readScope(req));
-      const [data, total] = await Promise.all([
-        Model.find(scoped).sort({ createdAt: -1 }).skip(skip).limit(limit),
-        Model.countDocuments(scoped),
-      ]);
+      let listQuery = Model.find(scoped).sort({ createdAt: -1 }).skip(skip).limit(limit);
+      if (populateAlways && populate) listQuery = listQuery.populate(populate);
+      const [data, total] = await Promise.all([listQuery, Model.countDocuments(scoped)]);
 
-      listResponse(res, data.map((item) => present(item, req)), total, page, limit);
+      let items = data.map((item) => present(item, req));
+      if (decorate) items = await decorate(items, req);
+      listResponse(res, items, total, page, limit);
     }),
   );
 
@@ -248,13 +269,15 @@ const collectionRoutes = ({
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'read', req, resourceName);
       let query = Model.findOne(withScope({ _id: req.params.id }, readScope(req)));
-      if (enablePopulate && populate) {
+      if ((enablePopulate || populateAlways) && populate) {
         query = query.populate(populate);
       }
       const item = await query;
       if (!item) throw notFound(resourceName);
 
-      itemResponse(res, present(item, req));
+      let presented = present(item, req);
+      if (decorate) [presented] = await decorate([presented], req);
+      itemResponse(res, presented);
     }),
   );
 
@@ -464,6 +487,25 @@ const publicTestimonial = (testimonial) => {
 };
 
 /**
+ * SEC-075 / SEC-077: the admin dashboard's data API. Every route takes only an
+ * admin session (admin secret and audience, via cookie or Bearer). A user
+ * Bearer token is rejected even for an admin account. The paths mirror
+ * kredibble-admin/src/lib/api.ts, and tests/admin-api-contract.test.js holds
+ * the two together.
+ */
+const mountAdminDataRoutes = (router) => {
+  const adminCollection = (path, options) => router.use(
+    `/admin${path}`,
+    collectionRoutes({ ...options, authenticate: requireAdminAuth, populateAlways: true }),
+  );
+
+  adminCollection('/events', {
+    Model: Event, resourceName: 'Event', policyKey: 'events',
+    searchFields: ['title', 'location', 'hirer'], filterFields: ['status'],
+  });
+};
+
+/**
  * Build the API router. It is mounted twice by app.js - at /api/v1 with populate
  * and at the deprecated /api without - so every route lives here exactly once.
  * @param {Object} options - Configuration options
@@ -478,6 +520,8 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.use('/assistant', assistantRouter);
   router.use('/news', newsRouter);
   router.use('/admin', adminApiRouter);
+  // After the staff-portal router, so its paths (e.g. /admin/reports/monthly) match first.
+  mountAdminDataRoutes(router);
 
   router.get('/health', (req, res) => {
     const dbStatus = mongoose.connection.readyState;
