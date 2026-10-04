@@ -234,7 +234,7 @@ async function refreshAdminSession(): Promise<AuthResponse> {
   }
 }
 
-export async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
+async function requestPayload<P>(path: string, init: RequestInit = {}, retried = false): Promise<P> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...defaultFetchOpts,
     ...init,
@@ -253,7 +253,7 @@ export async function request<T>(path: string, init: RequestInit = {}, retried =
       try {
         await refreshAdminSession();
         // Retry the original request
-        return request<T>(path, init, true);
+        return requestPayload<P>(path, init, true);
       } catch {
         clearAdminSession();
         throw new Error("Session expired, please log in again");
@@ -262,7 +262,19 @@ export async function request<T>(path: string, init: RequestInit = {}, retried =
     throw new Error(errorMsg);
   }
 
-  return payload.data as T;
+  return payload as P;
+}
+
+/** One record or action result: the response's `data`. Bodyless responses (204) give `undefined`. */
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const payload = await requestPayload<{ data: T } | null>(path, init);
+  return payload?.data as T;
+}
+
+/** A paginated list: keeps `meta` (page counts), which `request` drops. */
+export async function requestPage<T>(path: string): Promise<Paginated<T>> {
+  const payload = await requestPayload<Paginated<T>>(path);
+  return { data: payload.data, meta: payload.meta };
 }
 
 export const checkAdminSession = async (): Promise<AuthUser | null> => {
@@ -317,14 +329,14 @@ export const logoutAdmin = async () => {
 };
 
 // Seekers
-export const getSeekers = async <T = Paginated<SeekerProfile>>(params?: { page?: number; limit?: number; q?: string; verified?: boolean }) => {
+export const getSeekers = async (params?: { page?: number; limit?: number; q?: string; verified?: boolean }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.q) query.set("q", params.q);
   if (params?.verified !== undefined) query.set("verified", String(params.verified));
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/seekers${queryString}`);
+  return requestPage<SeekerProfile>(`/admin/seekers${queryString}`);
 };
 
 export const getSeekerById = async <T = SeekerProfile>(id: string) => {
@@ -332,14 +344,14 @@ export const getSeekerById = async <T = SeekerProfile>(id: string) => {
 };
 
 // Hirers
-export const getHirers = async <T = Paginated<HirerAccount>>(params?: { page?: number; limit?: number; q?: string; verified?: boolean }) => {
+export const getHirers = async (params?: { page?: number; limit?: number; q?: string; verified?: boolean }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.q) query.set("q", params.q);
   if (params?.verified !== undefined) query.set("verified", String(params.verified));
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/hirers${queryString}`);
+  return requestPage<HirerAccount>(`/admin/hirers${queryString}`);
 };
 
 export const getHirerById = async <T = HirerAccount>(id: string) => {
@@ -347,7 +359,7 @@ export const getHirerById = async <T = HirerAccount>(id: string) => {
 };
 
 // Events
-export const getEvents = async <T = Paginated<EventRecord>>(params?: { page?: number; limit?: number; q?: string; type?: string; status?: string; country?: string }) => {
+export const getEvents = async (params?: { page?: number; limit?: number; q?: string; type?: string; status?: string; country?: string }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
@@ -356,7 +368,7 @@ export const getEvents = async <T = Paginated<EventRecord>>(params?: { page?: nu
   if (params?.status) query.set("status", params.status);
   if (params?.country) query.set("country", params.country);
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/events${queryString}`);
+  return requestPage<EventRecord>(`/admin/events${queryString}`);
 };
 
 export const getEventById = async <T = EventRecord>(id: string) => {
@@ -364,7 +376,7 @@ export const getEventById = async <T = EventRecord>(id: string) => {
 };
 
 // Grants
-export const getGrants = async <T = Paginated<GrantRecord>>(params?: { page?: number; limit?: number; q?: string; status?: string; sector?: string; grantType?: string }) => {
+export const getGrants = async (params?: { page?: number; limit?: number; q?: string; status?: string; sector?: string; grantType?: string }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
@@ -373,7 +385,7 @@ export const getGrants = async <T = Paginated<GrantRecord>>(params?: { page?: nu
   if (params?.sector) query.set("sector", params.sector);
   if (params?.grantType) query.set("grantType", params.grantType);
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/grants${queryString}`);
+  return requestPage<GrantRecord>(`/admin/grants${queryString}`);
 };
 
 export const getGrantById = async <T = GrantRecord>(id: string) => {
@@ -381,7 +393,7 @@ export const getGrantById = async <T = GrantRecord>(id: string) => {
 };
 
 // Articles
-export const getArticles = async <T = Paginated<ArticleRecord>>(params?: { page?: number; limit?: number; q?: string; status?: string; category?: string }) => {
+export const getArticles = async (params?: { page?: number; limit?: number; q?: string; status?: string; category?: string }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
@@ -389,7 +401,7 @@ export const getArticles = async <T = Paginated<ArticleRecord>>(params?: { page?
   if (params?.status) query.set("status", params.status);
   if (params?.category) query.set("category", params.category);
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/articles${queryString}`);
+  return requestPage<ArticleRecord>(`/admin/articles${queryString}`);
 };
 
 export const getArticleById = async <T = ArticleRecord>(id: string) => {
@@ -397,7 +409,7 @@ export const getArticleById = async <T = ArticleRecord>(id: string) => {
 };
 
 // Staff
-export const getStaff = async <T = Paginated<StaffMember>>(params?: { page?: number; limit?: number; q?: string; role?: string; status?: string }) => {
+export const getStaff = async (params?: { page?: number; limit?: number; q?: string; role?: string; status?: string }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
@@ -405,7 +417,7 @@ export const getStaff = async <T = Paginated<StaffMember>>(params?: { page?: num
   if (params?.role) query.set("role", params.role);
   if (params?.status) query.set("status", params.status);
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/staff${queryString}`);
+  return requestPage<StaffMember>(`/admin/staff${queryString}`);
 };
 
 export const getStaffById = async <T = StaffMember>(id: string) => {
@@ -425,7 +437,7 @@ export const deleteStaff = async (id: string) => {
 };
 
 // Community Channels
-export const getCommunityChannels = async <T = Paginated<ChannelRecord>>(params?: { page?: number; limit?: number; q?: string; status?: string; category?: string }) => {
+export const getCommunityChannels = async (params?: { page?: number; limit?: number; q?: string; status?: string; category?: string }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
@@ -433,7 +445,7 @@ export const getCommunityChannels = async <T = Paginated<ChannelRecord>>(params?
   if (params?.status) query.set("status", params.status);
   if (params?.category) query.set("category", params.category);
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/community/channels${queryString}`);
+  return requestPage<ChannelRecord>(`/admin/community/channels${queryString}`);
 };
 
 export const getCommunityChannelById = async <T = ChannelRecord>(id: string) => {
@@ -453,23 +465,23 @@ export const deleteCommunityChannel = async (id: string) => {
 };
 
 // Community Posts
-export const getCommunityChannelPosts = async <T = Paginated<ChannelPost>>(channelId: string, params?: { page?: number; limit?: number }) => {
+export const getCommunityChannelPosts = async (channelId: string, params?: { page?: number; limit?: number }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/community/channels/${channelId}/posts${queryString}`);
+  return requestPage<ChannelPost>(`/admin/community/channels/${channelId}/posts${queryString}`);
 };
 
 // Verification Companies
-export const getVerificationCompanies = async <T = Paginated<CompanyVerification>>(params?: { page?: number; limit?: number; q?: string; overallStatus?: string }) => {
+export const getVerificationCompanies = async (params?: { page?: number; limit?: number; q?: string; overallStatus?: string }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.q) query.set("q", params.q);
   if (params?.overallStatus) query.set("overallStatus", params.overallStatus);
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/verification/companies${queryString}`);
+  return requestPage<CompanyVerification>(`/admin/verification/companies${queryString}`);
 };
 
 export const getVerificationCompanyById = async <T = CompanyVerification>(id: string) => {
@@ -481,21 +493,21 @@ export const updateVerificationCompany = async <T = CompanyVerification>(id: str
 };
 
 // Verification Documents
-export const getVerificationCompanyDocuments = async <T = Paginated<VerificationDoc>>(companyId: string, params?: { page?: number; limit?: number }) => {
+export const getVerificationCompanyDocuments = async (companyId: string, params?: { page?: number; limit?: number }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/verification/companies/${companyId}/documents${queryString}`);
+  return requestPage<VerificationDoc>(`/admin/verification/companies/${companyId}/documents${queryString}`);
 };
 
-export const getVerificationDocuments = async <T = Paginated<VerificationDoc>>(params?: { page?: number; limit?: number; status?: string }) => {
+export const getVerificationDocuments = async (params?: { page?: number; limit?: number; status?: string }) => {
   const query = new URLSearchParams();
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
   if (params?.status) query.set("status", params.status);
   const queryString = query.toString() ? `?${query.toString()}` : "";
-  return request<T>(`/admin/verification/documents${queryString}`);
+  return requestPage<VerificationDoc>(`/admin/verification/documents${queryString}`);
 };
 
 export const getVerificationDocumentById = async <T = VerificationDoc>(id: string) => {
@@ -506,9 +518,6 @@ export const updateVerificationDocument = async <T = VerificationDoc>(id: string
   return request<T>(`/admin/verification/documents/${id}`, { method: "PATCH", body: JSON.stringify(data) });
 };
 
-export const createVerificationDocument = async <T = VerificationDoc>(companyId: string, data: { documentType?: string; fileUrl?: string; status?: string }) => {
-  return request<T>(`/admin/verification/companies/${companyId}/documents`, { method: "POST", body: JSON.stringify(data) });
-};
 
 export const deleteVerificationDocument = async (id: string) => {
   return request<{ data: { id: string } }>(`/admin/verification/documents/${id}`, { method: "DELETE" });
