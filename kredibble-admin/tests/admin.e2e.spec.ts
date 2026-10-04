@@ -389,3 +389,32 @@ test.describe('Staff', () => {
     await expect(updated.getByText('Suspended')).toBeVisible();
   });
 });
+
+test.describe('Verification review', () => {
+  test('approving each document and then the company persists', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/verification`);
+    await page.getByText('E2E Verify Co').click();
+    await expect(page.getByRole('heading', { name: 'E2E Verify Co' })).toBeVisible();
+    await expect(page.getByText('hr@verify.example.com')).toBeVisible();
+
+    const approveCompany = page.getByRole('button', { name: 'Approve company' });
+    await expect(approveCompany).toBeDisabled();
+    for (const label of ['E2E Business Registration', 'E2E Organisation ID']) {
+      const doc = page.locator('div.rounded-2xl').filter({ hasText: label });
+      await doc.getByTitle('Approve').click();
+      await expect(doc.getByText('Approved')).toBeVisible();
+    }
+
+    await approveCompany.click();
+    await expect(page.getByTestId('overall-status')).toHaveText('Approved');
+    await page.reload();
+    await expect(page.getByTestId('overall-status')).toHaveText('Approved');
+
+    await page.goto(`${BASE_URL}/verification`);
+    await page.getByRole('button', { name: 'approved', exact: true }).click();
+    await expect(page.getByText('E2E Verify Co')).toBeVisible();
+  });
+});

@@ -113,6 +113,31 @@ await ChannelPost.create({
   flagged: true,
 });
 
+const { VerificationDoc } = await import('../src/models/Platform.js');
+
+// Verification review (SEC-077 Task 10): its own company, so approving it can't
+// disturb the "E2E Holdings is pending" directory test.
+const reviewer = await User.create({ name: 'E2E Verify Owner', email: 'e2e-verify@kredibble.com', role: 'hirer', passwordHash: 'x' });
+const reviewAccount = await HirerAccount.create({ userId: reviewer._id, companyName: 'E2E Verify Co', industry: 'Logistics', location: 'Tema' });
+const reviewCase = await CompanyVerification.create({
+  hirerId: reviewAccount._id,
+  name: 'E2E Verify Co',
+  industry: 'Logistics',
+  companySize: '11-50',
+  location: 'Tema',
+  website: 'https://verify.example.com',
+  companyEmail: 'hello@verify.example.com',
+  recruiterName: 'E2E Recruiter Two',
+  recruiterRole: 'HR Lead',
+  recruiterEmail: 'hr@verify.example.com',
+  submittedDate: '03 Oct 2026',
+  overallStatus: 'pending',
+});
+await VerificationDoc.create([
+  { companyId: reviewAccount._id, verificationCaseId: reviewCase._id, key: 'businessReg', label: 'E2E Business Registration', fileName: 'registration.pdf' },
+  { companyId: reviewAccount._id, verificationCaseId: reviewCase._id, key: 'orgId', label: 'E2E Organisation ID', fileName: 'org-id.pdf' },
+]);
+
 const server = http.createServer(app).listen(env.port, () => {
   console.log(`e2e API listening on http://localhost:${env.port}/api`);
 });
