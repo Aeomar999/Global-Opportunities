@@ -1,12 +1,12 @@
-﻿# task.md — Kredibble Security & Architecture Remediation Plan
+# task.md � Kredibble Security & Architecture Remediation Plan
 
-**Status:** Active — **reopened 2026-10-02** by the production-readiness audit (see § *2026-10-02 Production-Readiness Audit*)
+**Status:** Active � **reopened 2026-10-02** by the production-readiness audit (see � *2026-10-02 Production-Readiness Audit*)
 **Created:** 2026-09-27
 **Scope:** `kredibble-backend`, `kredibble-app`, `kredibble-admin`, deployment + CI/CD
 **Companion docs:** `AGENTS.md` (phase/skill pipeline), `PRODUCTION-READINESS-AUDIT.md` (full audit narrative and evidence)
 **Target:** Zero CRITICAL/HIGH findings, >80% coverage on auth + PII endpoints, OWASP Top 10 clean, every core user journey working on the deployed build
 
-> **2026-10-02 audit summary.** `main` @ `3ffc51d` is **not deployable and not launch-ready**. A live backend (`kredibble-backend.vercel.app`) is serving user records including password hashes to anonymous callers (SEC-041). The current code fails `npm ci` (SEC-066), the admin build fails (SEC-067), and production boot fails with the `render.yaml` env (SEC-068). Core journeys are broken (SEC-042, 043, 044, 080). Eleven items previously marked ✅ were found not implemented or broken and are **reopened** below. 55 new tasks (SEC-041 … SEC-095) were added. Every claim was verified by running the real app against `mongodb-memory-server` or by read-only requests to the live hosts.
+> **2026-10-02 audit summary.** `main` @ `3ffc51d` is **not deployable and not launch-ready**. A live backend (`kredibble-backend.vercel.app`) is serving user records including password hashes to anonymous callers (SEC-041). The current code fails `npm ci` (SEC-066), the admin build fails (SEC-067), and production boot fails with the `render.yaml` env (SEC-068). Core journeys are broken (SEC-042, 043, 044, 080). Eleven items previously marked ? were found not implemented or broken and are **reopened** below. 55 new tasks (SEC-041 � SEC-095) were added. Every claim was verified by running the real app against `mongodb-memory-server` or by read-only requests to the live hosts.
 
 ---
 
@@ -17,8 +17,8 @@
 3. Tick the checkbox, append evidence to **Progress Log**, then move on.
 4. One branch per task: `security/<task-id>-<slug>`.
 5. If a task reveals a bigger problem, create a new task with the next `SEC-0xx` id and link it. Never silently expand scope.
-6. **Always update `task.md` after every implementation** — tick checkboxes, update status table, add Progress Log entry.
-7. **Always push to GitHub after committing** — `git push` immediately after each `git commit` so the remote reflects the latest state.
+6. **Always update `task.md` after every implementation** � tick checkboxes, update status table, add Progress Log entry.
+7. **Always push to GitHub after committing** � `git push` immediately after each `git commit` so the remote reflects the latest state.
 
 **Branch naming:** `security/SEC-001-block-admin-registration`
 
@@ -37,37 +37,37 @@
 
 ---
 
-## Finding Crosswalk (original audit → task ID)
+## Finding Crosswalk (original audit ? task ID)
 
-The audit report numbered findings 1–10 plus a Medium table. This maps each to its tracked task so nothing is lost between the two documents.
+The audit report numbered findings 1�10 plus a Medium table. This maps each to its tracked task so nothing is lost between the two documents.
 
 | Original | Finding | Task ID | Priority change |
 |----------|---------|---------|-----------------|
 | Critical 1 | Socket.io CORS `*` | SEC-004 | P0 |
 | Critical 2 | No auth on collection routes (`index.js:133-220`) | SEC-002 | P0 |
-| Critical 3 | Weak password policy (`schemas/auth.js:3-8`) | SEC-008 | **P1** — raised off the "Critical" list; 6-char passwords are weak but not anonymously exploitable |
+| Critical 3 | Weak password policy (`schemas/auth.js:3-8`) | SEC-008 | **P1** � raised off the "Critical" list; 6-char passwords are weak but not anonymously exploitable |
 | Critical 4 | Admin role escalation (`auth.js:34`) | SEC-001 | P0 |
 | Critical 5 | JWT secret fallbacks (`env.js:16-17`) | SEC-006 | P0 |
 | Critical 6 | No input sanitization on generic CRUD | SEC-007 | P0 |
-| Critical 7 | Admin token in `localStorage` (`admin/api.ts:32-39`) | SEC-010 | **P1** — requires an XSS to exploit; the real fix is CSP (SEC-033) plus the cookie move |
-| Critical 8 | No TLS enforcement / cert pinning | SEC-016 | **P1** — narrowed from "cert pinning"; pinning is not required for a standard API, plaintext fallback is the actual defect |
-| Critical 9 | No request size limit on JSON body | — | **Dismissed** — see below |
-| Critical 10 | Error stack traces in production | — | **Dismissed** — see below |
-| Medium | No pagination (`index.js:88`) | SEC-011 | **P1** — raised; single-request OOM is a real DoS |
-| Medium | Regex injection (`index.js:85,315,333`) | SEC-012 | **P1** — raised; ReDoS is a cheap CPU DoS |
-| Medium | No audit logging | SEC-017 | **P1** — raised; blocks incident response |
+| Critical 7 | Admin token in `localStorage` (`admin/api.ts:32-39`) | SEC-010 | **P1** � requires an XSS to exploit; the real fix is CSP (SEC-033) plus the cookie move |
+| Critical 8 | No TLS enforcement / cert pinning | SEC-016 | **P1** � narrowed from "cert pinning"; pinning is not required for a standard API, plaintext fallback is the actual defect |
+| Critical 9 | No request size limit on JSON body | � | **Dismissed** � see below |
+| Critical 10 | Error stack traces in production | � | **Dismissed** � see below |
+| Medium | No pagination (`index.js:88`) | SEC-011 | **P1** � raised; single-request OOM is a real DoS |
+| Medium | Regex injection (`index.js:85,315,333`) | SEC-012 | **P1** � raised; ReDoS is a cheap CPU DoS |
+| Medium | No audit logging | SEC-017 | **P1** � raised; blocks incident response |
 | Medium | No refresh token rotation (`auth.js:7`) | SEC-009 | P1 |
 | Medium | Socket.io no auth (`socket.js:13-38`) | SEC-004 | merged with Critical 1 |
 | Medium | Rate limit bypass (`app.js:53`) | SEC-015 | P1 |
 | Medium | Duplicate route mount (`app.js:84,86`) | SEC-015 | merged |
 | Medium | No API versioning | SEC-019 | P2 |
-| Medium | Swagger exposed in prod (`app.js:82`) | SEC-014 | **P1** — raised |
-| Medium | Admin signup endpoint (`admin/api.ts:104-110`) | SEC-005 | **P0** — raised; it is a one-click exploit path for SEC-001 |
+| Medium | Swagger exposed in prod (`app.js:82`) | SEC-014 | **P1** � raised |
+| Medium | Admin signup endpoint (`admin/api.ts:104-110`) | SEC-005 | **P0** � raised; it is a one-click exploit path for SEC-001 |
 | Fix 8 | `helmet.contentSecurityPolicy` for admin | SEC-033 | P3 |
-| Fix 9 | Admin tokens → httpOnly cookies | SEC-010 | P1 |
+| Fix 9 | Admin tokens ? httpOnly cookies | SEC-010 | P1 |
 | Fix 10 | Refresh token rotation | SEC-009 | P1 |
 
-### Verified Non-Issues — Do Not Re-Raise
+### Verified Non-Issues � Do Not Re-Raise
 
 The audit raised these; investigation confirmed they are **not** defects. Closed here so a later phase does not "fix" working code.
 
@@ -80,7 +80,7 @@ The audit raised these; investigation confirmed they are **not** defects. Closed
 
 Note: the audit's own text reached the same conclusion on #10 ("Actually this one is fine"). Recording both prevents them re-entering the backlog.
 
-### Crosswalk — 2026-10-02 production-readiness audit → task ID
+### Crosswalk � 2026-10-02 production-readiness audit ? task ID
 
 `PRODUCTION-READINESS-AUDIT.md` used area prefixes. Per the `AGENTS.md` guardrail every finding is tracked under a `SEC-*` id here.
 
@@ -91,15 +91,15 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-043 | Community channel post routes 404 (missing from mounted router) | SEC-043 | P0 |
 | SEC-044 | Notifications always empty for users | SEC-044 | P1 |
 | SEC-045 | Admin-portal, AI assistant, news routers never mounted | SEC-045 | P1 |
-| SEC-046 | Dashboard summary shape ≠ admin UI | SEC-046 | P1 |
+| SEC-046 | Dashboard summary shape ? admin UI | SEC-046 | P1 |
 | SEC-047 | `Opportunity.hirerId` stores a User id but refs `HirerAccount` | SEC-047 | P1 |
-| SEC-048 | Moderation bypassed — pending listings visible | SEC-048 | P1 |
+| SEC-048 | Moderation bypassed � pending listings visible | SEC-048 | P1 |
 | PROD-1 | No "my applications" endpoint | SEC-072 | P1 |
-| SEC-049 | Rate limiter key generator wrong — limits never apply | SEC-049 | P0 |
+| SEC-049 | Rate limiter key generator wrong � limits never apply | SEC-049 | P0 |
 | SEC-050 | Lockout never persisted | SEC-050 | P0 |
 | SEC-051 | Login account enumeration | SEC-051 | P2 |
 | SEC-052 | Access-token revocation (	okenVersion) is dead code | SEC-052 | P1 |
-| SEC-053 | One refresh token per user; non-string body → 500 | SEC-053 | P2 |
+| SEC-053 | One refresh token per user; non-string body ? 500 | SEC-053 | P2 |
 | SEC-054 | Any signed-in user can harvest every users email | SEC-054 | P1 |
 | SEC-055 | Email leaked via populate; search routes leak phones and are unpaginated | SEC-055 | P1 |
 | SEC-056 | Applicant IDOR, impersonation and duplicate applications | SEC-056 | P1 |
@@ -112,7 +112,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-063 | Policy check fails open | SEC-063 | P2 |
 | SEC-064 | 5xx responses leak internal messages | SEC-064 | P2 |
 | SEC-065 | GDPR deletion incomplete | SEC-065 | P1 |
-| OPS-1 | Backend lockfile out of sync — `npm ci` fails | SEC-066 | P0 |
+| OPS-1 | Backend lockfile out of sync � `npm ci` fails | SEC-066 | P0 |
 | OPS-2 | Admin production build fails | SEC-067 | P0 |
 | OPS-3 | Production boot requires unused AI/email keys | SEC-068 | P0 |
 | OPS-4 | Two divergent backends; free-tier sleep; Swagger public | SEC-069 | P1 |
@@ -139,8 +139,8 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | Phase 4 | Transactional email domain | SEC-091 | P2 |
 | Phase 4 | Privacy policy, ToS, data-protection registration | SEC-092 | P1 |
 | Phase 4 | Load test + external pen test | SEC-093 | P2 |
-| §6 | Stale README / AGENTS.md baseline | SEC-094 | P3 |
-| — | Request logging noise; moving `Sunset`; dead duplicate route | SEC-095 | P3 |
+| �6 | Stale README / AGENTS.md baseline | SEC-094 | P3 |
+| � | Request logging noise; moving `Sunset`; dead duplicate route | SEC-095 | P3 |
 
 ---
 
@@ -148,121 +148,121 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 
 | ID | Title | Priority | Area | Status |
 |----|-------|----------|------|--------|
-| SEC-001 | Public self-registration as `admin` | P0 | Backend auth | ✅ Done |
-| SEC-002 | All generic CRUD collection routes are unauthenticated | P0 | Backend routes | ✅ Done — auth + ownership + live manifest test in place |
-| SEC-003 | `/dashboard/summary` is public — leaks platform counts | P0 | Backend routes | ✅ Done |
-| SEC-004 | Socket.io CORS `*` and zero authentication | P0 | Backend realtime | ✅ Done |
-| SEC-005 | `signupAdmin` in admin client creates admin accounts | P0 | Admin app | ✅ Done |
-| SEC-006 | Hard-coded JWT fallback secrets shipped in source | P0 | Backend config | ✅ Done |
-| SEC-007 | Mass assignment — `req.body` spread into models | P0 | Backend routes | ✅ Done |
-| SEC-008 | Password policy allows 6 chars, no complexity | P1 | Backend auth | ✅ Done |
-| SEC-009 | 7-day JWT with role baked in, no refresh/rotation | P1 | Backend auth | ⚠️ Reopened — `tokenVersion` check is dead code → SEC-052 |
-| SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ⚠️ Reopened — cookie never reaches the API → SEC-074, SEC-075 |
-| SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ✅ Done |
-| SEC-012 | User-controlled `$regex` — regex injection / ReDoS | P1 | Backend routes | ✅ Done |
-| SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ✅ Done |
-| SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ✅ Done |
-| SEC-015 | `apiRouter` mounted twice (`/` and `/api`), limiter double-counts | P1 | Backend app | ✅ Done |
-| SEC-016 | Clients fall back to plaintext HTTP, no HTTPS enforcement | P1 | App + Admin | ✅ Done |
-| SEC-017 | No audit log for admin/mutating actions | P1 | Backend | ✅ Done |
-| SEC-018 | Test suite empty — no auth or authorization tests exist | P1 | Backend | ⚠️ Reopened — 10/102 failing, CI not gating → SEC-070, SEC-071 |
-| SEC-019 | No API versioning — breaking changes ship silently | P2 | Backend | ⚠️ Partial — clients still call `/api`; live Vercel has no `/api/v1` → SEC-069 |
-| SEC-020 | `kredibble-app/.env` is tracked and committed | P2 | Repo hygiene | ✅ Done |
-| SEC-021 | Dev server starts and serves with no database | P2 | Backend | ✅ Done |
-| SEC-022 | CORS allows any `*.vercel.app` / `*.onrender.com` tenant | P2 | Backend app | ✅ Done |
-| SEC-023 | PII exposed through generic collection reads | P2 | Backend routes | ⚠️ Reopened — bypassed via `emailNormalized`, populate, search → SEC-054, SEC-055 |
-| SEC-024 | No rate limit on upload, search, or registration | P2 | Backend | ⚠️ Reopened — key generator bug, no limit applies → SEC-049 |
-| SEC-025 | No account lockout or progressive backoff on login | P2 | Backend auth | ⚠️ Reopened — lock never saved → SEC-050 |
-| SEC-026 | Client-supplied `userId` trusted for profile/saved/notification ops | P2 | Backend routes | ✅ Done |
-| SEC-027 | `passwordHash` reachable through generic update paths | P2 | Backend routes | ✅ Done |
-| SEC-028 | No email normalization — case-variant duplicate accounts | P2 | Backend auth | ✅ Done |
-| SEC-029 | No GDPR/CCPA data export or deletion endpoint | P2 | Backend | ⚠️ Reopened — tombstone not persisted, media kept, token still valid → SEC-065, SEC-052 |
-| SEC-030 | `console.log` in production paths violates logger guardrail | P3 | Backend | ✅ Done |
-| SEC-031 | Search fields have no indexes | P3 | Backend models | ✅ Done |
-| SEC-032 | N+1 reads in populated relation queries | P3 | Backend routes | ✅ Done |
-| SEC-033 | Next.js admin has no CSP / security headers | P3 | Admin app | ⚠️ Reopened — CSP blocks the API; unsafe-inline/eval → SEC-073, SEC-079 |
-| SEC-034 | Mobile TypeScript not in strict mode | P3 | App | ✅ Done |
-| SEC-035 | Root `package.json` carries unused `cuid` + `uuid` | P3 | Repo hygiene | ✅ Done |
-| SEC-036 | Grant allocation and applicant counters are non-atomic | P3 | Backend | ⚠️ Reopened — no allocation code exists on `main` → SEC-060 |
-| SEC-037 | List fields stored as `String` instead of typed arrays | P3 | Backend models | ⚠️ Reopened — fields are still `String` with `'[]'` default; parse helpers still in use |
-| SEC-038 | `join_user` lets any client join any user's room | P3 | Backend realtime | ✅ Done (verified 2026-10-02) |
-| SEC-039 | No request correlation ID or structured logger | P3 | Backend | ✅ Done |
-| SEC-040 | Admin panel has no independent admin token audience | P3 | Backend auth | ✅ Done |
-| **SEC-041** | **Live Vercel backend serves users + password hashes to anonymous callers** | **P0** | **Deployment / incident** | 🔴 Open — act today |
-| SEC-042 | Apply / grant-apply / verification-doc upload return 500 (audit logger) | P0 | Backend routes | ✅ Done |
-| SEC-043 | Community channel post routes missing from mounted router (404) | P0 | Backend routes | ✅ Done |
+| SEC-001 | Public self-registration as `admin` | P0 | Backend auth | ? Done |
+| SEC-002 | All generic CRUD collection routes are unauthenticated | P0 | Backend routes | ? Done � auth + ownership + live manifest test in place |
+| SEC-003 | `/dashboard/summary` is public � leaks platform counts | P0 | Backend routes | ? Done |
+| SEC-004 | Socket.io CORS `*` and zero authentication | P0 | Backend realtime | ? Done |
+| SEC-005 | `signupAdmin` in admin client creates admin accounts | P0 | Admin app | ? Done |
+| SEC-006 | Hard-coded JWT fallback secrets shipped in source | P0 | Backend config | ? Done |
+| SEC-007 | Mass assignment � `req.body` spread into models | P0 | Backend routes | ? Done |
+| SEC-008 | Password policy allows 6 chars, no complexity | P1 | Backend auth | ? Done |
+| SEC-009 | 7-day JWT with role baked in, no refresh/rotation | P1 | Backend auth | ?? Reopened � `tokenVersion` check is dead code ? SEC-052 |
+| SEC-010 | Admin JWT stored in `localStorage` (XSS-readable) | P1 | Admin app | ?? Reopened � cookie never reaches the API ? SEC-074, SEC-075 |
+| SEC-011 | No pagination or result limits on any list endpoint | P1 | Backend routes | ? Done |
+| SEC-012 | User-controlled `$regex` � regex injection / ReDoS | P1 | Backend routes | ? Done |
+| SEC-013 | Upload accepts any MIME type; `folder` param unvalidated | P1 | Backend upload | ? Done |
+| SEC-014 | Swagger UI mounted and served in production | P1 | Backend app | ? Done |
+| SEC-015 | `apiRouter` mounted twice (`/` and `/api`), limiter double-counts | P1 | Backend app | ? Done |
+| SEC-016 | Clients fall back to plaintext HTTP, no HTTPS enforcement | P1 | App + Admin | ? Done |
+| SEC-017 | No audit log for admin/mutating actions | P1 | Backend | ? Done |
+| SEC-018 | Test suite empty � no auth or authorization tests exist | P1 | Backend | ?? Reopened � 10/102 failing, CI not gating ? SEC-070, SEC-071 |
+| SEC-019 | No API versioning � breaking changes ship silently | P2 | Backend | ?? Partial � clients still call `/api`; live Vercel has no `/api/v1` ? SEC-069 |
+| SEC-020 | `kredibble-app/.env` is tracked and committed | P2 | Repo hygiene | ? Done |
+| SEC-021 | Dev server starts and serves with no database | P2 | Backend | ? Done |
+| SEC-022 | CORS allows any `*.vercel.app` / `*.onrender.com` tenant | P2 | Backend app | ? Done |
+| SEC-023 | PII exposed through generic collection reads | P2 | Backend routes | ?? Reopened � bypassed via `emailNormalized`, populate, search ? SEC-054, SEC-055 |
+| SEC-024 | No rate limit on upload, search, or registration | P2 | Backend | ?? Reopened � key generator bug, no limit applies ? SEC-049 |
+| SEC-025 | No account lockout or progressive backoff on login | P2 | Backend auth | ?? Reopened � lock never saved ? SEC-050 |
+| SEC-026 | Client-supplied `userId` trusted for profile/saved/notification ops | P2 | Backend routes | ? Done |
+| SEC-027 | `passwordHash` reachable through generic update paths | P2 | Backend routes | ? Done |
+| SEC-028 | No email normalization � case-variant duplicate accounts | P2 | Backend auth | ? Done |
+| SEC-029 | No GDPR/CCPA data export or deletion endpoint | P2 | Backend | ?? Reopened � tombstone not persisted, media kept, token still valid ? SEC-065, SEC-052 |
+| SEC-030 | `console.log` in production paths violates logger guardrail | P3 | Backend | ? Done |
+| SEC-031 | Search fields have no indexes | P3 | Backend models | ? Done |
+| SEC-032 | N+1 reads in populated relation queries | P3 | Backend routes | ? Done |
+| SEC-033 | Next.js admin has no CSP / security headers | P3 | Admin app | ?? Reopened � CSP blocks the API; unsafe-inline/eval ? SEC-073, SEC-079 |
+| SEC-034 | Mobile TypeScript not in strict mode | P3 | App | ? Done |
+| SEC-035 | Root `package.json` carries unused `cuid` + `uuid` | P3 | Repo hygiene | ? Done |
+| SEC-036 | Grant allocation and applicant counters are non-atomic | P3 | Backend | ?? Reopened � no allocation code exists on `main` ? SEC-060 |
+| SEC-037 | List fields stored as `String` instead of typed arrays | P3 | Backend models | ?? Reopened � fields are still `String` with `'[]'` default; parse helpers still in use |
+| SEC-038 | `join_user` lets any client join any user's room | P3 | Backend realtime | ? Done (verified 2026-10-02) |
+| SEC-039 | No request correlation ID or structured logger | P3 | Backend | ? Done |
+| SEC-040 | Admin panel has no independent admin token audience | P3 | Backend auth | ? Done |
+| **SEC-041** | **Live Vercel backend serves users + password hashes to anonymous callers** | **P0** | **Deployment / incident** | ?? Open � act today |
+| SEC-042 | Apply / grant-apply / verification-doc upload return 500 (audit logger) | P0 | Backend routes | ? Done |
+| SEC-043 | Community channel post routes missing from mounted router (404) | P0 | Backend routes | ? Done |
 | SEC-044 | Notifications always empty for non-admin users | P1 | Backend routes | Open |
-| SEC-045 | Admin-portal, AI assistant, news routers never mounted | P1 | Backend app | Open — needs scope decision (Q8) |
+| SEC-045 | Admin-portal, AI assistant, news routers never mounted | P1 | Backend app | Open � needs scope decision (Q8) |
 | SEC-046 | `/dashboard/summary` shape does not match admin UI | P1 | Backend + Admin | Open |
-| SEC-047 | `Opportunity.hirerId` stores User id but refs `HirerAccount` | P1 | Backend models | Open — needs decision (Q10) |
-| SEC-048 | Opportunity moderation bypassed on reads | P1 | Backend routes | Open — needs decision (Q3) |
-| SEC-049 | Rate-limiter key generator wrong — no limit ever applies | P0 | Backend | ✅ Done |
-| SEC-050 | Account lockout never persisted; admin login unthrottled | P0 | Backend auth | ✅ Done |
-| SEC-051 | Login reveals which emails are registered | P2 | Backend auth | ✅ Done |
-| SEC-052 | Token revocation works and checks DB | P1 | Backend auth | ✅ Done |
-| SEC-053 | One refresh token per user; malformed body → 500 | P2 | Backend auth | ✅ Done |
-| SEC-054 | Admin-only /users and proper PII stripping | P1 | Backend routes | ✅ Done |
-| SEC-055 | Search routes paginated and PII stripped | P1 | Backend routes | ✅ Done |
-| SEC-056 | Applicant endpoints explicitly check opportunity owner | P1 | Backend routes | ✅ Done |
-| SEC-057 | Community channels and posts enforce ownerField | P1 | Backend routes | ✅ Done |
-| SEC-058 | Verification documents scoped to owner (companyId) | P1 | Backend routes | ✅ Done |
-| SEC-059 | Event capacity unenforced; attendee emails exposed to hirers | P1 | Backend routes | ✅ Done |
-| SEC-060 | Grant allocation not implemented; applications carry no identity | P2 | Backend | Open — needs decision (Q4) |
-| SEC-061 | NoSQL operator injection via query params | P2 | Backend routes | ✅ Done |
-| SEC-062 | Email verification code: weak RNG, no attempt cap | P2 | Backend auth | ✅ Done |
-| SEC-063 | Authorization fails open for missing policy actions | P2 | Backend | ✅ Done |
-| SEC-064 | 5xx responses leak internal error messages | P2 | Backend app | ✅ Done |
-| SEC-065 | GDPR deletion incomplete (tombstone, media, owned content) | P1 | Backend | ✅ Done |
-| SEC-066 | Backend `package-lock.json` out of sync — `npm ci` fails | P0 | CI/CD | ✅ Done |
-| SEC-067 | Admin `next build` fails on type error | P0 | Admin / CI | ✅ Done |
-| SEC-068 | Production boot requires AI + Resend keys missing from `render.yaml` | P0 | Backend config | ✅ Done |
-| SEC-069 | Two divergent backend deployments; free tier sleeps; Swagger public | P1 | Deployment | Open — needs decision (Q7) |
+| SEC-047 | `Opportunity.hirerId` stores User id but refs `HirerAccount` | P1 | Backend models | Open � needs decision (Q10) |
+| SEC-048 | Opportunity moderation bypassed on reads | P1 | Backend routes | Open � needs decision (Q3) |
+| SEC-049 | Rate-limiter key generator wrong � no limit ever applies | P0 | Backend | ? Done |
+| SEC-050 | Account lockout never persisted; admin login unthrottled | P0 | Backend auth | ? Done |
+| SEC-051 | Login reveals which emails are registered | P2 | Backend auth | ? Done |
+| SEC-052 | Token revocation works and checks DB | P1 | Backend auth | ? Done |
+| SEC-053 | One refresh token per user; malformed body ? 500 | P2 | Backend auth | ? Done |
+| SEC-054 | Admin-only /users and proper PII stripping | P1 | Backend routes | ? Done |
+| SEC-055 | Search routes paginated and PII stripped | P1 | Backend routes | ? Done |
+| SEC-056 | Applicant endpoints explicitly check opportunity owner | P1 | Backend routes | ? Done |
+| SEC-057 | Community channels and posts enforce ownerField | P1 | Backend routes | ? Done |
+| SEC-058 | Verification documents scoped to owner (companyId) | P1 | Backend routes | ? Done |
+| SEC-059 | Event capacity unenforced; attendee emails exposed to hirers | P1 | Backend routes | ? Done |
+| SEC-060 | Grant allocation not implemented; applications carry no identity | P2 | Backend | Open � needs decision (Q4) |
+| SEC-061 | NoSQL operator injection via query params | P2 | Backend routes | ? Done |
+| SEC-062 | Email verification code: weak RNG, no attempt cap | P2 | Backend auth | ? Done |
+| SEC-063 | Authorization fails open for missing policy actions | P2 | Backend | ? Done |
+| SEC-064 | 5xx responses leak internal error messages | P2 | Backend app | ? Done |
+| SEC-065 | GDPR deletion incomplete (tombstone, media, owned content) | P1 | Backend | ? Done |
+| SEC-066 | Backend `package-lock.json` out of sync � `npm ci` fails | P0 | CI/CD | ? Done |
+| SEC-067 | Admin `next build` fails on type error | P0 | Admin / CI | ? Done |
+| SEC-068 | Production boot requires AI + Resend keys missing from `render.yaml` | P0 | Backend config | ? Done |
+| SEC-069 | Two divergent backend deployments; free tier sleeps; Swagger public | P1 | Deployment | Open � needs decision (Q7) |
 | SEC-070 | CI does not gate lint / typecheck / build / e2e | P1 | CI/CD | Open |
-| SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | ✅ Done (153/153 locally; CI to confirm on the PR) |
+| SEC-071 | Backend test suite red (10/102 failing) | P1 | Backend tests | ? Done (153/153 locally; CI to confirm on the PR) |
 | SEC-072 | Seekers cannot list their own applications | P1 | Backend + App | Open |
 | SEC-073 | Admin CSP `connect-src 'self'` blocks every API call | P1 | Admin app | Open |
-| SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ✅ Done |
-| SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | ✅ Done (admin data API + contract test, 8b68a3c) |
-| SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | ✅ Done |
-| SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | ✅ Done (all pages on the admin API, mock files deleted, every admin update audited) |
+| SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ? Done |
+| SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | ? Done (admin data API + contract test, 8b68a3c) |
+| SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | ? Done |
+| SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | ? Done (all pages on the admin API, mock files deleted, every admin update audited) |
 | SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | Open |
 | SEC-079 | Admin CSP allows `'unsafe-inline' 'unsafe-eval'` | P2 | Admin app | Open |
-| SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | ⚠️ Reopened — refresh only fires on message 'jwt expired', which the API never sends |
+| SEC-080 | Mobile app never refreshes tokens � sessions die at 15 min | P0 | Mobile app | ?? Reopened � refresh only fires on message 'jwt expired', which the API never sends |
 | SEC-081 | Mobile detail screens hardcoded; Apply not wired; fake fallback data | P1 | Mobile app | Open |
-| SEC-082 | Mobile AI assistant returns canned replies | P2 | Mobile app | Open — needs scope decision (Q8) |
-| SEC-083 | Forgot-password flow is UI-only (no backend) | P1 | Mobile + Backend | 🟡 Backend done; screen in Plan 3 |
-| SEC-084 | Change password and delete account not wired (store requirement) | P1 | Mobile + Backend | 🟡 Backend done; screens in Plan 3 |
+| SEC-082 | Mobile AI assistant returns canned replies | P2 | Mobile app | Open � needs scope decision (Q8) |
+| SEC-083 | Forgot-password flow is UI-only (no backend) | P1 | Mobile + Backend | ?? Backend done; screen in Plan 3 |
+| SEC-084 | Change password and delete account not wired (store requirement) | P1 | Mobile + Backend | ?? Backend done; screens in Plan 3 |
 | SEC-085 | Notifications/saved/applications/hirer screens on mock data | P2 | Mobile app | Open |
-| SEC-086 | Mobile `tsc` 5 errors, `expo lint` 45 errors | P2 | Mobile app | ✅ Done (verified 2026-10-03: tsc clean, expo lint 0 errors / 125 warnings) |
+| SEC-086 | Mobile `tsc` 5 errors, `expo lint` 45 errors | P2 | Mobile app | ? Done (verified 2026-10-03: tsc clean, expo lint 0 errors / 125 warnings) |
 | SEC-087 | App-store readiness: identity, iOS bundle id, policy links | P1 | Mobile app | Open |
 | SEC-088 | Mobile `npm audit`: 4 high, 12 moderate | P2 | Mobile deps | Open |
-| SEC-089 | Shared Redis configured via render.yaml for rate limits | P1 | Operations | ✅ Done |
-| SEC-090 | No error tracking or uptime monitoring | P1 | Operations | Open |
+| SEC-089 | Shared Redis configured via render.yaml for rate limits | P1 | Operations | ? Done |
+| SEC-090 | Error tracking, uptime monitoring, VPS/Docker infrastructure | P1 | Operations | ? Done |
 | SEC-091 | Transactional email domain not verified (SPF/DKIM) | P2 | Operations | Open |
 | SEC-092 | No privacy policy / ToS; data-protection registration | P1 | Legal | Open |
 | SEC-093 | No load test or external pen test | P2 | Operations | Open |
 | SEC-094 | README and `AGENTS.md` baseline are stale | P3 | Docs | Open |
 | SEC-095 | Request logging noise; moving `Sunset`; dead duplicate code | P3 | Backend | Open |
-| SEC-096 | Private channel readable anonymously once its creator is deleted (creator check fails open on `undefined === undefined`) | P0 | Backend routes | ✅ Done (found and fixed before merge, 11e894c) |
+| SEC-096 | Private channel readable anonymously once its creator is deleted (creator check fails open on `undefined === undefined`) | P0 | Backend routes | ? Done (found and fixed before merge, 11e894c) |
 | SEC-097 | Private-channel posts readable by any signed-in user via `GET /community/posts` (no read scope) | P1 | Backend routes | Open |
 | SEC-098 | Sockets ignore account deletion and session revocation (handshake checks signature only; open sockets never evicted) | P1 | Backend realtime | Open |
-| SEC-099 | No user logout route — refresh tokens stay valid for 30 days after sign-out | P1 | Backend auth | Open |
+| SEC-099 | No user logout route � refresh tokens stay valid for 30 days after sign-out | P1 | Backend auth | Open |
 | SEC-100 | Applicant access checks `Opportunity.createdBy`; hirers get 403 on postings they created through the API (root cause SEC-047) | P1 | Backend routes | Open |
 | SEC-101 | Deletion follow-ups: counters not decremented; kept public content can point at deleted media; `Ambassador`/`Beneficiary` PII untouched; testimonials matched on a typed email; tombstone `emailHash` and reset-code hashes are unkeyed SHA-256 | P2 | Backend | Open |
 | SEC-102 | `registerSchema` uses the Zod 3 `errorMap`, which Zod 4.6.5 ignores (custom role error message lost) | P3 | Backend | Open |
 | SEC-103 | Account-security polish: deletion scheduler has no backoff or in-flight guard; a 500 after the tombstone write can still lead to a scheduled erasure; self-delete admin check reads the JWT role claim; latent fail-open in `isLegacyMember` | P3 | Backend | Open |
-| SEC-104 | Staff-portal `POST/PATCH /admin/opportunities` spread the whole request body into the posting (`prepareOpportunity`): mass assignment of `applicantsCount`, `createdBy`, `hirerId`, `wordpressSync`… | P2 | Backend routes | Open |
+| SEC-104 | Staff-portal `POST/PATCH /admin/opportunities` spread the whole request body into the posting (`prepareOpportunity`): mass assignment of `applicantsCount`, `createdBy`, `hirerId`, `wordpressSync`� | P2 | Backend routes | Open |
 | SEC-105 | Admin traffic reaches the API through the Vercel proxy and `trust proxy` is 1 (Render's hop), so every admin is keyed on Vercel's egress IP and shares one 100-request/15-min bucket | P2 | Backend + Deployment | Open |
-| SEC-106 | Staff-portal `GET /admin/opportunities` put query values straight into the Mongo filter (operator injection, SEC-061 class) | P2 | Backend routes | ✅ Done (be2865e) |
-| SEC-107 | A channel an admin marked `removed` stayed listed, readable and postable for everyone | P1 | Backend routes | ✅ Done (9a873ac) |
-| SEC-108 | `collectionRoutes` audited admin updates only when an admin-only field changed, so report, event, grant, channel and staff decisions left no audit row | P1 | Backend | ✅ Done (1a418c9) |
-| SEC-109 | The admin e2e server loaded `kredibble-backend/.env`, so an upload test reached the real Cloudinary account (3 × 1×1 PNG, 67 B, `kredibble/kredibble/admin/article-banner/`, 2026-10-04 03:21 UTC) | P2 | Tests / Ops | ✅ Done (5ebe9a9); test files left for the owner to delete |
+| SEC-106 | Staff-portal `GET /admin/opportunities` put query values straight into the Mongo filter (operator injection, SEC-061 class) | P2 | Backend routes | ? Done (be2865e) |
+| SEC-107 | A channel an admin marked `removed` stayed listed, readable and postable for everyone | P1 | Backend routes | ? Done (9a873ac) |
+| SEC-108 | `collectionRoutes` audited admin updates only when an admin-only field changed, so report, event, grant, channel and staff decisions left no audit row | P1 | Backend | ? Done (1a418c9) |
+| SEC-109 | The admin e2e server loaded `kredibble-backend/.env`, so an upload test reached the real Cloudinary account (3 � 1�1 PNG, 67 B, `kredibble/kredibble/admin/article-banner/`, 2026-10-04 03:21 UTC) | P2 | Tests / Ops | ? Done (5ebe9a9); test files left for the owner to delete |
 
 ---
 
-# P0 — Ship Blockers
+# P0 � Ship Blockers
 
-## SEC-001 — Public self-registration as `admin`
+## SEC-001 � Public self-registration as `admin`
 
 **Priority:** P0
 **Evidence:** `kredibble-backend/src/schemas/auth.js` (role enum includes `admin`), `kredibble-backend/src/routes/auth.js` (register handler passes `role` straight to `User.create`)
@@ -272,7 +272,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 **Fix:**
 1. In `registerSchema`, restrict role to `'seeker' | 'hirer'`. Add an explicit comment that admin accounts are provisioned out-of-band.
 2. In the register handler, hard-code the persisted role rather than trusting the body: ignore any client-supplied `role` for the top-level user document.
-3. Provision first admin via a seed script (`npm run db:seed:test` already exists) or a one-time CLI: `node scripts/create-admin.js --email … --name …`.
+3. Provision first admin via a seed script (`npm run db:seed:test` already exists) or a one-time CLI: `node scripts/create-admin.js --email � --name �`.
 4. Keep `createAdmin` in the service layer but call it only from the CLI, never from an HTTP route.
 
 **Verify:**
@@ -291,17 +291,17 @@ curl -X POST localhost:4000/api/auth/register -H 'Content-Type: application/json
 
 ---
 
-## SEC-002 — All generic CRUD collection routes are unauthenticated
+## SEC-002 � All generic CRUD collection routes are unauthenticated
 
 **Priority:** P0
-**Evidence:** `kredibble-backend/src/routes/index.js` — `collectionRoutes(...)` registrations with no `requireAuth` / `requireRole` in the chain
+**Evidence:** `kredibble-backend/src/routes/index.js` � `collectionRoutes(...)` registrations with no `requireAuth` / `requireRole` in the chain
 
 **Risk:** Anonymous read of every user, email, phone number, resume URL, and saved item. Anonymous write/delete of any document. Complete data breach and vandalism.
 
 **Fix:**
 1. Wrap the `collectionRoutes` factory so auth is applied by default and cannot be forgotten. Make the unauthenticated case explicit and opt-in:
    ```js
-   const collectionRoutes = ({ model, search, populate, auth = { required: true, roles: [] } }) => { … }
+   const collectionRoutes = ({ model, search, populate, auth = { required: true, roles: [] } }) => { � }
    ```
 2. Default `auth.required` to `true`. Add a runtime assertion at module load that logs and throws if any registration passes `auth: { required: false }` without a justifying comment.
 3. Add `requireRole('admin')` to `/users`, `/staff`, `/verification`, `/reports`, `/grants`, `/dashboard`.
@@ -325,10 +325,10 @@ curl localhost:4000/api/dashboard/summary # expect 401
 
 ---
 
-## SEC-003 — `/dashboard/summary` is public
+## SEC-003 � `/dashboard/summary` is public
 
 **Priority:** P0
-**Evidence:** `kredibble-backend/src/routes/index.js` — dashboard summary route
+**Evidence:** `kredibble-backend/src/routes/index.js` � dashboard summary route
 
 **Risk:** Leaks total user count, opportunity count, and platform activity to anyone. Competitive intelligence plus a user-enumeration signal.
 
@@ -341,10 +341,10 @@ curl localhost:4000/api/dashboard/summary # expect 401
 
 ---
 
-## SEC-004 — Socket.io CORS `*` and no authentication
+## SEC-004 � Socket.io CORS `*` and no authentication
 
 **Priority:** P0
-**Evidence:** `kredibble-backend/src/socket.js` — `cors: { origin: "*" }`, `io.on('connection')` accepts every socket
+**Evidence:** `kredibble-backend/src/socket.js` � `cors: { origin: "*" }`, `io.on('connection')` accepts every socket
 
 **Risk:** Any website can open a WebSocket to the production server. Combined with SEC-038 this permits reading and injecting another user's private messages and community channel traffic from a third-party page.
 
@@ -356,7 +356,7 @@ curl localhost:4000/api/dashboard/summary # expect 401
    - verifies it with the same secret used for HTTP,
    - rejects with `next(new Error('unauthorized'))` on failure or expiry,
    - attaches `socket.data.user = { id, role }` and never trusts a client-sent user id.
-4. Set `env.isDevelopment ? console.log : pino` semantics — no `console.log` in production (see SEC-030).
+4. Set `env.isDevelopment ? console.log : pino` semantics � no `console.log` in production (see SEC-030).
 5. Reject client connections when `NODE_ENV === 'production'` and no valid token is present, with no anonymous fallback.
 
 **Verify:**
@@ -373,10 +373,10 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-## SEC-005 — Admin client can self-provision admin accounts
+## SEC-005 � Admin client can self-provision admin accounts
 
 **Priority:** P0
-**Evidence:** `kredibble-admin/src/lib/api.ts:104-110` — `signupAdmin` posts `{ …values, role: "admin" }` to `/auth/register`
+**Evidence:** `kredibble-admin/src/lib/api.ts:104-110` � `signupAdmin` posts `{ �values, role: "admin" }` to `/auth/register`
 
 **Risk:** Public admin signup page turns the SEC-001 backend flaw into a one-click exploit path. Even after SEC-001 is fixed, keeping the client invites regression.
 
@@ -391,20 +391,20 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 - [x] No admin route calls `/auth/register`
 - [x] Admin build passes with no dead imports
 - [x] Admin only offers sign-in
-- [x] `node scripts/create-admin.js --email … --name …` creates a working admin that can log in and receive an admin JWT
+- [x] `node scripts/create-admin.js --email � --name �` creates a working admin that can log in and receive an admin JWT
 
 ---
 
-## SEC-006 — Hard-coded JWT fallback secrets in source
+## SEC-006 � Hard-coded JWT fallback secrets in source
 
 **Priority:** P0
-**Evidence:** `kredibble-backend/src/config/env.js` — fallback literals for the JWT secrets; validation only rejects those exact literals
+**Evidence:** `kredibble-backend/src/config/env.js` � fallback literals for the JWT secrets; validation only rejects those exact literals
 
 **Risk:** The production guard only blocks the exact placeholder strings. A weak or truncated real secret sails through, and the fallbacks remain a working credential for anyone who reads the repo. Separately, `AGENTS.md` mandates a separate `ADMIN_JWT_SECRET`, which does not exist yet.
 
 **Fix:**
-1. Delete the fallback literals. Missing secret ⇒ fail fast at import time in **all** environments except test.
-2. Enforce a minimum strength check: length ≥ 32 characters and not a member of a small denylist (`secret`, `changeme`, `password`, `test`, the previous literals).
+1. Delete the fallback literals. Missing secret ? fail fast at import time in **all** environments except test.
+2. Enforce a minimum strength check: length = 32 characters and not a member of a small denylist (`secret`, `changeme`, `password`, `test`, the previous literals).
 3. Add `ADMIN_JWT_SECRET` as a separate required secret, and validate it in production. It must differ from `JWT_SECRET` (see SEC-040).
 4. In test, allow an explicit override via `NODE_ENV=test` and a short fixed value.
 5. Verify no secret appears in `swagger.json`, Postman collection, or any MD doc.
@@ -418,15 +418,15 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-## SEC-007 — Mass assignment via `req.body` spread
+## SEC-007 � Mass assignment via `req.body` spread
 
 **Priority:** P0
-**Evidence:** `kredibble-backend/src/routes/index.js` — `create`/`update` handlers in `collectionRoutes` pass the request body to the model
+**Evidence:** `kredibble-backend/src/routes/index.js` � `create`/`update` handlers in `collectionRoutes` pass the request body to the model
 
 **Risk:** Any authenticated caller can set fields the UI never exposes: `role`, `passwordHash`, `verified`, `rating`, `moderationStatus`, `applicantsCount`, `_id`, timestamps. Once SEC-002 lands, this becomes the authenticated privilege-escalation path.
 
 **Fix:**
-1. Add a per-model field allowlist next to the model definitions: `export const writableFields = ['title', 'type', …]`.
+1. Add a per-model field allowlist next to the model definitions: `export const writableFields = ['title', 'type', �]`.
 2. In `collectionRoutes`, build the payload explicitly: `pick(body, model.writableFields)`. Never spread `req.body`.
 3. Reject requests containing any key outside the allowlist with 422, listing the offending keys. Failing loudly beats silently dropping them.
 4. Strip keys matching `__proto__`, `constructor`, `prototype` before `pick`, to blunt prototype pollution.
@@ -440,16 +440,16 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-# P1 — Launch Blockers
+# P1 � Launch Blockers
 
-## SEC-008 — Weak password policy
+## SEC-008 � Weak password policy
 
 **Priority:** P1
-**Evidence:** `kredibble-backend/src/schemas/auth.js` — `password: z.string().min(6)`; complexity regexes present but commented out
+**Evidence:** `kredibble-backend/src/schemas/auth.js` � `password: z.string().min(6)`; complexity regexes present but commented out
 
 **Fix:**
 1. Enforce `min(10)`, `max(128)`, at least one lowercase, one uppercase, and one digit; reject the 25 most common passwords.
-2. Set `bcrypt` cost to 12 (already correct — keep it).
+2. Set `bcrypt` cost to 12 (already correct � keep it).
 3. Normalize to `NFKC` before hashing so visually identical passwords behave predictably.
 4. Mirror the rule in the client forms so users get inline feedback instead of a server round-trip.
 5. Log a metric (not the password) on rejection for abuse detection.
@@ -462,10 +462,10 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-## SEC-009 — 7-day JWT, no refresh or rotation
+## SEC-009 � 7-day JWT, no refresh or rotation
 
 **Priority:** P1
-**Evidence:** `kredibble-backend/src/middleware/auth.js` — `expiresIn: '7d'`
+**Evidence:** `kredibble-backend/src/middleware/auth.js` � `expiresIn: '7d'`
 
 **Risk:** A stolen token is valid for a week and cannot be revoked. A demoted or banned user keeps admin access until expiry.
 
@@ -473,24 +473,24 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 1. Reduce the access token to 15 minutes.
 2. Add a refresh token (30 days, opaque, hashed at rest) stored per user; issue it from `/auth/login` and rotate it on every refresh.
 3. Add `/auth/refresh` and `/auth/logout`. Logout revokes the refresh token server-side.
-4. Add a `tokenVersion` field on `User`, bumped on password change, role change, or forced logout. `requireAuth` rejects tokens whose version is stale — this fixes the stale-role problem for free.
+4. Add a `tokenVersion` field on `User`, bumped on password change, role change, or forced logout. `requireAuth` rejects tokens whose version is stale � this fixes the stale-role problem for free.
 5. Maintain a denylist of revoked refresh tokens with TTL cleanup.
 
 **Acceptance criteria:**
-- [x] Access token ≤ 15 min
+- [x] Access token = 15 min
 - [x] Refresh token (30 days, opaque, SHA-256 hashed at rest) issued on login, rotated on every refresh
 - [x] `/auth/refresh` rotates refresh token, adds old hash to denylist
 - [x] `/auth/logout` revokes current refresh token
-- [ ] `tokenVersion` on User bumped on password/role change; stale tokens rejected — **reopened 2026-10-02:** the comparison in `middleware/auth.js:57` reads `req.auth` before it is assigned, so it never runs; no password/role-change route bumps it either. Tracked as SEC-052.
+- [ ] `tokenVersion` on User bumped on password/role change; stale tokens rejected � **reopened 2026-10-02:** the comparison in `middleware/auth.js:57` reads `req.auth` before it is assigned, so it never runs; no password/role-change route bumps it either. Tracked as SEC-052.
 - [x] Revoked refresh tokens stored with 30-day TTL
 - [x] Access token expiry reduced from 7d to 15m
 
 ---
 
-## SEC-010 — Admin JWT in `localStorage`
+## SEC-010 � Admin JWT in `localStorage`
 
 **Priority:** P1
-**Evidence:** `kredibble-admin/src/lib/api.ts:32-46` — token in `window.localStorage`
+**Evidence:** `kredibble-admin/src/lib/api.ts:32-46` � token in `window.localStorage`
 
 **Risk:** Any XSS in the admin app reads the admin token instantly. Admin panel has the highest blast radius in the system.
 
@@ -509,12 +509,12 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-## SEC-011 — No pagination on list endpoints
+## SEC-011 � No pagination on list endpoints
 
 **Priority:** P1
-**Evidence:** `kredibble-backend/src/routes/index.js` — `Model.find(filter)` with no `limit`
+**Evidence:** `kredibble-backend/src/routes/index.js` � `Model.find(filter)` with no `limit`
 
-**Risk:** Unbounded result sets. One request can pull the entire collection into memory and OOM the process — a trivial single-request DoS.
+**Risk:** Unbounded result sets. One request can pull the entire collection into memory and OOM the process � a trivial single-request DoS.
 
 **Fix:**
 1. Add a shared `parsePagination` helper: `page` (default 1), `limit` (default 20, hard max 100), plus `sort` from a per-model allowlist.
@@ -530,12 +530,12 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-## SEC-012 — User-controlled `$regex`
+## SEC-012 � User-controlled `$regex`
 
 **Priority:** P1
-**Evidence:** `kredibble-backend/src/routes/index.js` — search config interpolates query params into `new RegExp(...)`
+**Evidence:** `kredibble-backend/src/routes/index.js` � search config interpolates query params into `new RegExp(...)`
 
-**Risk:** Malicious patterns cause catastrophic backtracking (ReDoS) — a cheap single-request CPU DoS — and can be used for blind data extraction via timing.
+**Risk:** Malicious patterns cause catastrophic backtracking (ReDoS) � a cheap single-request CPU DoS � and can be used for blind data extraction via timing.
 
 **Fix:**
 1. Escape all regex metacharacters before compiling, or switch to a literal `.toLowerCase().includes()` for non-expert search.
@@ -548,10 +548,10 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-## SEC-013 — Unrestricted upload type and unvalidated `folder`
+## SEC-013 � Unrestricted upload type and unvalidated `folder`
 
 **Priority:** P1
-**Evidence:** `kredibble-backend/src/routes/upload.js` — `multer.memoryStorage()`, only `fileSize` limited; `folder` taken from `req.query`
+**Evidence:** `kredibble-backend/src/routes/upload.js` � `multer.memoryStorage()`, only `fileSize` limited; `folder` taken from `req.query`
 
 **Risk:** Accepts executables, HTML, and SVG (XSS when served), plus polyglot files. The `folder` param is attacker-controlled, letting anyone write into arbitrary Cloudinary folders and collide with other users' asset paths. The 5 MB limit is also per-file with no per-user quota.
 
@@ -565,17 +565,17 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 **Acceptance criteria:**
 - [x] `.svg`, `.html`, `.exe` all rejected (MIME allowlist + magic bytes)
-- [x] `?folder=../other-user` ignored — server derives path from user ID + purpose enum
+- [x] `?folder=../other-user` ignored � server derives path from user ID + purpose enum
 - [x] Uploads land under `kredibble/${userId}/${purpose}` (e.g., `cvs`, `avatars`, `company-logos`, `verification-docs`)
 - [x] Per-user rate limit: 20 uploads/hour
 - [x] 6 regression tests added (no file, disallowed MIME, SVG, HTML, magic bytes mismatch, server-derived folder)
 
 ---
 
-## SEC-014 — Swagger UI served in production
+## SEC-014 � Swagger UI served in production
 
 **Priority:** P1
-**Evidence:** `kredibble-backend/src/app.js` — Swagger mounted alongside the API routes
+**Evidence:** `kredibble-backend/src/app.js` � Swagger mounted alongside the API routes
 
 **Risk:** Publishes the full attack surface: every route, parameter, and schema. Removes all reconnaissance effort.
 
@@ -590,27 +590,27 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-## SEC-015 — Duplicate router mount breaks rate limiting
+## SEC-015 � Duplicate router mount breaks rate limiting
 
 **Priority:** P1
-**Evidence:** `kredibble-backend/src/app.js` — `apiRouter` mounted at both `/` and `/api`, with a global limiter already applied to `/api`
+**Evidence:** `kredibble-backend/src/app.js` � `apiRouter` mounted at both `/` and `/api`, with a global limiter already applied to `/api`
 
 **Risk:** Every request consumes the limiter budget twice, halving the effective rate limit, and doubles the router's memory/CPU cost. It also creates two live URLs for one resource, so route guards must be maintained in two places.
 
 **Fix:**
 1. Mount `apiRouter` exactly once, at `/api`.
 2. Keep a root `GET /` health banner that does not consume the API limiter.
-3. Re-verify the limiter applies exactly once per request — assert with a test that counts `X-RateLimit-Remaining` decrements.
+3. Re-verify the limiter applies exactly once per request � assert with a test that counts `X-RateLimit-Remaining` decrements.
 
 **Acceptance criteria:**
 - [x] Single mount point; a test proves one limiter decrement per request
 
 ---
 
-## SEC-016 — Clients fall back to plaintext HTTP
+## SEC-016 � Clients fall back to plaintext HTTP
 
 **Priority:** P1
-**Evidence:** `kredibble-app/src/lib/api.ts:21-24` and `kredibble-admin/src/lib/api.ts:17` — localhost fallbacks
+**Evidence:** `kredibble-app/src/lib/api.ts:21-24` and `kredibble-admin/src/lib/api.ts:17` � localhost fallbacks
 
 **Risk:** A misconfigured production build silently ships over plaintext HTTP, exposing JWTs and PII to any network observer.
 
@@ -627,7 +627,7 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 
 ---
 
-## SEC-017 — No audit log
+## SEC-017 � No audit log
 
 **Priority:** P1
 **Evidence:** No logging middleware in `kredibble-backend/src/app.js`; `morgan` is a dependency but only for access logs
@@ -635,7 +635,7 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 **Risk:** Privilege escalation, bulk data export, and destructive changes leave no forensic trail. Blocks incident response and any compliance claim.
 
 **Fix:**
-1. Add a structured logger (Pino) with request ID propagation — this also closes SEC-039.
+1. Add a structured logger (Pino) with request ID propagation � this also closes SEC-039.
 2. Emit an audit record for: login success/failure, logout, refresh, registration, role change, password change, all admin mutations, verification decisions, report resolution, bulk export, and deletion.
 3. Record `actorId`, `actorRole`, `action`, `resourceType`, `resourceId`, `ip`, `userAgent`, `requestId`, `outcome`. Never log tokens, passwords, or PII bodies.
 4. Store audit records in a dedicated append-only collection with a TTL-based retention policy and an index on `actorId` + `createdAt`.
@@ -649,14 +649,14 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 - Instrumented special nested routes: applications, grant applications, event bookings, channel posts, verification docs, saved items
 
 **Acceptance criteria:**
-- ✅ Every item in the list above produces a queryable audit record with no secrets in the payload
-- ✅ 77/77 backend tests pass
-- ✅ Admin lint clean
-- ✅ Request ID propagated via `X-Request-Id` header (SEC-039)
+- ? Every item in the list above produces a queryable audit record with no secrets in the payload
+- ? 77/77 backend tests pass
+- ? Admin lint clean
+- ? Request ID propagated via `X-Request-Id` header (SEC-039)
 
 ---
 
-## SEC-018 — Test suite is empty
+## SEC-018 � Test suite is empty
 
 **Priority:** P1
 **Evidence:** `kredibble-backend/package.json` configures Jest + `mongodb-memory-server` + `supertest`, but no test files exist. `kredibble-admin` has Playwright configured; `kredibble-app` has no test runner at all.
@@ -668,7 +668,7 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 2. Backend integration tests against `mongodb-memory-server`: each P0 task gets a regression test (auth rejection, 401/403 matrix, mass-assignment 422, refresh rotation, upload MIME rejection).
 3. A route-manifest test that walks the Express router stack and fails on any mutating route without auth, and on any route missing from the documented allowlist.
 4. Socket tests: handshake auth accept/deny, origin allow/deny, cross-user room isolation.
-5. Admin: Playwright smoke — login, redirect when unauthenticated, dashboard render, logout.
+5. Admin: Playwright smoke � login, redirect when unauthenticated, dashboard render, logout.
 6. Mobile: add a runner (Jest + `jest-expo`) and cover `api.ts` URL resolution, token storage, and the auth context.
 
 **Implementation:**
@@ -680,83 +680,83 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 - Test files excluded from main TypeScript check via tsconfig.json exclude
 
 **Acceptance criteria:**
-- ✅ >80% line coverage on auth, upload, and PII routes (backend)
-- ✅ Every P0 task has a named regression test
-- ❌ Backend: **92/102 on `main` @ `3ffc51d` (10 failing, 2026-10-02)** — SEC-071
-- ⚠️ Admin Playwright: 12 tests written, but CI starts no servers (`webServer` commented out) so they cannot pass — SEC-070
-- ✅ Mobile Jest: 20 tests pass (re-verified 2026-10-02)
-- ❌ Suite is green in CI — backend `npm ci` fails (SEC-066), mobile lint failures are masked by `|| echo` (SEC-070)
+- ? >80% line coverage on auth, upload, and PII routes (backend)
+- ? Every P0 task has a named regression test
+- ? Backend: **92/102 on `main` @ `3ffc51d` (10 failing, 2026-10-02)** � SEC-071
+- ?? Admin Playwright: 12 tests written, but CI starts no servers (`webServer` commented out) so they cannot pass � SEC-070
+- ? Mobile Jest: 20 tests pass (re-verified 2026-10-02)
+- ? Suite is green in CI � backend `npm ci` fails (SEC-066), mobile lint failures are masked by `|| echo` (SEC-070)
 
 ---
 
-# P2 — Hardening
+# P2 � Hardening
 
-## SEC-019 — No API versioning
+## SEC-019 � No API versioning
 Add `/api/v1` as a versioned prefix, keep the unversioned path as a temporary 301-alias, and log deprecation usage so clients can be migrated. **Done when:** the mobile and admin clients both call `/api/v1` and the old path reports zero traffic over a full release cycle.
 
-## SEC-020 — Tracked `kredibble-app/.env` (narrowed after verification)
-**Original claim was mostly wrong and has been narrowed.** Verified: `kredibble-backend/.env` and `.env.production` are correctly ignored (`kredibble-backend/.gitignore` lines 2–3) and untracked; `kredibble-backend/.env.example` is tracked and holds placeholders only. `.vercel/` is ignored (root `.gitignore` line 9). The seed script with test passwords (`kredibble-backend/scripts/seed-test-credentials.js`) is ignored and its credentials are `@test.com` fixtures. No `.env` appears in history via `git log --all -- '*.env'`.
+## SEC-020 � Tracked `kredibble-app/.env` (narrowed after verification)
+**Original claim was mostly wrong and has been narrowed.** Verified: `kredibble-backend/.env` and `.env.production` are correctly ignored (`kredibble-backend/.gitignore` lines 2�3) and untracked; `kredibble-backend/.env.example` is tracked and holds placeholders only. `.vercel/` is ignored (root `.gitignore` line 9). The seed script with test passwords (`kredibble-backend/scripts/seed-test-credentials.js`) is ignored and its credentials are `@test.com` fixtures. No `.env` appears in history via `git log --all -- '*.env'`.
 
-**What is real:** `kredibble-app/.env` is **tracked and committed** across 4 commits, even though root `.gitignore` lists it — `.gitignore` does not untrack already-tracked files. Its current value is not a secret (`EXPO_PUBLIC_API_URL` is inlined into the client bundle by design; the value is a LAN IP), so there is no credential to rotate. The defect is a committed dev-machine file.
+**What is real:** `kredibble-app/.env` is **tracked and committed** across 4 commits, even though root `.gitignore` lists it � `.gitignore` does not untrack already-tracked files. Its current value is not a secret (`EXPO_PUBLIC_API_URL` is inlined into the client bundle by design; the value is a LAN IP), so there is no credential to rotate. The defect is a committed dev-machine file.
 
-**Fix:** `git rm --cached kredibble-app/.env`, keep the local copy, and confirm it stays ignored. Ship a `kredibble-app/.env.example` placeholder instead. Separately, enforce this in CI: fail the build if any `.env` (excluding `.example`) is tracked. Note that `EXPO_PUBLIC_*` values are **public by design** — never place a real secret behind that prefix, since it ships to clients. **Done when:** `git ls-files kredibble-app/.env` is empty and the CI check fails on a deliberately added tracked `.env`.
+**Fix:** `git rm --cached kredibble-app/.env`, keep the local copy, and confirm it stays ignored. Ship a `kredibble-app/.env.example` placeholder instead. Separately, enforce this in CI: fail the build if any `.env` (excluding `.example`) is tracked. Note that `EXPO_PUBLIC_*` values are **public by design** � never place a real secret behind that prefix, since it ships to clients. **Done when:** `git ls-files kredibble-app/.env` is empty and the CI check fails on a deliberately added tracked `.env`.
 
-## SEC-021 — Dev server runs with no database
+## SEC-021 � Dev server runs with no database
 `src/server.js` continues without a live Mongo connection in development, so every request fails later and further from the cause. Make connection failure fatal everywhere, keep the actionable hint from `src/lib/mongodb.js`, and gate the hint behind `!env.isProduction` so internal topology never leaks. **Done when:** booting with a bad `DATABASE_URL` exits non-zero with a clear message.
 
-## SEC-022 — Over-broad CORS
-`src/app.js` allows any `*.vercel.app` and `*.onrender.com` host — a stranger's preview deployment qualifies. Replace wildcards with an explicit `CORS_ORIGIN` list; fall back to the local dev origins only when `!env.isProduction`. Also drop the `null` and `file://` allowances unless a specific client requires them. **Acceptance criteria:**
+## SEC-022 � Over-broad CORS
+`src/app.js` allows any `*.vercel.app` and `*.onrender.com` host � a stranger's preview deployment qualifies. Replace wildcards with an explicit `CORS_ORIGIN` list; fall back to the local dev origins only when `!env.isProduction`. Also drop the `null` and `file://` allowances unless a specific client requires them. **Acceptance criteria:**
 - [x] A third-party Vercel URL is rejected by both HTTP and Socket.
 
-## SEC-023 — PII leakage through generic reads
+## SEC-023 � PII leakage through generic reads
 Once SEC-002 is closed, ensure reads project safe fields only: seeker `phone`, hirer `companyEmail`/`recruiterPhone`/`recruiterEmail`, applicant `resumeUrl`, and `User.email` should not be in the default public projection. Return a reduced shape for non-owner, non-admin readers. **Done when:** a seeker fetching another seeker's profile cannot obtain a phone number.
 
-## SEC-024 — Missing rate limits
+## SEC-024 � Missing rate limits
 Add limits for: registration (5/hour per IP), upload (20/hour per user), search (60/15min), password reset (3/hour), and the AI/expensive endpoints. Use a shared store (Redis) rather than in-memory counters so limits hold across instances. **Done when:** each listed route returns 429 at its threshold under a load test.
 
-## SEC-025 — No account lockout
+## SEC-025 � No account lockout
 Add per-account and per-IP failure counters with exponential backoff plus a temporary lock and a security notification, rather than a hard account lockout that enables denial-of-service against a known user. Keep the existing 20/15min limiter as the outer layer. **Done when:** sustained failed logins trigger lockout and an audit record, while a legitimate user is not permanently locked out.
 
-## SEC-026 — Client-supplied `userId` trusted
+## SEC-026 � Client-supplied `userId` trusted
 `kredibble-app/src/lib/api.ts` passes `userId` to `/users/:id/saved` and `/notifications?userId=`, and passes `id` to `/seekers/:id` and `/hirers/:id`. The server must derive identity from the JWT and reject any mismatch. Ideally remove `userId` from the client contract entirely. **Done when:** a seeker cannot read or mutate another seeker's saved items, notifications, or profile.
 
-## SEC-027 — `passwordHash` reachable via generic update
+## SEC-027 � `passwordHash` reachable via generic update
 Prevented by SEC-007's allowlist, plus add an explicit `pre('save')` hook that re-hashes a plaintext `password` and a `strict: 'throw'` schema option so unknown writes fail loudly. **Done when:** no code path outside the auth service can set `passwordHash`.
 
-## SEC-028 — No email normalization
+## SEC-028 � No email normalization
 Lowercase and trim email on both registration and login, and store a separate `emailNormalized` with a unique index so `A@x.com` and `a@x.com` cannot become two accounts. **Done when:** the second registration attempt returns 409.
 
-## SEC-029 — No GDPR/CCPA data export or deletion
+## SEC-029 � No GDPR/CCPA data export or deletion
 Add `GET /api/auth/me/export` (full JSON archive) and `DELETE /api/auth/me` (cascade delete across User, Seeker/Hirer, Applicant, VerificationDoc, Notification, RefreshToken, Community posts, Cloudinary assets). Require recent re-authentication, require `ADMIN_JWT_SECRET`-scoped approval for a grace period, and keep a tombstone for legal retention. **Done when:** export and delete both pass a scripted end-to-end test.
 
 ---
 
-# P3 — Code Quality & Performance
+# P3 � Code Quality & Performance
 
 | ID | Fix | Done when |
 |----|-----|-----------|
 | SEC-030 | Replace every `console.log` in `src/socket.js` and `src/lib/mongodb.js` with the structured logger; never log secrets or full connection strings (keep the existing mask). | `rg 'console\.log' src` returns nothing outside an allowlisted dev script |
 | SEC-031 | Add indexes for search paths: `Opportunity.title`, `SeekerProfile.profession`, `Candidate.skills`, `Article.title` (text index), `Notification.userId + createdAt`. Ship a `db:indexes` script that creates them idempotently. | `explain()` on each search uses `IXSCAN`, no collection scan |
-| SEC-032 | Eliminate N+1 in populated reads — batch with `$lookup`/aggregation or `populate` on the root query, and select only needed fields. | `/opportunities` with populated hirers issues a constant number of queries |
+| SEC-032 | Eliminate N+1 in populated reads � batch with `$lookup`/aggregation or `populate` on the root query, and select only needed fields. | `/opportunities` with populated hirers issues a constant number of queries |
 | SEC-033 | Add a strict CSP and `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy` in `kredibble-admin/next.config.js`. | `curl -I` on the admin origin returns all four headers |
-| SEC-034 | Enable `strict`, `noUncheckedIndexedAccess`, and `noImplicitOverride` in the mobile `tsconfig.json`; remove the remaining `any` types from `kredibble-app/src/lib/api.ts` (there are many — replace with real response types). | `npx tsc --noEmit` clean with `strict` on |
+| SEC-034 | Enable `strict`, `noUncheckedIndexedAccess`, and `noImplicitOverride` in the mobile `tsconfig.json`; remove the remaining `any` types from `kredibble-app/src/lib/api.ts` (there are many � replace with real response types). | `npx tsc --noEmit` clean with `strict` on |
 | SEC-035 | Remove the unused root `package.json` (`cuid`, `uuid`) or make the root a real workspace root with a `workspaces` field. | Root installs no orphan dependencies |
-| SEC-036 | Make grant allocation (`allocated += requestedAmount`) and applicant/event counters atomic — use `findOneAndUpdate` with a conditional guard plus a transaction, and enforce `allocated <= fundingPool` server-side. | Concurrent applications cannot overspend a grant pool or double-count attendees — **⚠️ Reopened 2026-10-02: not implemented on `main`; see SEC-060 / SEC-059** |
-| SEC-037 | `technicalSkills`, `softSkills`, `tools`, `certifications`, `experienceLevels`, `skills` are stored as `String` with a `'[]'` default. Convert to `String[]` with a migration script, or the UI's array data is silently unusable and unsearchable. | A saved skills array round-trips as an array and is searchable — **⚠️ Reopened 2026-10-02: models still declare `{ type: String, default: '[]' }` and `parseJson`/`stringifyArrayFields`/`withParsed*` are still in `routes/index.js`; registration stores `"[\"React\",\"Node\"]"` as a string** |
+| SEC-036 | Make grant allocation (`allocated += requestedAmount`) and applicant/event counters atomic � use `findOneAndUpdate` with a conditional guard plus a transaction, and enforce `allocated <= fundingPool` server-side. | Concurrent applications cannot overspend a grant pool or double-count attendees � **?? Reopened 2026-10-02: not implemented on `main`; see SEC-060 / SEC-059** |
+| SEC-037 | `technicalSkills`, `softSkills`, `tools`, `certifications`, `experienceLevels`, `skills` are stored as `String` with a `'[]'` default. Convert to `String[]` with a migration script, or the UI's array data is silently unusable and unsearchable. | A saved skills array round-trips as an array and is searchable � **?? Reopened 2026-10-02: models still declare `{ type: String, default: '[]' }` and `parseJson`/`stringifyArrayFields`/`withParsed*` are still in `routes/index.js`; registration stores `"[\"React\",\"Node\"]"` as a string** |
 | SEC-038 | `socket.on('join_user', userId)` lets any client join any user's private room. Restrict to `socket.data.user.id`, and check channel membership before `join_channel`. | A client cannot subscribe to another user's private room |
 | SEC-039 | Add a request correlation ID (`crypto.randomUUID()`) propagated through responses (`X-Request-Id`) and the audit log, so a user-reported failure maps to server logs. | Every response carries `X-Request-Id`; logs are searchable by it |
-| SEC-040 | Issue admin tokens with a distinct audience claim signed by `ADMIN_JWT_SECRET`, and have `requireRole('admin')` require that audience — so a stolen user token cannot be replayed against the admin panel and vice versa. | ✅ Done |
+| SEC-040 | Issue admin tokens with a distinct audience claim signed by `ADMIN_JWT_SECRET`, and have `requireRole('admin')` require that audience � so a stolen user token cannot be replayed against the admin panel and vice versa. | ? Done |
 
 ---
 
-# 2026-10-02 Production-Readiness Audit — Reopened & New Tasks
+# 2026-10-02 Production-Readiness Audit � Reopened & New Tasks
 
 **Source:** `PRODUCTION-READINESS-AUDIT.md` (narrative + evidence). **Baseline:** `main` @ `3ffc51d` (merge of PR #18).
 **Method:** full read of all three apps; `npm test` / lint / `tsc` / `next build` / `npm audit` in each app; the real `src/app.js` + `src/socket.js` run against `mongodb-memory-server` (`NODE_ENV=development`, no `.env`, limiters active) with a ~40-check HTTP + Socket.io probe; anonymous read-only requests to the two deployed backends. "Probe" below always refers to that run.
 
 ## Reopened items
 
-These were ticked ✅ but are not true of `main`. Their original cards stay for history; the linked task owns the fix.
+These were ticked ? but are not true of `main`. Their original cards stay for history; the linked task owns the fix.
 
 | Task | Was marked | Actual state on `main` @ `3ffc51d` | Now tracked by |
 |------|-----------|-------------------------------------|----------------|
@@ -765,33 +765,33 @@ These were ticked ✅ but are not true of `main`. Their original cards stay for 
 | SEC-018 | Done ("suite green in CI") | 92/102 passing; admin e2e cannot run in CI; mobile lint masked | SEC-070, SEC-071 |
 | SEC-019 | Done | Clients still call `/api`; live Vercel host has no `/api/v1` | SEC-069 |
 | SEC-023 | Done | Bypassed via `emailNormalized`, v1 populate, and both search routes | SEC-054, SEC-055 |
-| SEC-024 | Done | Key generator returns the request object — no limit is ever reached | SEC-049 |
+| SEC-024 | Done | Key generator returns the request object � no limit is ever reached | SEC-049 |
 | SEC-025 | Done | `lockUntil` set but never saved; admin login has no lockout | SEC-050 |
 | SEC-029 | Done ("7-year tombstone") | Tombstone never persisted; media and owned content kept; token still valid | SEC-065 |
 | SEC-033 | Done | `connect-src 'self'` blocks the API; `unsafe-inline`/`unsafe-eval` allowed | SEC-073, SEC-079 |
 | SEC-036 | Done | No allocation code exists in either router | SEC-060 |
 | SEC-037 | Done | Fields still `String` with `'[]'`; parse helpers still used | SEC-037 (reopened in place) |
 
-## Verified working on 2026-10-02 — do not regress
+## Verified working on 2026-10-02 � do not regress
 
-- Register/login happy path; `role: "admin"` self-registration → 400; password policy enforced.
+- Register/login happy path; `role: "admin"` self-registration ? 400; password policy enforced.
 - Socket.io: anonymous handshake rejected; `join_user` pinned to the caller; `send_message` only into joined rooms.
-- Ownership on seeker/hirer profiles and opportunities (non-owner PATCH/DELETE → 403).
+- Ownership on seeker/hirer profiles and opportunities (non-owner PATCH/DELETE ? 403).
 - Upload: MIME allowlist + magic bytes + `file-type`, server-derived folder, 5 MB cap.
-- 1 MB JSON limit → 413; malformed JSON → 400; malformed ObjectId → 400.
+- 1 MB JSON limit ? 413; malformed JSON ? 400; malformed ObjectId ? 400.
 - Helmet + HSTS, `X-Request-Id`, production CORS allowlist, production secrets fail closed and must differ.
 - Backend `npm audit --omit=dev`: 0 vulnerabilities. Mobile Jest: 20/20.
 
-## P0 — Reopened Ship Blockers
+## P0 � Reopened Ship Blockers
 
-### SEC-041 — Live Vercel backend serves user records and password hashes anonymously
+### SEC-041 � Live Vercel backend serves user records and password hashes anonymously
 
-**Priority:** P0 — **incident, act today**
-**Evidence (2026-10-02, anonymous `GET`s only — no writes attempted):**
-- `GET https://kredibble-backend.vercel.app/api/users` → **200**, 10 users (6 admin, 1 hirer, 3 seeker), fields `id, name, email, role, passwordHash, createdAt, updatedAt`.
-- `GET …/api/dashboard/summary` → 200 (admin-only on `main`).
-- `GET …/api/v1/health` → 404, so this deployment predates SEC-019 and is not running `main`.
-- `GET …/api/health` → `database: connected`. The test admin that the Progress Log says was created "against production DB" appears in the user list.
+**Priority:** P0 � **incident, act today**
+**Evidence (2026-10-02, anonymous `GET`s only � no writes attempted):**
+- `GET https://kredibble-backend.vercel.app/api/users` ? **200**, 10 users (6 admin, 1 hirer, 3 seeker), fields `id, name, email, role, passwordHash, createdAt, updatedAt`.
+- `GET �/api/dashboard/summary` ? 200 (admin-only on `main`).
+- `GET �/api/v1/health` ? 404, so this deployment predates SEC-019 and is not running `main`.
+- `GET �/api/health` ? `database: connected`. The test admin that the Progress Log says was created "against production DB" appears in the user list.
 - `kredibble-admin/.env.production` points at this host.
 
 **Risk:** Offline cracking of every bcrypt hash; the README advertises seeded `password123` accounts, which fall instantly. Pre-SEC-002 code allowed anonymous writes, including `role`, so the database may already be tampered with. The pre-SEC-006 build may still sign tokens with the hardcoded fallback secrets, so tokens could be forged against it.
@@ -822,10 +822,10 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 
 ---
 
-### SEC-042 — Apply / grant-apply / verification-doc upload return 500 after saving
+### SEC-042 � Apply / grant-apply / verification-doc upload return 500 after saving
 
 **Priority:** P0
-**Evidence:** `src/lib/audit.js:86` calls `logger.error`, but `audit.js` never imports `logger`. `routes/index.js:774,798,821` pass `AUDIT_ACTIONS.CREATE`, which is not defined, so `AuditLog.create` fails validation. The catch block then throws `ReferenceError: logger is not defined`, and `asyncHandler` turns that into a 500. Probe: `POST /api/v1/opportunities/:id/applicants` → 500 while the `Applicant` row is saved; a retry saves a second row. Same for `POST /grants/:id/applications` and `POST /verification/companies/:id/documents`, on both `/api/v1` and `/api`.
+**Evidence:** `src/lib/audit.js:86` calls `logger.error`, but `audit.js` never imports `logger`. `routes/index.js:774,798,821` pass `AUDIT_ACTIONS.CREATE`, which is not defined, so `AuditLog.create` fails validation. The catch block then throws `ReferenceError: logger is not defined`, and `asyncHandler` turns that into a 500. Probe: `POST /api/v1/opportunities/:id/applicants` ? 500 while the `Applicant` row is saved; a retry saves a second row. Same for `POST /grants/:id/applications` and `POST /verification/companies/:id/documents`, on both `/api/v1` and `/api`.
 
 **Risk:** The core seeker action reports failure while silently succeeding, so users retry and create duplicate applications. Audit logging, which must never break a request, breaks three of them.
 
@@ -833,9 +833,9 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 1. Add `import logger from './logger.js';` to `src/lib/audit.js`.
 2. Replace `AUDIT_ACTIONS.CREATE` with the existing `APPLICATION_SUBMIT`, `GRANT_APPLY` and `UPLOAD`. Add a test that every `AUDIT_ACTIONS.*` reference in `src/` resolves to a defined value.
 3. Make `auditLog` truly non-throwing: guard the logger call too, and don't `await` audit writes on the request path (fire-and-forget with `.catch`).
-4. Add ESLint with `no-undef` to the backend (it has no lint today — SEC-070) so an unimported identifier fails CI.
+4. Add ESLint with `no-undef` to the backend (it has no lint today � SEC-070) so an unimported identifier fails CI.
 
-**Verify:** integration tests. A seeker applies → 201 and exactly one `Applicant` row. A grant application → 201. A verification document → 201.
+**Verify:** integration tests. A seeker applies ? 201 and exactly one `Applicant` row. A grant application ? 201. A verification document ? 201.
 
 **Acceptance criteria:**
 - [ ] All three routes return 201 on `/api/v1` and on legacy `/api`
@@ -845,10 +845,10 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 
 ---
 
-### SEC-043 — Community channel post routes are missing from the mounted router
+### SEC-043 � Community channel post routes are missing from the mounted router
 
 **Priority:** P0
-**Evidence:** `POST`/`GET /community/channels/:channelId/posts` exist only on the module-level `apiRouter` (`routes/index.js:492-520`), which is never mounted. `app.js` mounts `createApiRouter()` (`routes/index.js:662-966`), which omits them. Probe: both verbs → 404 on `/api/v1` and `/api`. The mobile app's `createChannelPost` and `getChannelPosts` (`kredibble-app/src/lib/api.ts:237-246`) call them. The dead `apiRouter` is a divergent ~300-line copy: it also holds the dashboard shape the admin UI expects (SEC-046), and at line 503 it references `logger` without importing it.
+**Evidence:** `POST`/`GET /community/channels/:channelId/posts` exist only on the module-level `apiRouter` (`routes/index.js:492-520`), which is never mounted. `app.js` mounts `createApiRouter()` (`routes/index.js:662-966`), which omits them. Probe: both verbs ? 404 on `/api/v1` and `/api`. The mobile app's `createChannelPost` and `getChannelPosts` (`kredibble-app/src/lib/api.ts:237-246`) call them. The dead `apiRouter` is a divergent ~300-line copy: it also holds the dashboard shape the admin UI expects (SEC-046), and at line 503 it references `logger` without importing it.
 
 **Fix:**
 1. Delete the module-level `apiRouter`, keeping a single `createApiRouter()`.
@@ -856,37 +856,37 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 3. Add a client-contract test: list every path in `kredibble-app/src/lib/api.ts` and `kredibble-admin/src/lib/api.ts`, and fail if any returns 404 for an authorised caller.
 
 **Acceptance criteria:**
-- [ ] `POST /api/v1/community/channels/:id/posts` → 201; `GET` → 200, paginated
+- [ ] `POST /api/v1/community/channels/:id/posts` ? 201; `GET` ? 200, paginated
 - [ ] Exactly one router definition remains in `routes/index.js`
 - [ ] Contract test fails when a path the clients call is missing
 
 ---
 
-### SEC-049 — Rate-limiter key generator is wrong, so no limit is ever reached
+### SEC-049 � Rate-limiter key generator is wrong, so no limit is ever reached
 
 **Priority:** P0
-**Evidence:** `src/lib/rate-limiters.js:200` — `keyGenerator: keyGenerator || ipKeyGenerator`. In express-rate-limit 8, `ipKeyGenerator(ip, ipv6Subnet)` normalises an IP **string**. Used directly as a key generator it receives `(req, res)` and returns the request object. Lines 241 and 274 make the same mistake (`ipKeyGenerator(req, { ipv6Subnet: 56 })`). Probe with limiters active: 25 failed logins from one IP → **0 × 429**, and every response reports `RateLimit: limit=20, remaining=19`. The in-memory store gives every request its own bucket. With `REDIS_URL` set, the key would stringify to `rl:<prefix>:[object Object]`: one **global** bucket, so 20 auth requests site-wide would return 429 to every user. The SEC-024 tests missed this because every limiter `skip`s when `NODE_ENV=test`.
+**Evidence:** `src/lib/rate-limiters.js:200` � `keyGenerator: keyGenerator || ipKeyGenerator`. In express-rate-limit 8, `ipKeyGenerator(ip, ipv6Subnet)` normalises an IP **string**. Used directly as a key generator it receives `(req, res)` and returns the request object. Lines 241 and 274 make the same mistake (`ipKeyGenerator(req, { ipv6Subnet: 56 })`). Probe with limiters active: 25 failed logins from one IP ? **0 � 429**, and every response reports `RateLimit: limit=20, remaining=19`. The in-memory store gives every request its own bucket. With `REDIS_URL` set, the key would stringify to `rl:<prefix>:[object Object]`: one **global** bucket, so 20 auth requests site-wide would return 429 to every user. The SEC-024 tests missed this because every limiter `skip`s when `NODE_ENV=test`.
 
 **Risk:** Unlimited credential stuffing, registration spam, verification-email bombing, scraping and upload abuse. Enabling Redis would turn it into a self-inflicted outage.
 
 **Fix:**
 1. `keyGenerator: keyGenerator || ((req) => ipKeyGenerator(req.ip))`.
 2. Per-user limiters: `(req) => req.auth?.sub ?? ipKeyGenerator(req.ip, 56)`. Move `aiLimiter` after `requireAuth` in `routes/assistant.js:9` so `req.auth` exists.
-3. Add a test seam to run limiters in tests. Assert that the 21st login from one IP → 429 while another IP → 200, and that Redis keys contain the client key, not `[object Object]`.
+3. Add a test seam to run limiters in tests. Assert that the 21st login from one IP ? 429 while another IP ? 200, and that Redis keys contain the client key, not `[object Object]`.
 4. Retune for shared NATs. Ghanaian mobile carriers (CGNAT) and campus Wi-Fi put many users behind one IP, and 100 requests per 15 min globally is low even for one active user. Key authenticated traffic by user id, keep IP keys for anonymous auth routes, and raise the global ceiling.
 5. Document that `app.set('trust proxy', 1)` assumes exactly one proxy hop (Render/Vercel). On a bare host `X-Forwarded-For` is spoofable.
 
 **Acceptance criteria:**
-- [ ] 21st `/auth/login` from one IP within 15 min → 429; other IPs unaffected (test with limiters enabled)
+- [ ] 21st `/auth/login` from one IP within 15 min ? 429; other IPs unaffected (test with limiters enabled)
 - [ ] Redis keys look like `rl:<prefix>:<ip-or-user>` (test)
 - [ ] `aiLimiter` and `uploadLimiter` key by user id
 
 ---
 
-### SEC-050 — Account lockout is never persisted; admin login has no lockout
+### SEC-050 � Account lockout is never persisted; admin login has no lockout
 
 **Priority:** P0
-**Evidence:** `src/routes/auth.js:167-184`: when `failedLoginAttempts >= 5` the handler sets `lockUntil`, writes an audit record, and `throw`s **before** `user.save()`. Probe: 7 wrong passwords → `[401,401,401,401,429,429,429]`, DB shows `failedLoginAttempts=4, lockUntil=null`, then the correct password → 200. `/auth/admin/login` (`auth.js:319-369`) has no attempt counter.
+**Evidence:** `src/routes/auth.js:167-184`: when `failedLoginAttempts >= 5` the handler sets `lockUntil`, writes an audit record, and `throw`s **before** `user.save()`. Probe: 7 wrong passwords ? `[401,401,401,401,429,429,429]`, DB shows `failedLoginAttempts=4, lockUntil=null`, then the correct password ? 200. `/auth/admin/login` (`auth.js:319-369`) has no attempt counter.
 
 **Risk:** Combined with SEC-049, online password guessing is unthrottled for every account, admins included.
 
@@ -902,10 +902,10 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 
 ---
 
-### SEC-066 — Backend lockfile out of sync: `npm ci`, Docker, CI and Render deploys fail
+### SEC-066 � Backend lockfile out of sync: `npm ci`, Docker, CI and Render deploys fail
 
 **Priority:** P0
-**Evidence:** `git archive HEAD kredibble-backend` into a clean folder, then `npm ci` → `EUSAGE … Missing: ioredis@5.11.1, rate-limit-redis@6.0.1, @ioredis/commands@1.10.0, cluster-key-slot, debug, denque, redis-errors, redis-parser, standard-as-callback, ms from lock file`. The `Dockerfile` runs `npm ci --omit=dev`, and `ci.yml` and `cd-backend.yml` depend on it. The root npm workspace and root lockfile hid this locally. As of 2026-10-02, uncommitted work on `devops/ci-cd-green` removes workspaces and edits every lockfile; confirm it resolves this.
+**Evidence:** `git archive HEAD kredibble-backend` into a clean folder, then `npm ci` ? `EUSAGE � Missing: ioredis@5.11.1, rate-limit-redis@6.0.1, @ioredis/commands@1.10.0, cluster-key-slot, debug, denque, redis-errors, redis-parser, standard-as-callback, ms from lock file`. The `Dockerfile` runs `npm ci --omit=dev`, and `ci.yml` and `cd-backend.yml` depend on it. The root npm workspace and root lockfile hid this locally. As of 2026-10-02, uncommitted work on `devops/ci-cd-green` removes workspaces and edits every lockfile; confirm it resolves this.
 
 **Fix:**
 1. Regenerate `kredibble-backend/package-lock.json` inside `kredibble-backend`, with no workspace root above it, using npm 10.x (what `node:20-alpine` ships).
@@ -924,10 +924,10 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 
 ---
 
-### SEC-067 — Admin production build fails
+### SEC-067 � Admin production build fails
 
 **Priority:** P0
-**Evidence:** `next build` → type error at `kredibble-admin/src/app/(dashboard)/opportunities/page.tsx:47` (`data as Opportunity[]` from `Record<string, unknown>[]`). The SEC-033 log entry called it "pre-existing", but it was never tracked. No admin deploy can succeed.
+**Evidence:** `next build` ? type error at `kredibble-admin/src/app/(dashboard)/opportunities/page.tsx:47` (`data as Opportunity[]` from `Record<string, unknown>[]`). The SEC-033 log entry called it "pre-existing", but it was never tracked. No admin deploy can succeed.
 
 **Fix:** Give `getOpportunities()` a real return type (a shared `Opportunity` type), or validate the response with a schema. Add `npm run build` to the admin CI job.
 
@@ -937,7 +937,7 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 
 ---
 
-### SEC-068 — Production boot requires keys the deploy config does not provide
+### SEC-068 � Production boot requires keys the deploy config does not provide
 
 **Priority:** P0
 **Evidence:** `src/config/env.js:99-104` throws in production when the OpenAI/Anthropic key or the Resend config is missing. `render.yaml` sets only `NODE_ENV, DATABASE_URL, JWT_SECRET, ADMIN_JWT_SECRET, CORS_ORIGIN, PORT`. Reproduced: `BOOT FAILS: CRITICAL ERROR: the configured openai API key is missing.` The AI route isn't mounted (SEC-045), so the key guards a feature that doesn't exist.
@@ -953,7 +953,7 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 
 ---
 
-### SEC-080 — Mobile app never refreshes tokens; sessions die after 15 minutes
+### SEC-080 � Mobile app never refreshes tokens; sessions die after 15 minutes
 **Reopened 2026-10-03:** `kredibble-app/src/lib/api.ts:109` refreshes only when `payload.error.message === 'jwt expired'`, but the API's 401 message is "Authentication token is invalid or expired" (`middleware/auth.js`), so the refresh never fires. Fix in Plan 3: refresh on any 401 from an authenticated request (once), or have the API send a stable error code.
 
 **Priority:** P0
@@ -974,43 +974,43 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 
 ---
 
-## P1 — Launch Blockers (new)
+## P1 � Launch Blockers (new)
 
-### SEC-044 — Notifications are always empty for users
-**Evidence:** `routes/index.js:200-202` forces `filter.userId = req.auth.sub` for non-admins, but the `Notification` schema (`models/Content.js`) has no `userId`; notifications are broadcast by `audience`. Probe: admin creates a notification → 201; seeker `GET /notifications` → 0 items. `GET /notifications/:id` is unscoped. The policy's `createFields` include `type`, `priority`, `isActive`, which the schema doesn't define.
+### SEC-044 � Notifications are always empty for users
+**Evidence:** `routes/index.js:200-202` forces `filter.userId = req.auth.sub` for non-admins, but the `Notification` schema (`models/Content.js`) has no `userId`; notifications are broadcast by `audience`. Probe: admin creates a notification ? 201; seeker `GET /notifications` ? 0 items. `GET /notifications/:id` is unscoped. The policy's `createFields` include `type`, `priority`, `isActive`, which the schema doesn't define.
 **Fix:** For non-admins, filter by `audience` (`all` plus the caller's role, using the values the admin composer actually sends) and by `isActive`. Add a `NotificationDelivery { userId, notificationId, readAt }` collection if per-user read state is needed. Reconcile the schema with `createFields`.
 **Acceptance criteria:**
 - [ ] A seeker sees an `audience: 'all'` notification and not a hirers-only one (test)
 
-### SEC-045 — Admin-portal, AI assistant and news routers are never mounted
-**Evidence:** `adminRouter` (`routes/admin.js`, ~600 lines: vetting, partners, ambassadors, beneficiaries, targets, scorecards, testimonials, monthly reports), `assistantRouter` (`routes/assistant.js`) and `newsRouter` (`routes/news.js`) are exported but never imported. Probe: `/api/v1/admin/dashboard`, `/admin/partners`, `/assistant/chat`, `/news` → 404. Five failing tests in `tests/api.test.js` expect portal behaviour (SEC-071). `adminRouter` also uses user-token `requireAuth`, not the admin cookie (SEC-075). The assistant accepts a client-chosen `provider`.
+### SEC-045 � Admin-portal, AI assistant and news routers are never mounted
+**Evidence:** `adminRouter` (`routes/admin.js`, ~600 lines: vetting, partners, ambassadors, beneficiaries, targets, scorecards, testimonials, monthly reports), `assistantRouter` (`routes/assistant.js`) and `newsRouter` (`routes/news.js`) are exported but never imported. Probe: `/api/v1/admin/dashboard`, `/admin/partners`, `/assistant/chat`, `/news` ? 404. Five failing tests in `tests/api.test.js` expect portal behaviour (SEC-071). `adminRouter` also uses user-token `requireAuth`, not the admin cookie (SEC-075). The assistant accepts a client-chosen `provider`.
 **Fix:** Decide v1 scope (Open Question 8). For what ships, mount it under `/api/v1/admin`, `/api/v1/assistant` and `/api/v1/news` with the right auth, rate limits and manifest coverage, and have the server choose the AI provider. For what doesn't ship, delete the router, its models, its tests and its env requirements (SEC-068).
 **Acceptance criteria:**
 - [ ] Every exported router is either mounted with tests or deleted
 - [ ] No env var is required for an unmounted feature
 
-### SEC-046 — Dashboard summary shape does not match the admin UI
+### SEC-046 � Dashboard summary shape does not match the admin UI
 **Evidence:** The mounted `/dashboard/summary` (`routes/index.js:841-872`) returns `{ users, seekers, hirers, opportunities, applications, events, grants, grantApplications }`. The admin page (`kredibble-admin/src/app/(dashboard)/page.tsx:36-94`) reads `pendingVerifications, pendingOpportunities, activeSeekers, activeHirers, openReports`, so it renders zeros. The dead router (`routes/index.js:353-382`) has the expected shape.
 **Fix:** Return pending queues plus totals, with a TypeScript type shared with the admin client and a contract test.
 **Acceptance criteria:**
 - [ ] The admin dashboard shows non-zero counts against seeded data
 
-### SEC-047 — `Opportunity.hirerId` holds a User id but references `HirerAccount`
-**Evidence:** Create sets `hirerId = req.auth.sub` (`routes/index.js:247-249`, `ownerField: 'hirerId'`), while `models/Platform.js:14` declares `ref: 'HirerAccount'` and v1 populates it (`routes/index.js:725-726`). Probe: `GET /api/v1/opportunities/:id` → `hirerId: null`. `CompanyVerification.hirerId` and `VerificationDoc.companyId` follow the same pattern. Seeded data that uses real `HirerAccount` ids can't be edited by its own hirer.
+### SEC-047 � `Opportunity.hirerId` holds a User id but references `HirerAccount`
+**Evidence:** Create sets `hirerId = req.auth.sub` (`routes/index.js:247-249`, `ownerField: 'hirerId'`), while `models/Platform.js:14` declares `ref: 'HirerAccount'` and v1 populates it (`routes/index.js:725-726`). Probe: `GET /api/v1/opportunities/:id` ? `hirerId: null`. `CompanyVerification.hirerId` and `VerificationDoc.companyId` follow the same pattern. Seeded data that uses real `HirerAccount` ids can't be edited by its own hirer.
 **Fix:** Use `createdBy` (User, already on the schema) for ownership. Keep `hirerId` as the caller's `HirerAccount._id`, looked up server-side. Migrate existing documents and switch `ownerField` to `createdBy`. Open Question 10.
 **Acceptance criteria:**
 - [ ] v1 opportunity detail populates company name and logo
 - [ ] A hirer can edit their own listing; another hirer gets 403 (tests)
 - [ ] A migration script fixes existing documents
 
-### SEC-048 — Moderation is bypassed on opportunity reads
+### SEC-048 � Moderation is bypassed on opportunity reads
 **Evidence:** The `collectionRoutes` list handler (`routes/index.js:175-216`) applies `moderationStatus` only when `?status=` is sent. Probe: a hirer's new `pending` listing is visible to seekers immediately. The failing test "only returns published and vetted opportunities to the public" encodes the intended rule.
 **Fix:** For non-admins, default to `moderationStatus: 'approved'` (plus `vetted: true` if that stays the rule). Owners also see their own pending listings; admins see everything. Decide anonymous read access under Open Question 3.
 **Acceptance criteria:**
 - [ ] The seeker list excludes pending and rejected listings (test)
 - [ ] The owner sees their own pending listing; an admin sees all
 
-### SEC-052 — Access-token revocation (`tokenVersion`) is dead code
+### SEC-052 � Access-token revocation (`tokenVersion`) is dead code
 **Evidence:** `middleware/auth.js:57` compares `payload.tv` with `req.auth?.tokenVersion` before `req.auth` is assigned, so the condition is always false. Probe: after `tokenVersion++` the old token still works, and after `DELETE /auth/me` the deleted user's token returns 200 with `role: deleted`. Admin tokens carry no `tv`, and no password- or role-change route bumps `tokenVersion`.
 **Fix:** After `jwt.verify`, load `{ tokenVersion, role }` for `payload.sub` (cached ~60 s, or in Redis). Reject on a mismatch, on `role: 'deleted'`, or when the user is missing. Add `tv` to admin tokens. Bump `tokenVersion` on password change (SEC-084), password reset (SEC-083), role change, admin force-logout and account deletion.
 **Acceptance criteria:**
@@ -1018,21 +1018,21 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 - [ ] A deleted account's token returns 401 (test)
 - [ ] A role change takes effect without waiting for token expiry
 
-### SEC-054 — Any signed-in user can harvest every user's email
+### SEC-054 � Any signed-in user can harvest every user's email
 **Evidence:** `policies.js:75` sets `users.read: AUTHENTICATED`. `PII_FIELDS.users = ['email']` strips `email` but not `emailNormalized` (`models/User.js:9`, not `select: false`). Probe: a seeker's `GET /api/v1/users?limit=100` returns every user's `emailNormalized`, `role` and `failedLoginAttempts`, admins included.
 **Fix:** Make `/users` list and read admin-only; add a `/users/:id/public` endpoint (name + avatar) if the UI needs one. Set `select: false` on `emailNormalized`, `failedLoginAttempts`, `lockUntil`, `lastFailedLogin` and `tokenVersion`. Switch response shaping from a denylist (`stripSensitive`) to per-resource allowlists of public fields.
 **Acceptance criteria:**
-- [ ] A seeker's `GET /users` → 403 (test)
+- [ ] A seeker's `GET /users` ? 403 (test)
 - [ ] No non-admin response from any list route contains another user's email in any field (sweep test)
 
-### SEC-055 — Email leaked via populate; search routes leak phones and are unpaginated
+### SEC-055 � Email leaked via populate; search routes leak phones and are unpaginated
 **Evidence:** v1 populates `userId` with `select: 'name email avatarUrl'` for seekers and hirers (`routes/index.js:714,717`). Probe: another user's email is returned on `GET /api/v1/seekers/:id`. `/seekers/search` and `/candidates/search` (`routes/index.js:669-701`) skip `stripPiiIfNeeded` (probe: seeker phone numbers visible) and `parsePagination`, so they return the whole collection.
 **Fix:** Populate only `name avatarUrl`. Pass search results through the same PII allowlist and pagination as the list routes. Restrict seeker search to hirers and admins.
 **Acceptance criteria:**
 - [ ] No email in a populated `userId` for non-owners (test)
 - [ ] Search responses carry `meta` and no `phone` for non-owners (test)
 
-### SEC-056 — Applicant IDOR, impersonation and duplicate applications
+### SEC-056 � Applicant IDOR, impersonation and duplicate applications
 **Evidence:** `policies.js:163-170` lets any hirer read, update or delete any applicant, and the nested routes (`routes/index.js:765-791`) never check that the caller owns the opportunity. Probe: hirer B lists hirer A's applicants (CV `resumeUrl` included), sets `status: 'Rejected'` (200) and deletes one (204). `createFields` include `seekerId` and `name`, so a seeker can apply as someone else. The opportunity's existence isn't checked. Dedupe relies on a sparse `(opportunityId, seekerId)` index that is skipped when `seekerId` is omitted; the probe saved duplicates. Hirers can apply too.
 **Fix:**
 1. Reading, updating or deleting an applicant is allowed for the opportunity owner (via SEC-047's `createdBy`) and admins. Applicants can read and withdraw their own applications.
@@ -1041,38 +1041,38 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 4. Only the `seeker` role may apply.
 **Acceptance criteria:**
 - [ ] Hirer B gets 403 reading, patching or deleting hirer A's applicants (tests)
-- [ ] A second application by the same seeker → 409 (test)
-- [ ] Applying to a nonexistent opportunity → 404 (test)
+- [ ] A second application by the same seeker ? 409 (test)
+- [ ] Applying to a nonexistent opportunity ? 404 (test)
 
-### SEC-057 — Community channel/post IDOR and author spoofing
-**Evidence:** In `policies.js:207-224`, channel `update` is `AUTHENTICATED` with no owner check, and `status`/`followers` are writable. Channel `delete` is `[HIRER, ADMIN]` without ownership. Post `update`/`delete` are `AUTHENTICATED` without ownership, and `authorName` is client-supplied. Probe: seeker B renames seeker A's channel to "pwned" (200); hirer B deletes it (204); a post as "Kredibble Official" → 201; another user edits it (200) and deletes it (204). The schemas already have `Channel.createdBy` and `ChannelPost.authorId`, which settles Open Question 6 as option (a).
+### SEC-057 � Community channel/post IDOR and author spoofing
+**Evidence:** In `policies.js:207-224`, channel `update` is `AUTHENTICATED` with no owner check, and `status`/`followers` are writable. Channel `delete` is `[HIRER, ADMIN]` without ownership. Post `update`/`delete` are `AUTHENTICATED` without ownership, and `authorName` is client-supplied. Probe: seeker B renames seeker A's channel to "pwned" (200); hirer B deletes it (204); a post as "Kredibble Official" ? 201; another user edits it (200) and deletes it (204). The schemas already have `Channel.createdBy` and `ChannelPost.authorId`, which settles Open Question 6 as option (a).
 **Fix:** Set `createdBy`, `authorId` and `authorName` server-side. Use `ownerField: 'createdBy'` for channels and `'authorId'` for posts. Remove `followers`, `status` and `postsCount` from user-writable fields. Admins keep moderation override. Legacy posts without `authorId` become admin-only to edit.
 **Acceptance criteria:**
-- [ ] Non-owner PATCH or DELETE of a channel or post → 403 (tests)
+- [ ] Non-owner PATCH or DELETE of a channel or post ? 403 (tests)
 - [ ] `authorName` in the request body is ignored (test)
 
-### SEC-058 — Verification documents are readable by every hirer
-**Evidence:** `policies.js:279-287` sets `verification/documents.read: [HIRER, ADMIN]` with no ownership. The generic `GET /verification/documents` (`routes/index.js:837`) and `GET /verification/companies/:companyId/documents` return every company's documents. `POST …/:companyId/documents` doesn't check that the caller owns `companyId`. Probe: hirer B lists hirer A's business-registration file URL.
+### SEC-058 � Verification documents are readable by every hirer
+**Evidence:** `policies.js:279-287` sets `verification/documents.read: [HIRER, ADMIN]` with no ownership. The generic `GET /verification/documents` (`routes/index.js:837`) and `GET /verification/companies/:companyId/documents` return every company's documents. `POST �/:companyId/documents` doesn't check that the caller owns `companyId`. Probe: hirer B lists hirer A's business-registration file URL.
 **Fix:** Limit reads to the owning hirer and admins. On create, check that `companyId` belongs to the caller's `HirerAccount`. Make the generic list admin-only. Serve the documents through authenticated or signed Cloudinary URLs rather than a public `secure_url`.
 **Acceptance criteria:**
 - [ ] Hirer B cannot list or fetch hirer A's documents (test)
 - [ ] A hirer cannot attach documents to another company's case (test)
 
-### SEC-059 — Event capacity unenforced; attendee emails exposed to any hirer
-**Evidence:** `routes/index.js:918-924` increments `attendeesCount` with no capacity check. Probe: capacity 2, two bookings of 10 → `attendeesCount = 20`. `GET /events/:eventId/attendees` is open to any hirer (`policies.js:189-196`); the probe returned attendee emails. Unknown `eventId`s are accepted.
+### SEC-059 � Event capacity unenforced; attendee emails exposed to any hirer
+**Evidence:** `routes/index.js:918-924` increments `attendeesCount` with no capacity check. Probe: capacity 2, two bookings of 10 ? `attendeesCount = 20`. `GET /events/:eventId/attendees` is open to any hirer (`policies.js:189-196`); the probe returned attendee emails. Unknown `eventId`s are accepted.
 **Fix:** Atomic guard: `Event.findOneAndUpdate({ _id, $expr: { $lte: [{ $add: ['$attendeesCount', qty] }, '$capacity'] } }, { $inc: { attendeesCount: qty } })` before inserting the attendee (in a transaction, or compensating on failure). Return 404 for unknown events. Limit attendee reads to the organiser and admins, and take `email`/`fullName` from the caller's account.
 **Acceptance criteria:**
-- [ ] An over-capacity booking → 409, including under concurrent requests (test)
-- [ ] An unrelated hirer → 403 on the attendee list (test)
+- [ ] An over-capacity booking ? 409, including under concurrent requests (test)
+- [ ] An unrelated hirer ? 403 on the attendee list (test)
 
-### SEC-065 — GDPR deletion is incomplete
+### SEC-065 � GDPR deletion is incomplete
 **Evidence:** `routes/auth.js:550-673` builds a `tombstone` object that is never saved, yet the response claims a tombstone was retained. Cloudinary assets under `kredibble/<userId>/` aren't deleted. Opportunities, channels and verification cases the user created remain. Grant applications are deleted by `applicantEmail`, a field the schema doesn't have. The steps run in `Promise.all` with no transaction, and the access token keeps working (SEC-052).
 **Fix:** Persist a `UserTombstone { userId, emailHash, deletedAt, retentionUntil }`. Delete the user's Cloudinary folder. Decide whether owned content is deleted or anonymised, and implement that. Key cascades on ids, not emails. Run inside a transaction. Bump `tokenVersion`. Add an end-to-end test proving no PII remains.
 **Acceptance criteria:**
 - [x] E2E: after deletion, no collection holds the user's email, phone or name; tombstone persisted; media deletion called (mocked)
 - [x] The deleted user's tokens are rejected
 
-### SEC-069 — Two divergent backend deployments; free tier sleeps; Swagger public
+### SEC-069 � Two divergent backend deployments; free tier sleeps; Swagger public
 **Evidence:**
 - The admin app points at `https://kredibble-backend.vercel.app/api` (old code, SEC-041); the mobile `eas.json` points at `https://kredibble-api.onrender.com/api` (newer code).
 - Vercel is serverless: Socket.io (`initSocket` in `src/server.js`) can't run there, and limiter/lockout state lives per invocation.
@@ -1084,10 +1084,10 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 **Fix:** Pick one always-on host for the API and sockets (Open Question 7). Use custom domains `api.<domain>` and `admin.<domain>` on the same registrable domain (needed for SEC-074). If Vercel is dropped, delete its backend project plus `kredibble-backend/vercel.json` and `api/index.js`. Run separate staging and production environments and databases. Switch both clients to `/api/v1`. Disable Swagger in production. Settle on one domain name.
 **Acceptance criteria:**
 - [ ] Exactly one production API host; both clients use `https://api.<domain>/api/v1`
-- [ ] No cold starts (always-on instance), and `/api-docs` → 404 in production
+- [ ] No cold starts (always-on instance), and `/api-docs` ? 404 in production
 - [ ] A separate staging environment and database exist
 
-### SEC-070 — CI does not gate anything that matters
+### SEC-070 � CI does not gate anything that matters
 **Evidence (`.github/workflows/ci.yml`):**
 - Mobile job: `npm run lint || echo "No lint script yet"` masks 45 lint errors, and no `tsc` runs.
 - Admin job: lint plus Playwright, with no backend or admin server started (`playwright.config.ts:74` has `webServer` commented out) and no `next build`.
@@ -1100,7 +1100,7 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 - [ ] A deliberately broken lint, type, build or test step fails the PR (checked once per app)
 - [ ] CD jobs run only after CI passes
 
-### SEC-071 — Backend suite is red (10 of 102 failing)
+### SEC-071 � Backend suite is red (10 of 102 failing)
 **Evidence:** `npm test` on `3ffc51d`:
 - `tests/api.test.js`, 5 failures: public vetted-opportunity feed; saved-items 403 contract; vet/publish guard message; opportunity view referral tracking; partner auto-close via `/admin/partners`.
 - `tests/socket.integration.test.js`, 2 failures: join and broadcast use fixture channel ids that are not real channels.
@@ -1111,38 +1111,38 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 **Acceptance criteria:**
 - [ ] `npm test` is 100% green in CI on `main`
 
-### SEC-072 — Seekers cannot list their own applications
-**Evidence:** `GET /applicants` → 403 for seekers (`policies.js:164`), and there is no `/users/me/applications`. The mobile `profile/applications.tsx` screen is mock data.
+### SEC-072 � Seekers cannot list their own applications
+**Evidence:** `GET /applicants` ? 403 for seekers (`policies.js:164`), and there is no `/users/me/applications`. The mobile `profile/applications.tsx` screen is mock data.
 **Fix:** Add `GET /api/v1/users/me/applications` (paginated, joined with opportunity title, company and status), and wire the mobile screen.
 **Acceptance criteria:**
 - [ ] A seeker sees exactly their own applications (test, and the screen is wired)
 
-### SEC-073 — Admin CSP blocks every API call
+### SEC-073 � Admin CSP blocks every API call
 **Evidence:** `kredibble-admin/next.config.ts:10` sets `connect-src 'self'`, but the API is a different origin (`NEXT_PUBLIC_API_URL`), so browsers block the login `fetch`.
 **Fix:** Build `connect-src 'self' <API origin>` from `NEXT_PUBLIC_API_URL` at build time, plus the `wss:` origin if the admin uses sockets.
 **Acceptance criteria:**
 - [ ] Admin login works against the deployed API in Chromium, WebKit and Firefox with CSP enforced (Playwright)
 
-### SEC-074 — Admin `SameSite=Strict` cookie cannot cross sites
+### SEC-074 � Admin `SameSite=Strict` cookie cannot cross sites
 **Evidence:** `setAdminCookie` in `middleware/auth.js` sets `SameSite=Strict`. Admin on `*.vercel.app` calling an API on another `*.vercel.app` or `onrender.com` is cross-site, because `vercel.app` is a public suffix, so the cookie is never sent. Third-party-cookie blocking would also defeat `SameSite=None`.
 **Fix:** Host admin and API on one registrable domain (`admin.<domain>` / `api.<domain>`), or proxy `/api/*` through the Next.js app with rewrites so the cookie is first-party. Keep `Strict` + `Secure` + `HttpOnly`, and add CSRF protection if any cookie-authenticated route accepts form posts.
 **Acceptance criteria:**
 - [ ] A signed-in admin's cookie is sent on API requests from the deployed admin origin (Playwright on staging)
 
-### SEC-075 — The admin cookie is only accepted by `/dashboard/summary`
-**Evidence:** Every collection route uses `requireAuth` (Bearer header, user secret). Only `/dashboard/summary` uses `requireAdminAuth`, and `adminRouter` uses `requireAuth` too. Probe with the admin cookie: `GET /verification/companies` → 401 and `GET /opportunities` → 401. The admin UI therefore cannot load verifications or opportunities.
+### SEC-075 � The admin cookie is only accepted by `/dashboard/summary`
+**Evidence:** Every collection route uses `requireAuth` (Bearer header, user secret). Only `/dashboard/summary` uses `requireAdminAuth`, and `adminRouter` uses `requireAuth` too. Probe with the admin cookie: `GET /verification/companies` ? 401 and `GET /opportunities` ? 401. The admin UI therefore cannot load verifications or opportunities.
 **Fix:** Preferred: an `/api/v1/admin/*` namespace guarded only by `requireAdminAuth` (admin secret and audience), which becomes the only surface the admin app calls; this keeps SEC-040's audience separation meaningful. Alternative: a combined guard that accepts either a valid user Bearer token or a valid admin token and normalises both to `req.auth`.
 **Acceptance criteria:**
 - [x] The admin app can list and approve verifications and moderate opportunities using only its cookie (tests)
 - [x] A user Bearer token is rejected on `/api/v1/admin/*` (test)
 
-### SEC-076 — The admin session has no refresh
+### SEC-076 � The admin session has no refresh
 **Evidence:** The admin token and cookie last 15 min (`setAdminCookie` `maxAge`). `/auth/admin/login` returns a refresh token in the JSON body that nothing can use, because there is no admin refresh route. The admin UI decides "logged in" from `localStorage` (`kredibble-admin/src/lib/api.ts:39`), so it keeps rendering while every call fails.
 **Fix:** Add `POST /auth/admin/refresh` backed by a path-scoped httpOnly refresh cookie, and stop returning refresh tokens to the browser in JSON. On the client, try one refresh on 401; otherwise clear the local user and redirect to `/login`. Check the session on layout mount via `/auth/admin/me`.
 **Acceptance criteria:**
 - [x] An admin stays signed in through 1 h of activity, and an expired session redirects to login (Playwright)
 
-### SEC-077 — 20 of ~25 admin pages run on mock data
+### SEC-077 � 20 of ~25 admin pages run on mock data
 **Evidence:** These pages import `src/lib/mock-*.ts`: analytics, community (+ detail), content/articles (+ detail), events (+ detail), grants (+ detail), hirers (+ detail), `opportunities/[id]`, reports (+ detail), seekers (+ detail), staff (+ invite, + detail), `verification/[id]`. Approve, suspend and resolve actions only change in-memory arrays.
 **Fix:** Wire each page to the admin API (SEC-075), deleting its mock file as you go, with empty, error and loading states. Admin mutations must be audit-logged.
 **Status:** Admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents have been added to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. **Seekers and Hirers list/detail pages wired to API.** Remaining work: wire remaining admin pages to API, delete mock files, add loading/error/empty states.
@@ -1150,21 +1150,21 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 - [x] `rg "lib/mock-" kredibble-admin/src/app` returns nothing (all `src/lib/mock-*.ts` deleted)
 - [x] Every admin action persists and appears in `AuditLog` (creates, deletes and, since 1a418c9, every admin update; staff invites audited)
 
-### SEC-078 — Admin Next.js has critical advisories
+### SEC-078 � Admin Next.js has critical advisories
 **Evidence:** `npm audit --omit=dev` in `kredibble-admin`: `next@16.2.10` is critical (RCE in image optimisation and `next/og`, middleware bypass, SSRF, cache confusion); `postcss` and `sharp` are high.
-**Fix:** Upgrade to a patched Next 16 release (≥ 16.3.8 per the advisory) with a matching `eslint-config-next`, then re-run build and e2e.
+**Fix:** Upgrade to a patched Next 16 release (= 16.3.8 per the advisory) with a matching `eslint-config-next`, then re-run build and e2e.
 **Acceptance criteria:**
 - [ ] `npm audit --omit=dev --audit-level=high` is clean in `kredibble-admin`
 
-### SEC-081 — Mobile detail screens are hardcoded; Apply is not wired; lists fall back to fake data
+### SEC-081 � Mobile detail screens are hardcoded; Apply is not wired; lists fall back to fake data
 **Evidence:** `jobs/[id].tsx:22` does `JOBS_DATA.find(...) ?? JOBS_DATA[0]`, so a real job id shows a fake "Wave" posting. `internships/[id].tsx`, `events/[id].tsx` and `grants/[id].tsx` do the same. The jobs Apply button only toggles local state. `jobs/index.tsx:225`, and the internships, grants and events lists, silently render `*_DATA` when the API fails.
 **Fix:** Fetch details by id (`GET /api/v1/opportunities/:id`, `/events/:id`, `/grants/:id`). Wire Apply, Book and Apply-for-grant to the API, with duplicate and closed states. Replace the fake fallbacks with error-and-retry and empty states, and delete the `*_DATA` arrays.
 **Acceptance criteria:**
 - [ ] No `*_DATA` constants remain in `src/app`
 - [ ] Applying from a job detail creates an application that appears in SEC-072
 
-### SEC-083 — Forgot-password flow is UI-only
-**Evidence:** `(auth)/login.tsx:471-601` steps through `email → verify → reset → success` without any API call, and the backend has no reset endpoint. Users are told their password was reset when it wasn't.
+### SEC-083 � Forgot-password flow is UI-only
+**Evidence:** `(auth)/login.tsx:471-601` steps through `email ? verify ? reset ? success` without any API call, and the backend has no reset endpoint. Users are told their password was reset when it wasn't.
 **Fix:**
 - Backend `POST /auth/password/forgot`: always returns 202, rate limited, sends a code via Resend.
 - Backend `POST /auth/password/reset` (code + new password): CSPRNG code, 5-attempt cap, 10-min TTL; it bumps `tokenVersion`, revokes refresh tokens and is audit-logged.
@@ -1173,117 +1173,117 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 - [x] End-to-end reset test passes; the old password and old sessions stop working
 - [x] The response doesn't reveal whether the email exists
 
-### SEC-084 — Change password and delete account are not wired
+### SEC-084 � Change password and delete account are not wired
 **Evidence:** `profile/security.tsx` and `hirer-profile/security.tsx` render forms with no API calls. There's no `POST /auth/password` route. `DELETE /auth/me` exists, but no screen calls it. Apple App Store Guideline 5.1.1(v) and Google Play both require in-app account deletion for apps that let users create accounts.
 **Fix:** Add `POST /api/v1/auth/password` (current + new password, policy-checked, bumps `tokenVersion`, revokes refresh tokens) and wire both screens. Account deletion asks for the password, calls `DELETE /auth/me`, clears SecureStore and returns to the welcome screen.
 **Acceptance criteria:**
 - [x] Changing the password works and signs out other sessions (test)
 - [ ] Account deletion is reachable from Profile in three taps or fewer
 
-### SEC-087 — App-store readiness
+### SEC-087 � App-store readiness
 **Evidence:** `app.json` has the display name `kredibble-app`; no `ios.bundleIdentifier`, `ios.buildNumber` or `android.versionCode`; and splash/icon assets that look like Expo template defaults. There's no privacy-policy or terms link in the app, and no `expo-notifications`. The `start` and `web` scripts use Windows-only `set` syntax.
 **Fix:** Set the name to "Kredibble", plus the bundle id, version codes and final icons/splash. Link the privacy policy and terms at signup and in settings (SEC-092). Prepare store listing assets, decide on push notifications for v1, and make the scripts cross-platform (`cross-env`).
 **Acceptance criteria:**
 - [ ] `eas build -p ios` and `eas build -p android` (production profile) complete non-interactively
 - [ ] A privacy-policy URL is present in the app and the store listings
 
-### SEC-089 — Shared Redis, always-on hosting, database backups
+### SEC-089 � Shared Redis, always-on hosting, database backups
 **Evidence:** No deploy config sets `REDIS_URL`, so limiter and lockout state is per process (and per invocation on Vercel). Hosting is Render's free tier, which sleeps. No Atlas backup or restore procedure is documented.
-**Fix:** Managed Redis for the limiters (and optionally a `tokenVersion` cache). A paid always-on instance, with ≥ 2 replicas once Redis is in place. Atlas continuous backup plus a tested restore runbook, and a separate staging database.
+**Fix:** Managed Redis for the limiters (and optionally a `tokenVersion` cache). A paid always-on instance, with = 2 replicas once Redis is in place. Atlas continuous backup plus a tested restore runbook, and a separate staging database.
 **Acceptance criteria:**
 - [ ] Limits hold across two instances (test against staging)
 - [ ] A restore drill is completed and documented
 
-### SEC-090 — No error tracking or uptime monitoring
+### SEC-090 � No error tracking or uptime monitoring
 **Evidence:** None of the apps has Sentry, Datadog or similar. Failures like SEC-042 are only visible to users.
 **Fix:** Add Sentry or an equivalent to the backend (Express handler, tagged with the request id), the admin (Next.js SDK) and mobile (`@sentry/react-native` with EAS source maps). Add an uptime check on `/api/v1/health` with alerting, plus a log drain with retention. Scrub PII from events.
 **Acceptance criteria:**
 - [ ] A forced 500 on staging shows up in the error tracker with its `X-Request-Id`
 - [ ] A health-check alert fires when the API is down
 
-### SEC-092 — Privacy policy, terms, data-protection registration
+### SEC-092 � Privacy policy, terms, data-protection registration
 **Evidence:** Neither the mobile nor the admin app has a privacy policy or terms (`rg -i "privacy policy|terms of"` finds nothing), yet the platform processes CVs, phone numbers and company verification documents.
 **Fix:** Publish a privacy policy and terms at hosted URLs, link them with explicit consent at signup, and link them in settings. Register with Ghana's Data Protection Commission (Data Protection Act, 2012, Act 843) if processing Ghanaian users' data, and assess GDPR if targeting EU users. Define retention periods for audit logs, tombstones and CVs.
 **Acceptance criteria:**
 - [ ] The policy and terms URLs are live and linked in the app and the stores
 - [ ] The registration or assessment is recorded
 
-## P2 — Hardening (new)
+## P2 � Hardening (new)
 
-### SEC-051 — Login reveals which emails are registered
-`routes/auth.js:142` vs `:201`: existing accounts get "…N attempt(s) remaining before lockout" and unknown emails don't. bcrypt only runs for existing users, which also creates a timing oracle. Use one generic message, and run a dummy `bcrypt.compare` for unknown emails. **Done when:** messages are identical and response timing is indistinguishable within noise (test).
-**Status:** ✅ Done. Login returns generic 401s for both non-existent users and wrong passwords, and runs a dummy bcrypt compare to prevent timing oracles.
+### SEC-051 � Login reveals which emails are registered
+`routes/auth.js:142` vs `:201`: existing accounts get "�N attempt(s) remaining before lockout" and unknown emails don't. bcrypt only runs for existing users, which also creates a timing oracle. Use one generic message, and run a dummy `bcrypt.compare` for unknown emails. **Done when:** messages are identical and response timing is indistinguishable within noise (test).
+**Status:** ? Done. Login returns generic 401s for both non-existent users and wrong passwords, and runs a dummy bcrypt compare to prevent timing oracles.
 
-### SEC-053 — One refresh token per user; malformed refresh body → 500
-`User.refreshTokenHash` is a single field, so signing in on a second device revokes the first (probe: phone refresh → 401 after a laptop login). `POST /auth/refresh` with a non-string `refreshToken` → 500 from a `crypto` TypeError. Move to a `RefreshToken { userId, tokenHash, deviceLabel, expiresAt, revokedAt, replacedBy }` collection with reuse detection (replaying a rotated token revokes its whole family), add a sessions list, and validate bodies with Zod. Relates to Open Question 2. **Done when:** two devices refresh independently, a replayed rotated token revokes its family, and a malformed body → 400.
-**Status:** ✅ Done. Created RefreshToken collection, added Zod validation to /refresh, and implemented token family revocation on reuse.
+### SEC-053 � One refresh token per user; malformed refresh body ? 500
+`User.refreshTokenHash` is a single field, so signing in on a second device revokes the first (probe: phone refresh ? 401 after a laptop login). `POST /auth/refresh` with a non-string `refreshToken` ? 500 from a `crypto` TypeError. Move to a `RefreshToken { userId, tokenHash, deviceLabel, expiresAt, revokedAt, replacedBy }` collection with reuse detection (replaying a rotated token revokes its whole family), add a sessions list, and validate bodies with Zod. Relates to Open Question 2. **Done when:** two devices refresh independently, a replayed rotated token revokes its family, and a malformed body ? 400.
+**Status:** ? Done. Created RefreshToken collection, added Zod validation to /refresh, and implemented token family revocation on reuse.
 
-### SEC-060 — Grant allocation not implemented; applications carry no identity (reopens SEC-036)
+### SEC-060 � Grant allocation not implemented; applications carry no identity (reopens SEC-036)
 `routes/index.js:793-804` saves any `requestedAmount`: the probe requested 999,999,999 against a 1,000 pool, it was saved, and `allocated` stayed 0. The grant id isn't checked. `GrantApplication` stores no applicant user id, so GDPR export/delete (which query `applicantEmail`) never match, and applicants can't see their own applications. Implement the conditional `$expr` reservation the SEC-036 log describes (or reserve on approval, per Open Question 4). Store `applicantUserId`, return 404 for unknown or closed grants, and cap `requestedAmount` at the pool. **Done when:** concurrent over-allocation is impossible (test) and applicants can list their own grant applications.
 
-### SEC-061 — NoSQL operator injection via query params
-`routes/index.js:183-189` puts `req.query.status`/`type` straight into the Mongo filter; `?status[$ne]=approved` gets through (probe: 200). Coerce scalar query params to strings (or `mongoose.set('sanitizeFilter', true)`) and validate list queries with Zod. **Done when:** object-valued query params → 400 (test).
-**Status:** ✅ Done. Object-valued query parameters in collection filters now throw 400.
+### SEC-061 � NoSQL operator injection via query params
+`routes/index.js:183-189` puts `req.query.status`/`type` straight into the Mongo filter; `?status[$ne]=approved` gets through (probe: 200). Coerce scalar query params to strings (or `mongoose.set('sanitizeFilter', true)`) and validate list queries with Zod. **Done when:** object-valued query params ? 400 (test).
+**Status:** ? Done. Object-valued query parameters in collection filters now throw 400.
 
-### SEC-062 — Email verification code: weak RNG, no attempt cap
+### SEC-062 � Email verification code: weak RNG, no attempt cap
 `lib/email.js:11` generates codes with `Math.random()`. `EmailVerificationCode.attempts` is never incremented (`routes/auth.js:429-457`), so a 6-digit code can be brute-forced within its TTL; only the broken limiter stood in the way. Use `crypto.randomInt(0, 1_000_000)`, zero-padded; increment attempts atomically and invalidate the code after 5; rate-limit `/verification-code/verify` per email. `emailVerified` is never enforced anywhere, so decide which actions require it (Open Question 9). **Done when:** a 6th wrong code invalidates the code (test).
-**Status:** ✅ Done. verification codes now use crypto.randomInt, increment attempts atomically, invalidate after 5 attempts, and are rate limited.
+**Status:** ? Done. verification codes now use crypto.randomInt, increment attempts atomically, invalidate after 5 attempts, and are rate limited.
 
-### SEC-063 — Authorization fails open for missing policy actions
-`policies.js:291-295`: `allowedRoles` returns `AUTHENTICATED` when a policy or action is missing. `guard('saved-items', …)` has no policy entry and passes by default. Fail closed: throw at startup for unknown policy keys, deny missing actions, and add an explicit `saved-items` policy. **Done when:** a route that references an unknown policy fails the test suite.
-**Status:** ✅ Done. `guard` now throws on missing policy keys during route definition, missing actions fail closed returning empty allowed roles, and `saved-items` explicitly added.
+### SEC-063 � Authorization fails open for missing policy actions
+`policies.js:291-295`: `allowedRoles` returns `AUTHENTICATED` when a policy or action is missing. `guard('saved-items', �)` has no policy entry and passes by default. Fail closed: throw at startup for unknown policy keys, deny missing actions, and add an explicit `saved-items` policy. **Done when:** a route that references an unknown policy fails the test suite.
+**Status:** ? Done. `guard` now throws on missing policy keys during route definition, missing actions fail closed returning empty allowed roles, and `saved-items` explicitly added.
 
-### SEC-064 — 5xx responses leak internal messages
-The `app.js` error handler sends `err.message` for every status, e.g. `logger is not defined` or crypto TypeErrors. The DB-connection middleware in `app.js` returns `Database connection failed. ${error.message}`, which can include hostnames. For status ≥ 500, return a generic message plus the `X-Request-Id` and log the details server-side. Reduce Mongoose cast/validation details to field names in production. **Done when:** a forced 500 in production mode returns no internal text (test).
+### SEC-064 � 5xx responses leak internal messages
+The `app.js` error handler sends `err.message` for every status, e.g. `logger is not defined` or crypto TypeErrors. The DB-connection middleware in `app.js` returns `Database connection failed. ${error.message}`, which can include hostnames. For status = 500, return a generic message plus the `X-Request-Id` and log the details server-side. Reduce Mongoose cast/validation details to field names in production. **Done when:** a forced 500 in production mode returns no internal text (test).
 
-### SEC-079 — Admin CSP allows `'unsafe-inline' 'unsafe-eval'`
+### SEC-079 � Admin CSP allows `'unsafe-inline' 'unsafe-eval'`
 `kredibble-admin/next.config.ts` sets `script-src 'self' 'unsafe-inline' 'unsafe-eval'`, which weakens the XSS defence the SEC-010 cookie move relies on. Move to a nonce-based CSP in `middleware.ts`, drop `unsafe-eval` in production, and keep `frame-ancestors 'none'`. **Done when:** the production `script-src` has no `unsafe-*` and the app still works.
 
-### SEC-082 — Mobile AI assistant returns canned replies
+### SEC-082 � Mobile AI assistant returns canned replies
 `kredibble-app/src/app/assistant/index.tsx` answers with scripted replies on a `setTimeout`. The backend assistant route is unmounted (SEC-045) and accepts a client-chosen `provider`. Either ship it (route behind auth, per-user `aiLimiter`, server-chosen provider and model, cost caps, conversation length limits, a safety prompt, PII-free logging) or hide the tab for v1 (Open Question 8). **Done when:** the screen is backed by the API or removed.
 
-### SEC-085 — Other mobile screens on mock data
+### SEC-085 � Other mobile screens on mock data
 These screens don't call the API: `notifications/index.tsx`, `profile/applications.tsx`, `profile/saved.tsx` (mock avatars), `profile/manage.tsx`, `profile/notifications.tsx`, `hirer-profile/postings.tsx`, `hirer-profile/channels.tsx`, `hirer-profile/notifications.tsx`, `recommended/index.tsx`, `experts/[id].tsx`, and the search/filter screens. Wire them after SEC-044 and SEC-072, or remove them from v1 navigation. **Done when:** every screen reachable in v1 reads real data or has been removed.
 
-### SEC-086 — Mobile type-check and lint failing
+### SEC-086 � Mobile type-check and lint failing
 `npx tsc --noEmit` shows 5 errors: 4 in `events/index.tsx` (`searchQuery` missing on the filter type; real-vs-mock event shape) and 1 in `grants/index.tsx` (shape mismatch). `expo lint` shows 45 errors and 123 warnings, e.g. `react-hooks/set-state-in-effect` in `hooks/use-color-scheme.web.ts:11`. Fix them and gate both in CI (SEC-070). **Done when:** both commands exit 0.
 
-### SEC-088 — Mobile dependency advisories
+### SEC-088 � Mobile dependency advisories
 `npm audit --omit=dev` in `kredibble-app` reports 4 high and 12 moderate advisories, in the Expo config/prebuild tooling chain. Update within the Expo SDK line (`npx expo install --fix`). Document any advisories that are build-time only and never ship in the bundle. **Done when:** no high advisory remains in shipped runtime code and the rest are documented.
 
-### SEC-091 — Transactional email domain not verified
+### SEC-091 � Transactional email domain not verified
 Verification codes (and SEC-083 reset codes) are sent from `RESEND_FROM_EMAIL`, which defaults to `noreply@kredibble.app` in `lib/email.js`. Verify the sending domain in Resend with SPF, DKIM and DMARC, and test delivery to Gmail, Outlook and Yahoo. **Done when:** test emails reach the inbox with DKIM passing.
 
-### SEC-093 — No load test or external penetration test
+### SEC-093 � No load test or external penetration test
 The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 500 ms and an OWASP Top 10 pen test; neither has been run. Run k6 or Artillery against staging once SEC-089 is done, then commission an external pen test after the P0/P1 backlog closes. **Done when:** results are recorded and any findings are tracked here.
 
-### SEC-096 — Private channel readable anonymously once its creator is deleted (fixed)
-**Evidence:** `canAccessChannel` / `canManageChannel` compared `toId(channel.createdBy) === user?.sub`; with `createdBy: null` (set by account deletion) and an anonymous caller both sides are `undefined`. Probe: anonymous `GET /api/v1/community/channels/:id/posts` on a private channel went 403 → 200 after the creator deleted their account.
+### SEC-096 � Private channel readable anonymously once its creator is deleted (fixed)
+**Evidence:** `canAccessChannel` / `canManageChannel` compared `toId(channel.createdBy) === user?.sub`; with `createdBy: null` (set by account deletion) and an anonymous caller both sides are `undefined`. Probe: anonymous `GET /api/v1/community/channels/:id/posts` on a private channel went 403 ? 200 after the creator deleted their account.
 **Fix (11e894c):** `isChannelCreator(channel, user)` requires both ids to be present. Regression test in `tests/sec-065.test.js` (anonymous, deleted user's token and non-member get 403; member and admin get 200).
 
-### SEC-097 — Private-channel posts readable through `/community/posts`
+### SEC-097 � Private-channel posts readable through `/community/posts`
 **Evidence:** `collectionRoutes` for `community/posts` (`routes/index.js` ~1075) has `read: AUTHENTICATED` and no `readScope`, so any signed-in non-member can list or read posts from private channels. The channel-scoped route is guarded; this one isn't.
 **Fix:** add a `readScope` limited to public channels plus channels where the caller is creator or active member (admins unrestricted), or remove the generic read route if no client uses it.
 **Acceptance criteria:**
 - [ ] A signed-in non-member gets no private-channel posts from `GET /api/v1/community/posts` or `/:id` (test)
 
-### SEC-098 — Sockets ignore account deletion and session revocation
+### SEC-098 � Sockets ignore account deletion and session revocation
 **Evidence:** `socket.js` handshake verifies only the JWT signature, not `role: 'deleted'` or `tokenVersion`; open sockets are never evicted when sessions are revoked.
 **Fix:** check the user (role, `tokenVersion`) at handshake; on password change, reset or deletion, disconnect that user's sockets (`io.in(userRoom).disconnectSockets()`).
 **Acceptance criteria:**
 - [ ] A revoked or deleted user's token is refused at handshake, and their open sockets are disconnected (test)
 
-### SEC-099 — No user logout route
+### SEC-099 � No user logout route
 **Evidence:** `routes/auth.js` has `/admin/logout` but no user logout; mobile sign-out only clears SecureStore, so the refresh token stays valid server-side for 30 days.
 **Fix:** `POST /auth/logout { refreshToken }` revokes that token (idempotent, 204); the mobile client calls it on sign-out.
 **Acceptance criteria:**
 - [ ] After logout, the refresh token is rejected (test)
 
-### SEC-100 — Hirers can't see applicants on their own API-created postings
+### SEC-100 � Hirers can't see applicants on their own API-created postings
 **Evidence:** applicant routes check `opportunity.createdBy` (`routes/index.js` ~971, ~1047), but `POST /opportunities` stores the owner in `hirerId` and never sets `createdBy` (same root cause as SEC-047). Fails closed: hirers get 403.
 **Fix:** resolve with the SEC-047 decision (Q10); until then check `createdBy` or `hirerId`.
 
-### SEC-101 — Account deletion follow-ups
+### SEC-101 � Account deletion follow-ups
 - `Event.attendeesCount` and `Opportunity.applicantsCount` keep deleted bookings and applications (capacity is used up for good).
 - Kept public content (channel avatars, post banners, posting logos) may point at files in the deleted user's Cloudinary folder.
 - `Ambassador` (`linkedUserId`) and `Beneficiary` hold name, email and phone that deletion doesn't touch (product call: are admin-run records in scope?).
@@ -1291,29 +1291,29 @@ The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 50
 - Tombstone `emailHash` and reset-code hashes are unkeyed SHA-256: a 6-digit code is reversible by anyone with DB read access; use an HMAC with a server secret.
 - `delete_resources_by_prefix` ignores `next_cursor` (more than 1000 files per user).
 
-### SEC-102 — Zod 3 `errorMap` in `registerSchema`
+### SEC-102 � Zod 3 `errorMap` in `registerSchema`
 **Evidence:** `schemas/auth.js` passes `errorMap` to `z.enum`; Zod 4.6.5 ignores it, so the custom role message never appears. Use `{ error: ... }`.
 
-### SEC-103 — Account-security polish
+### SEC-103 � Account-security polish
 - The deletion scheduler (`server.js`) re-runs tombstones with `mediaDeleted: false` every hour on every instance, with no backoff or in-flight guard. `processed` also counts skipped orphans.
 - If the tombstone write succeeds but the role update fails, the route answers 500, yet the scheduler erases the account later. Delete the pending tombstone on that failure, or answer 202.
 - The self-delete admin check reads the JWT `role` claim instead of the loaded user's role.
 - `isLegacyMember` compares against a possibly-`undefined` user id (not reachable today).
 - The `/refresh` deleted/missing-user branch writes no audit row.
 
-### SEC-104 — Mass assignment on staff-portal opportunity writes
+### SEC-104 � Mass assignment on staff-portal opportunity writes
 **Evidence:** `prepareOpportunity` in `routes/admin-api.js` starts from `{ ...data }`, the raw request body, for both `POST` and `PATCH /admin/opportunities`. A staff member with an opportunity role (or an admin) can set any field: `applicantsCount`, `createdBy`, `hirerId`, `wordpressSync`, `vettedBy`. The collection routes reduce bodies to an allowlist (SEC-007); this path doesn't.
 **Fix:** build the update from an explicit allowlist (the `opportunities` policy fields, plus `vetted` and `moderationStatus` for moderation) and set `vettedBy`/`vettedAt` server-side only.
 **Acceptance criteria:**
 - [ ] `PATCH /admin/opportunities/:id { applicantsCount: 999, createdBy: <id> }` leaves both unchanged (test)
 
-### SEC-105 — Admins share one rate-limit bucket behind the Vercel proxy
-**Evidence:** the admin calls the API through Vercel's same-origin rewrite. `app.js` sets `trust proxy` to 1, the Render hop, so `req.ip` is the Vercel server that forwarded the request, not the admin's browser. The global limiter (100 requests / 15 min per IP) therefore counts all admins together; a busy dashboard (each page makes 2–3 calls) will start answering 429.
-**Fix:** either trust the extra Vercel hop for admin traffic (`trust proxy` 2, if every request really passes Render → Vercel) or key the limiter on the authenticated admin id for admin routes; verify against staging before changing.
+### SEC-105 � Admins share one rate-limit bucket behind the Vercel proxy
+**Evidence:** the admin calls the API through Vercel's same-origin rewrite. `app.js` sets `trust proxy` to 1, the Render hop, so `req.ip` is the Vercel server that forwarded the request, not the admin's browser. The global limiter (100 requests / 15 min per IP) therefore counts all admins together; a busy dashboard (each page makes 2�3 calls) will start answering 429.
+**Fix:** either trust the extra Vercel hop for admin traffic (`trust proxy` 2, if every request really passes Render ? Vercel) or key the limiter on the authenticated admin id for admin routes; verify against staging before changing.
 **Acceptance criteria:**
 - [ ] Two admins behind the proxy get independent limits (staging test)
 
-## P3 — Docs & code health (new)
+## P3 � Docs & code health (new)
 
 | ID | Fix | Done when |
 |----|-----|-----------|
@@ -1327,51 +1327,51 @@ The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 50
 Phases run in sequence per `AGENTS.md`. Within a phase, respect this dependency chain:
 
 ```
-SEC-001 ─┐
-SEC-002 ─┼─→ SEC-007 ──→ SEC-023, SEC-027
-SEC-003 ─┘
-SEC-004 ──→ SEC-038
-SEC-005 ─┐
-SEC-006 ─┴─→ SEC-009 ──→ SEC-040
-SEC-018 ──→ (all)  [write the failing tests first, then fix]
+SEC-001 -+
+SEC-002 -+-? SEC-007 --? SEC-023, SEC-027
+SEC-003 -+
+SEC-004 --? SEC-038
+SEC-005 -+
+SEC-006 ---? SEC-009 --? SEC-040
+SEC-018 --? (all)  [write the failing tests first, then fix]
 ```
 
 **Recommended order:**
-1. **Tests first** — SEC-018 scaffolding, so every subsequent fix is verifiable.
-2. **P0 sweep** — SEC-001, 002, 003, 004, 005, 006, 007 (merge as one PR once tests prove them).
-3. **P1 sweep** — SEC-008 through SEC-018.
-4. **P2** — SEC-019 through SEC-029.
-5. **P3** — SEC-030 through SEC-040.
-6. **Final gate** — run the `security-audit` skill and the pre-launch checklist in `AGENTS.md`.
+1. **Tests first** � SEC-018 scaffolding, so every subsequent fix is verifiable.
+2. **P0 sweep** � SEC-001, 002, 003, 004, 005, 006, 007 (merge as one PR once tests prove them).
+3. **P1 sweep** � SEC-008 through SEC-018.
+4. **P2** � SEC-019 through SEC-029.
+5. **P3** � SEC-030 through SEC-040.
+6. **Final gate** � run the `security-audit` skill and the pre-launch checklist in `AGENTS.md`.
 
 **Recommended branch/PR shape:** one PR per P0 group rather than one per task, to avoid a long window where auth is half-migrated.
 
 ## 2026-10-02 reopened sequence (supersedes the order above for open work)
 
 ```
-SEC-041 ──→ SEC-069 ──→ SEC-074 ──→ SEC-073
-SEC-066 ──→ SEC-070 ──→ SEC-071
-Q8 scope decision ──→ SEC-045 ──→ SEC-068, SEC-071, SEC-082
-SEC-042 ─┐
-SEC-043 ─┴─→ contract test (SEC-043 step 3) ──→ SEC-070
-SEC-049 ──→ SEC-089 (multi-instance verification)
-SEC-047 ──→ SEC-056 ──→ SEC-072 ──→ SEC-081
-SEC-052 ──→ SEC-065, SEC-083, SEC-084
-SEC-075 ──→ SEC-076 ──→ SEC-077
-SEC-080 ──→ (every mobile task — sessions must survive first)
+SEC-041 --? SEC-069 --? SEC-074 --? SEC-073
+SEC-066 --? SEC-070 --? SEC-071
+Q8 scope decision --? SEC-045 --? SEC-068, SEC-071, SEC-082
+SEC-042 -+
+SEC-043 ---? contract test (SEC-043 step 3) --? SEC-070
+SEC-049 --? SEC-089 (multi-instance verification)
+SEC-047 --? SEC-056 --? SEC-072 --? SEC-081
+SEC-052 --? SEC-065, SEC-083, SEC-084
+SEC-075 --? SEC-076 --? SEC-077
+SEC-080 --? (every mobile task � sessions must survive first)
 ```
 
-**Phase 0 — today (incident):** SEC-041. Nothing else matters until that host is off the production database.
+**Phase 0 � today (incident):** SEC-041. Nothing else matters until that host is off the production database.
 
-**Phase 1 — deployable and correct (~1 week):** SEC-066, SEC-067, SEC-068 → choose the host (SEC-069) → SEC-042, SEC-043, SEC-049, SEC-050, SEC-080 → SEC-070, SEC-071 so CI keeps it that way.
+**Phase 1 � deployable and correct (~1 week):** SEC-066, SEC-067, SEC-068 ? choose the host (SEC-069) ? SEC-042, SEC-043, SEC-049, SEC-050, SEC-080 ? SEC-070, SEC-071 so CI keeps it that way.
 
-**Phase 2 — access control and privacy (~1 week):** SEC-052, SEC-054, SEC-055, SEC-056, SEC-057, SEC-058, SEC-059, SEC-065, then SEC-044, SEC-046, SEC-047, SEC-048, SEC-072, then P2 security (SEC-051, SEC-053, SEC-060–064).
+**Phase 2 � access control and privacy (~1 week):** SEC-052, SEC-054, SEC-055, SEC-056, SEC-057, SEC-058, SEC-059, SEC-065, then SEC-044, SEC-046, SEC-047, SEC-048, SEC-072, then P2 security (SEC-051, SEC-053, SEC-060�064).
 
-**Phase 3 — product surface (~2–3 weeks):** admin chain SEC-073 → SEC-074 → SEC-075 → SEC-076 → SEC-077, SEC-078, SEC-079; mobile SEC-081, SEC-083, SEC-084, SEC-087, then SEC-085, SEC-086, SEC-088; SEC-045/SEC-082 per the Q8 decision.
+**Phase 3 � product surface (~2�3 weeks):** admin chain SEC-073 ? SEC-074 ? SEC-075 ? SEC-076 ? SEC-077, SEC-078, SEC-079; mobile SEC-081, SEC-083, SEC-084, SEC-087, then SEC-085, SEC-086, SEC-088; SEC-045/SEC-082 per the Q8 decision.
 
-**Phase 4 — launch operations (~1 week, overlaps Phase 3):** SEC-089, SEC-090, SEC-091, SEC-092, SEC-093, SEC-094, SEC-095. Then re-run the 2026-10-02 probe and the `AGENTS.md` pre-launch checklist against staging.
+**Phase 4 � launch operations (~1 week, overlaps Phase 3):** SEC-089, SEC-090, SEC-091, SEC-092, SEC-093, SEC-094, SEC-095. Then re-run the 2026-10-02 probe and the `AGENTS.md` pre-launch checklist against staging.
 
-**Estimate:** roughly 5–7 weeks for one experienced full-stack developer to a defensible public v1, assuming the AI assistant and admin portal are deferred.
+**Estimate:** roughly 5�7 weeks for one experienced full-stack developer to a defensible public v1, assuming the AI assistant and admin portal are deferred.
 
 ---
 
@@ -1387,7 +1387,7 @@ SEC-080 ──→ (every mobile task — sessions must survive first)
 - [ ] `ARCHITECTURE.md` updated if a module boundary moved
 - [ ] Committed on a `security/*` branch with a `SEC-0xx:` message; never on `main`
 - [x] Checkbox ticked here and a line added to the Progress Log
-- [ ] *(added 2026-10-02)* Behaviour verified against a **running server** with the relevant middleware active (limiters, lockout, auth) — not only unit tests that skip it in `NODE_ENV=test`
+- [ ] *(added 2026-10-02)* Behaviour verified against a **running server** with the relevant middleware active (limiters, lockout, auth) � not only unit tests that skip it in `NODE_ENV=test`
 - [ ] *(added 2026-10-02)* Progress Log entry names the exact test or command that proves the claim, and the pass count is copied from that run, not from memory
 - [ ] *(added 2026-10-02)* If the change affects a deployed surface, the deployed build is checked after release (e.g. `curl` the endpoint), not assumed from a green CI
 
@@ -1423,14 +1423,14 @@ rg -n '\.\.\.req\.body' kredibble-backend/src # expect no output
 **Added 2026-10-02:**
 
 ```bash
-# Clean-checkout install (SEC-066) — run for each app
+# Clean-checkout install (SEC-066) � run for each app
 git archive HEAD kredibble-backend | tar -x -C /tmp/kb && (cd /tmp/kb/kredibble-backend && npm ci && docker build .)
 
-# Production config boot smoke (SEC-068) — use the deploy template's variables only
+# Production config boot smoke (SEC-068) � use the deploy template's variables only
 NODE_ENV=production DATABASE_URL=... JWT_SECRET=... ADMIN_JWT_SECRET=... CORS_ORIGIN=... \
   node -e "import('./src/config/env.js').then(() => console.log('boot ok'))"
 
-# Deployed surfaces (SEC-041, SEC-069) — every line must NOT print 200
+# Deployed surfaces (SEC-041, SEC-069) � every line must NOT print 200
 for h in https://kredibble-backend.vercel.app https://<prod-api-host>; do
   curl -s -o /dev/null -w "$h/api/users %{http_code}\n" "$h/api/users"
   curl -s -o /dev/null -w "$h/api-docs/ %{http_code}\n" "$h/api-docs/"
@@ -1452,9 +1452,9 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 | Date | Task | Commit | Result | Notes |
 |------|------|--------|--------|-------|
-| 2026-09-27 | Audit | — | Findings documented | 40 findings recorded across 3 apps; 2 of the 10 original criticals dismissed as verified non-issues |
-| 2026-09-27 | Docs sync | — | Baseline captured | Verified-working matrix, API auth baseline, deployment surface, and finding crosswalk added to `AGENTS.md` + `task.md` |
-| 2026-09-27 | Verification | — | 3 claims corrected | `.vercel/` and backend `.env` confirmed gitignored (dropped a bogus finding); SEC-020 narrowed to the one genuinely tracked `.env` |
+| 2026-09-27 | Audit | � | Findings documented | 40 findings recorded across 3 apps; 2 of the 10 original criticals dismissed as verified non-issues |
+| 2026-09-27 | Docs sync | � | Baseline captured | Verified-working matrix, API auth baseline, deployment surface, and finding crosswalk added to `AGENTS.md` + `task.md` |
+| 2026-09-27 | Verification | � | 3 claims corrected | `.vercel/` and backend `.env` confirmed gitignored (dropped a bogus finding); SEC-020 narrowed to the one genuinely tracked `.env` |
 | 2026-09-27 | SEC-001 | uncommitted | Done | `registerSchema.role` is `z.enum(['seeker','hirer'])` plus a persistence gate, so a smuggled `role: "admin"` cannot reach the DB. |
 | 2026-09-27 | SEC-003, SEC-006 | uncommitted | Done | `/dashboard/summary` is `requireAuth` + `requireRole(ADMIN)`; `env.js` has no secret literal and fails closed in production. |
 | 2026-09-27 | SEC-005 | uncommitted | Done | `signupAdmin` and the `/signup` route removed; `scripts/create-admin.js` added as the only provisioning path. Admin lint clean. |
@@ -1473,7 +1473,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-09-27 | Verification | b967cf3 / 6604de4 / cc207d8 | Green | Backend `npm test`: 58/58 passing (3 suites). Socket integration tests (9) mutation-probed. Ownership guard and manifest sweep mutation-probed. Admin `npm run lint` clean. Mobile `tsc --noEmit`: 0 new errors in touched files (5 pre-existing errors in `events/index.tsx` and `grants/index.tsx` remain). |
 | 2026-09-27 | `create-admin.js` E2E | cc207d8 | Done | Ran `npm run user:create-admin -- --email test-admin@kredibble.com --name "Test Admin"` against production DB; created admin with generated 24-char password; verified login returns 200 with `role: "admin"` JWT. Script is the sole admin provisioning path (SEC-001/005). |
 | 2026-09-27 | SEC-008 | [new] | Done | Password policy upgraded: min 10, max 128, requires lowercase/uppercase/digit, rejects top 25 common passwords. 8 regression tests added (length, complexity, common deny-list). `password123` rejected; `Password123` accepted. 66/66 backend tests green. |
-| 2026-10-01 | PR #18 Merge | 3ffc51d | Done | Merged PR #18 (`feat(backend): harden production security, access control, and integrations`) — all P0/P1 backend security fixes merged. All 90 backend tests pass. Vercel deployment SUCCESS. Contributor acknowledged. |
+| 2026-10-01 | PR #18 Merge | 3ffc51d | Done | Merged PR #18 (`feat(backend): harden production security, access control, and integrations`) � all P0/P1 backend security fixes merged. All 90 backend tests pass. Vercel deployment SUCCESS. Contributor acknowledged. |
 | 2026-09-27 | SEC-009 | [new] | Done | Refresh token rotation implemented: 15-min access tokens, 30-day opaque refresh tokens (SHA-256 hashed at rest). `/auth/refresh` rotates token, adds old hash to denylist with 30-day TTL. `/auth/logout` revokes refresh token. `tokenVersion` on User invalidates stale access tokens on password/role change. `requireAuth` checks `tokenVersion`. 66/66 backend tests green. |
 | 2026-09-27 | SEC-011 | [new] | Done | Pagination added to all list endpoints via `parsePagination` helper in `src/utils/http.js`. Defaults: page=1, limit=20, max limit=100. All `collectionRoutes` GET / endpoints now return `{ data, meta: { page, limit, total, pages } }`. `listResponse` updated to support paginated response. 5 regression tests added (defaults, page/limit params, limit clamping, page clamping, multiple endpoints). 71/71 backend tests green. |
 | 2026-09-27 | SEC-013 | [new] | Done | Upload hardened: MIME allowlist (PDF/PNG/JPEG/WebP) + magic bytes validation. Server derives folder from user ID + purpose enum (`cvs`, `avatars`, `company-logos`, `verification-docs`). Per-user rate limit 20/hr. Free-form `folder` query param removed. 6 regression tests added. Mocked Cloudinary in test env. 77/77 backend tests green. |
@@ -1484,7 +1484,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-09-28 | SEC-018 | 4f87f41 | Done | Admin Playwright + Mobile Jest tests added. Admin: 12 tests (login, session protection, logout, dashboard, API integration). Mobile: 20 tests (API config, token storage, auth functions). Backend: 77/77 tests pass. Mobile TypeScript: only pre-existing errors. Admin lint clean. |
 | 2026-09-28 | SEC-023 | 4c42aa3 | Done | PII safe projection implemented: `PII_FIELDS` map in policies.js defines sensitive fields per resource (seekers: phone, hirers: companyEmail/recruiterPhone/recruiterEmail, applicants: resumeUrl, users: email, verification/companies: companyEmail/recruiterPhone/recruiterEmail). `stripPiiIfNeeded()` strips fields for non-owners/non-admins. Admins and owners see full data. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-024 | ed5ccfc | Done | Rate limits implemented: registrationLimiter (5/hr per IP), searchLimiter (60/15min per IP), passwordResetLimiter (3/hr per IP), aiLimiter (20/15min per user). Applied to register, verification-code/send, candidates/search, seekers/search, assistant/chat. All 77 backend tests pass. Admin lint clean. |
-| 2026-09-28 | SEC-026 | 17928ef | Done | Removed client-supplied userId: backend `/users/:userId/saved` → `/users/me/saved` (derives userId from JWT). Notifications now filter by `req.auth.sub` for non-admins. Mobile `toggleSavedItem`/`getSavedItems` use `/users/me/saved`, `getNotifications` no longer passes userId. 77 backend + 20 mobile tests pass. Admin lint clean. |
+| 2026-09-28 | SEC-026 | 17928ef | Done | Removed client-supplied userId: backend `/users/:userId/saved` ? `/users/me/saved` (derives userId from JWT). Notifications now filter by `req.auth.sub` for non-admins. Mobile `toggleSavedItem`/`getSavedItems` use `/users/me/saved`, `getNotifications` no longer passes userId. 77 backend + 20 mobile tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-028 | 68dfe8c | Done | Email normalization implemented: `emailNormalized` field with unique index, auto-generated via default function. Auth routes (register, login, admin login, email verification) all normalize email. Case-variant duplicates (A@x.com vs a@x.com) rejected with 409. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-029 | cd2bdde | Done | GDPR/CCPA endpoints implemented: GET /api/auth/me/export returns full JSON archive (user, profiles, applications, events, grants, verifications, saved items, notifications, posts, reports). DELETE /api/auth/me requires password + 'DELETE MY ACCOUNT' confirmation, creates 7-year tombstone, anonymizes user data, cascades deletion to all related data, preserves thread integrity by anonymizing community posts/reports. 77/77 backend tests pass. Admin lint clean. |
 | 2026-09-28 | SEC-019 | f36f7e4 | Done | API versioning implemented: /api/v1 as primary path, /api as backward-compatible alias with deprecation headers (Deprecation: true, Link: successor-version, Sunset: 1 year). Route manifest test updated for v1 public routes. 77/77 backend tests pass. Admin lint clean. |
@@ -1501,27 +1501,27 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-09-29 | SEC-036 | [new] | Done | Grant allocation made atomic: POST /grants/:grantId/applications now uses `Grant.findOneAndUpdate` with `$expr` guard to atomically increment `allocated` and reject if `allocated + requestedAmount > fundingPool`. Both /api and /api/v1 routes updated. 77/77 backend tests pass. |
 | 2026-09-29 | SEC-024 | [new] | Done | Rate limiters updated to use Redis store in production via `rate-limit-redis` and `ioredis`. Created `createRateLimiter` factory in `src/lib/rate-limiters.js` that uses RedisStore when `NODE_ENV=production` and `REDIS_URL` is configured, falls back to in-memory in development/test. Applied to registrationLimiter, searchLimiter, passwordResetLimiter, aiLimiter, strictLimiter. Code ready; test environment uses in-memory store. |
 | 2026-09-29 | SEC-024 | 4968222 | Done (after correction) | **The above was reviewed and found to be broken.** The Redis path had never been executed, so four defects in it went unnoticed. Fixed: (a) a healthy `[totalHits, timeToExpire]` reply was classified as an error, so every limiter dropped to per-process counters after its first request and the Redis path was dead even when healthy; (b) the fallback keyed on `args[1]`, the script SHA, instead of the client key at `args[3]`, turning per-IP limits into one global counter; (c) the fallback returned a bare count where `rate-limit-redis` requires the raw array, throwing "Expected result to be array of values" and breaking the request; (d) degraded `DECR`/`DEL` routed through `increment`, so a reset after a successful login *raised* the counter and locked clients out. Root cause of the miss: `sendCommand` was an untestable closure and the store had no tests. Extracted it into an exported `createRedisStoreWithFallback()` as a test seam. Added 15 tests (`tests/rate-limiters.test.js`), each mutation-checked to fail when its defect is reintroduced. Backend suite 92/92 (was 77). Remaining: integration test against a live Redis is still outstanding. |
-| 2026-10-02 | Production-readiness audit | 3ffc51d | 55 new findings, 11 reopened | Full audit of all three apps on `main` @ `3ffc51d`; narrative in `PRODUCTION-READINESS-AUDIT.md`. New tasks SEC-041 … SEC-095 (9 P0, 30 P1, 14 P2, 2 P3). Reopened SEC-009, 010, 018, 019, 023, 024, 025, 029, 033, 036, 037. Verdict: not deployable, not launch-ready. |
-| 2026-10-02 | Verification snapshot | 3ffc51d | Red | Backend `npm test`: **92/102 (10 failing)** across `api.test.js` (5), `socket.integration.test.js` (2), `security.p0.test.js` (3). Backend `npm ci` from a clean `git archive` **fails** (lockfile missing `ioredis`, `rate-limit-redis` …). Backend `npm audit --omit=dev`: 0. Admin `npm run lint`: clean; `npm run build`: **fails** (`opportunities/page.tsx:47`); `npm audit --omit=dev`: 1 critical (`next`), 2 high. Mobile `tsc --noEmit`: 5 errors; `expo lint`: 45 errors / 123 warnings; Jest: 20/20; `npm audit --omit=dev`: 4 high / 12 moderate. Production boot with `render.yaml` env: **fails** (AI key required). |
+| 2026-10-02 | Production-readiness audit | 3ffc51d | 55 new findings, 11 reopened | Full audit of all three apps on `main` @ `3ffc51d`; narrative in `PRODUCTION-READINESS-AUDIT.md`. New tasks SEC-041 � SEC-095 (9 P0, 30 P1, 14 P2, 2 P3). Reopened SEC-009, 010, 018, 019, 023, 024, 025, 029, 033, 036, 037. Verdict: not deployable, not launch-ready. |
+| 2026-10-02 | Verification snapshot | 3ffc51d | Red | Backend `npm test`: **92/102 (10 failing)** across `api.test.js` (5), `socket.integration.test.js` (2), `security.p0.test.js` (3). Backend `npm ci` from a clean `git archive` **fails** (lockfile missing `ioredis`, `rate-limit-redis` �). Backend `npm audit --omit=dev`: 0. Admin `npm run lint`: clean; `npm run build`: **fails** (`opportunities/page.tsx:47`); `npm audit --omit=dev`: 1 critical (`next`), 2 high. Mobile `tsc --noEmit`: 5 errors; `expo lint`: 45 errors / 123 warnings; Jest: 20/20; `npm audit --omit=dev`: 4 high / 12 moderate. Production boot with `render.yaml` env: **fails** (AI key required). |
 
 
 | 2026-10-02 | SEC-058, 059 | uncommitted | Done | Completed Phase 2 P1 tasks for Verification documents IDOR (SEC-058) and Event bookings capacity & privacy (SEC-059). Validated via integration tests. |
 
 
-| 2026-10-02 | **Incident: SEC-041** | — | 🔴 Open | Anonymous `GET https://kredibble-backend.vercel.app/api/users` returned 10 users (6 admin) **with `passwordHash`**; `/api/v1/health` 404 there (old build); DB connected. Only read-only requests were made; writes were not tested against production. Render host (`kredibble-api.onrender.com`) correctly returns 401 for the same request but serves `/api-docs` publicly and cold-started in 21.6 s. |
-| 2026-10-02 | SEC-041 containment (partial) | — | 🟠 In progress | 11:49 UTC: Vercel project `jerry-amoahs-projects/kredibble-backend` paused; its domain `kredibble-backend-murex.vercel.app` → `503 DEPLOYMENT_PAUSED` (verified 11:54 UTC). **The leaking host `kredibble-backend.vercel.app` is a different project/account** and still returned all 10 users with `passwordHash` at 11:54 UTC. Remaining: owner of that domain pauses/protects it, or rotate the Atlas DB user password to cut its DB access. `kredibble-admin/.env.production` points at the leaking host. |
-| 2026-10-02 | Correction: PR #18 entry above | 3ffc51d | Inaccurate | "All 90 backend tests pass" — the suite on `3ffc51d` is 92/102 with 10 failures. "Vercel deployment SUCCESS" — the Vercel backend serves a pre-`/api/v1` build (SEC-041). |
+| 2026-10-02 | **Incident: SEC-041** | � | ?? Open | Anonymous `GET https://kredibble-backend.vercel.app/api/users` returned 10 users (6 admin) **with `passwordHash`**; `/api/v1/health` 404 there (old build); DB connected. Only read-only requests were made; writes were not tested against production. Render host (`kredibble-api.onrender.com`) correctly returns 401 for the same request but serves `/api-docs` publicly and cold-started in 21.6 s. |
+| 2026-10-02 | SEC-041 containment (partial) | � | ?? In progress | 11:49 UTC: Vercel project `jerry-amoahs-projects/kredibble-backend` paused; its domain `kredibble-backend-murex.vercel.app` ? `503 DEPLOYMENT_PAUSED` (verified 11:54 UTC). **The leaking host `kredibble-backend.vercel.app` is a different project/account** and still returned all 10 users with `passwordHash` at 11:54 UTC. Remaining: owner of that domain pauses/protects it, or rotate the Atlas DB user password to cut its DB access. `kredibble-admin/.env.production` points at the leaking host. |
+| 2026-10-02 | Correction: PR #18 entry above | 3ffc51d | Inaccurate | "All 90 backend tests pass" � the suite on `3ffc51d` is 92/102 with 10 failures. "Vercel deployment SUCCESS" � the Vercel backend serves a pre-`/api/v1` build (SEC-041). |
 | 2026-10-02 | Correction: SEC-009 / 024 / 025 / 029 / 036 / 037 entries above | 3ffc51d | Inaccurate | SEC-009: `requireAuth` `tokenVersion` check is dead code. SEC-024 (both entries): key generator wrong, so no limit applies; tests skip limiters. SEC-025: `lockUntil` never saved. SEC-029: tombstone never persisted. SEC-036: no `findOneAndUpdate`/`$expr` allocation exists in either router. SEC-037: models still `String`, helpers not removed. See the Reopened table. |
-| 2026-10-02 | Environment note | — | Info | During the audit, uncommitted work on `devops/ci-cd-green` removed the root npm workspace and root `package-lock.json` and edited every app's `package.json`/lockfile. The audit made no changes to those files; `task.md` and `PRODUCTION-READINESS-AUDIT.md` are the only files it touched. |
+| 2026-10-02 | Environment note | � | Info | During the audit, uncommitted work on `devops/ci-cd-green` removed the root npm workspace and root `package-lock.json` and edited every app's `package.json`/lockfile. The audit made no changes to those files; `task.md` and `PRODUCTION-READINESS-AUDIT.md` are the only files it touched. |
 | 2026-10-03 | CI lint | 4476654 | Done | Cleared the 3 backend lint errors that blocked CI's test step and the Render deploy. |
 | 2026-10-03 | SEC-083 (backend) | e8fddb3, 11e894c | Done | `POST /auth/password/forgot` (always 202; per-IP and per-email limits; no admin resets) and `POST /auth/password/reset` (CSPRNG code, 10-min TTL, 5 attempts, code consumed atomically, same error for every failure, revokes all sessions). |
 | 2026-10-03 | SEC-084 (backend) | a9cd277, 11e894c | Done | `POST /auth/password`: signs out other devices, returns a fresh session; per-user re-auth limit; wrong password is 400 so the mobile client doesn't sign the user out. `issueSession` extracted from `/login`. |
 | 2026-10-03 | SEC-065, SEC-029 | 34132c9, 6d58952, aac49c5, 11e894c | Done | Deletion per the 2026-10-03 decision: private data and testimonials deleted, public content anonymised, live postings closed (matched on `createdBy` or `hirerId`), Cloudinary folder cleared with CDN invalidation, `UserTombstone` persisted, access cut first. Ordered and idempotent instead of a transaction; unfinished deletions complete automatically (hourly in `server.js`; `npm run accounts:complete-deletions` by hand). Export uses the same data map. Login and `/refresh` reject deleted users; admins can't self-delete. |
 | 2026-10-03 | SEC-096 | 11e894c | Done | Found in the final branch review: deleting a channel creator made a private channel readable anonymously. Fixed with a creator check that requires both ids. |
-| 2026-10-03 | Verification | 11e894c | Green | Backend `npm run lint` clean; `npm test` 153/153 (12 suites). New findings filed: SEC-097…SEC-103; SEC-080 reopened. |
+| 2026-10-03 | Verification | 11e894c | Green | Backend `npm run lint` clean; `npm test` 153/153 (12 suites). New findings filed: SEC-097�SEC-103; SEC-080 reopened. |
 | 2026-10-04 | SEC-075 | ab83d97 (PR #23) | Done | Created `/api/admin` namespace with combined auth (`requireAdminOrStaffAuth`) accepting admin cookie/JWT or user Bearer+StaffMember. Mounted at `/admin` in `createApiRouter()`. Updated admin client to call `/admin/verification`, `/admin/opportunities`, `/admin/dashboard`. All 153 backend tests pass. |
 | 2026-10-04 | SEC-076 | c020bc3 (PR #24) | Done | Added admin session refresh with httpOnly refresh cookie (30-day TTL, path-scoped to `/auth/admin`). Added `POST /auth/admin/refresh` with token rotation and reuse detection, `GET /auth/admin/me` for session validation. Admin client: automatic refresh retry on 401, `checkAdminSession()`. All 153 backend tests pass, Playwright e2e tests pass. |
-| 2026-10-04 | SEC-077 (partial) | — | In Progress | Added admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. Remaining: wire admin pages to API, delete mock files, add loading/error states. All 153 backend tests pass. |
+| 2026-10-04 | SEC-077 (partial) | � | In Progress | Added admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. Remaining: wire admin pages to API, delete mock files, add loading/error states. All 153 backend tests pass. |
 | 2026-10-04 | Correction: SEC-075 / SEC-077 entries above | f2921d2 | Inaccurate | A supertest probe with a valid admin cookie on `main` @ `f2921d2`: 9 of the 12 `/api/v1/admin/*` paths the admin client called returned `404 Route not found` (seekers, hirers, verification companies and documents, events, grants, articles, staff, community). `admin-api.js` was the staff-portal router with the new guard; the routes listed above were never added. The seekers, hirers and verification pages were broken in production. CI stayed green because no test called those paths. |
 | 2026-10-04 | SEC-075 (admin data API) | 45ed6ba, 8b68a3c, 9137d2c, c3bf053 | Done | `collectionRoutes` gains `authenticate`, `filterFields` (string-only, SEC-061), `searchFilter`, `populateAlways`, `decorate`. `mountAdminDataRoutes` serves seekers, hirers, verification companies/documents, events, grants, articles, staff, reports and community channels under `/admin` behind `requireAdminAuth` (admin sessions only; user Bearer tokens, even an admin's, get 401; staff-portal roles get no access), plus nested document and channel-post lists. Seekers/hirers carry the owner's name and email; hirers carry verification status and posting count. `tests/admin-api-contract.test.js` calls every path in `kredibble-admin/src/lib/api.ts` and fails on `Route not found`. Admin client: `requestPage` keeps `meta`; `request` tolerates 204; dead `createVerificationDocument` removed. Playwright: seekers, hirers and verification pages show seeded records. Backend 167/167, admin e2e 15/15. |
 | 2026-10-04 | SEC-077 (admin API, part 2) | be2865e, a1d542a, feaf665 | Done | Admin routes for grant applications, community posts, single opportunity, analytics, staff invite by email (existing accounts only; 404/409; audited without the email) and an image-only admin upload (`createUploadRouter` factory; user uploads unchanged). Admin client types now mirror the backend models. |
@@ -1533,15 +1533,15 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 # Open Questions
 
-1. **Admin token transport — RESOLVED** — httpOnly cookie via a backend `/api/auth/admin/login` route. Simpler than BFF, avoids CSRF with `SameSite=Strict`, works with existing mobile-style `credentials: 'include'` pattern. Next.js admin client calls the backend endpoint, backend sets the cookie, returns user info only. Logout clears the cookie. This unblocks SEC-010 and SEC-040.
+1. **Admin token transport � RESOLVED** � httpOnly cookie via a backend `/api/auth/admin/login` route. Simpler than BFF, avoids CSRF with `SameSite=Strict`, works with existing mobile-style `credentials: 'include'` pattern. Next.js admin client calls the backend endpoint, backend sets the cookie, returns user info only. Logout clears the cookie. This unblocks SEC-010 and SEC-040.
 
-2. **Refresh token storage** — MongoDB collection, or Redis? Redis gives immediate revocation; Mongo keeps the dependency count at zero. Depends on whether Redis is already available in the deploy target.
-3. **Public read surface** — should `/opportunities`, `/events`, and `/articles` stay publicly readable, or require auth? This determines how much of SEC-002 and SEC-023 is a guard versus a projection change.
-4. **Grant/economy semantics** — is grant allocation meant to be instant and final, or reviewed? This changes the correct atomicity design for SEC-036.
-5. **Swagger in staging** — keep docs reachable in staging for the frontend team, or hard-disable outside development? Affects SEC-014's implementation.
-6. **Community post authorship** — `channelPostSchema` stores `authorName` (a display string) but no author id, so post ownership cannot be enforced the way seeker/hirer/opportunity ownership now is. Options: (a) add a nullable `authorId` and backfill nothing (legacy posts stay unowned and read-only for non-admins), (b) add `authorId` required and force a migration, (c) leave post moderation admin-only. Affects whether post PATCH/DELETE can stay `AUTHENTICATED` for everyone. This is a schema decision, not a route guard, so it was excluded from the SEC-002 change rather than half-implemented. **2026-10-02 update:** the schema now has `ChannelPost.authorId` and `Channel.createdBy`, so option (a) is available without a schema change; recommended and specified in SEC-057.
-7. **Single backend host (SEC-069, SEC-089)** — Render (paid, always-on), Railway, Fly, or another long-lived host? It must run Socket.io, so serverless Vercel is out for the API. This also fixes the custom domains needed for SEC-074 (`api.<domain>` / `admin.<domain>`) and settles `kredibble.app` vs `kredibble.com`.
-8. **v1 scope (SEC-045, SEC-082)** — ship or cut for launch: (a) the admin portal API (`routes/admin.js`: partners, ambassadors, beneficiaries, targets, scorecards, testimonials, WordPress sync), (b) the AI assistant, (c) the news feed. Each unmounted feature either gets mounted with tests or deleted along with its env requirements.
-9. **Email verification (SEC-062)** — must a user verify their email before applying, posting, or creating a company? `emailVerified` is stored but never enforced.
-10. **`hirerId` semantics (SEC-047)** — confirm `createdBy` (User) for ownership and `hirerId` (HirerAccount) for display, and approve a migration of existing opportunities/verification records.
-11. **Data retention (SEC-065, SEC-092)** — how long to keep tombstones, audit logs (currently 1 year), CVs of rejected applicants, and verification documents after approval. **2026-10-03 decision:** on deletion, private data is deleted and public content anonymised; live postings close; testimonials are deleted. Tombstone retention stays 7 years pending legal review (it holds an email hash, see SEC-101). Audit logs keep their 1-year TTL with emails removed.
+2. **Refresh token storage** � MongoDB collection, or Redis? Redis gives immediate revocation; Mongo keeps the dependency count at zero. Depends on whether Redis is already available in the deploy target.
+3. **Public read surface** � should `/opportunities`, `/events`, and `/articles` stay publicly readable, or require auth? This determines how much of SEC-002 and SEC-023 is a guard versus a projection change.
+4. **Grant/economy semantics** � is grant allocation meant to be instant and final, or reviewed? This changes the correct atomicity design for SEC-036.
+5. **Swagger in staging** � keep docs reachable in staging for the frontend team, or hard-disable outside development? Affects SEC-014's implementation.
+6. **Community post authorship** � `channelPostSchema` stores `authorName` (a display string) but no author id, so post ownership cannot be enforced the way seeker/hirer/opportunity ownership now is. Options: (a) add a nullable `authorId` and backfill nothing (legacy posts stay unowned and read-only for non-admins), (b) add `authorId` required and force a migration, (c) leave post moderation admin-only. Affects whether post PATCH/DELETE can stay `AUTHENTICATED` for everyone. This is a schema decision, not a route guard, so it was excluded from the SEC-002 change rather than half-implemented. **2026-10-02 update:** the schema now has `ChannelPost.authorId` and `Channel.createdBy`, so option (a) is available without a schema change; recommended and specified in SEC-057.
+7. **Single backend host (SEC-069, SEC-089)** � Render (paid, always-on), Railway, Fly, or another long-lived host? It must run Socket.io, so serverless Vercel is out for the API. This also fixes the custom domains needed for SEC-074 (`api.<domain>` / `admin.<domain>`) and settles `kredibble.app` vs `kredibble.com`.
+8. **v1 scope (SEC-045, SEC-082)** � ship or cut for launch: (a) the admin portal API (`routes/admin.js`: partners, ambassadors, beneficiaries, targets, scorecards, testimonials, WordPress sync), (b) the AI assistant, (c) the news feed. Each unmounted feature either gets mounted with tests or deleted along with its env requirements.
+9. **Email verification (SEC-062)** � must a user verify their email before applying, posting, or creating a company? `emailVerified` is stored but never enforced.
+10. **`hirerId` semantics (SEC-047)** � confirm `createdBy` (User) for ownership and `hirerId` (HirerAccount) for display, and approve a migration of existing opportunities/verification records.
+11. **Data retention (SEC-065, SEC-092)** � how long to keep tombstones, audit logs (currently 1 year), CVs of rejected applicants, and verification documents after approval. **2026-10-03 decision:** on deletion, private data is deleted and public content anonymised; live postings close; testimonials are deleted. Tombstone retention stays 7 years pending legal review (it holds an email hash, see SEC-101). Audit logs keep their 1-year TTL with emails removed.
