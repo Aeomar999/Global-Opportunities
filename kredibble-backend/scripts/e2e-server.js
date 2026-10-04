@@ -24,6 +24,11 @@ process.env.NODE_ENV = 'development';
 process.env.DATABASE_URL = mongo.getUri();
 process.env.PORT ||= '4000';
 process.env.CORS_ORIGIN ||= 'http://localhost:3000';
+// Never reach real third-party services from the e2e API, whatever .env holds:
+// empty values make uploads answer "Cloudinary is not configured" and email a no-op.
+for (const key of ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'RESEND_API_KEY']) {
+  process.env[key] = '';
+}
 
 const { app } = await import('../src/app.js');
 const { connectToDatabase } = await import('../src/lib/mongodb.js');

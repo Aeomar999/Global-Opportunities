@@ -1,46 +1,135 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, ImagePlus, X } from "lucide-react";
-import { articles, type ArticleStatus } from "@/lib/mock-articles";
+import { AlertCircle, ChevronLeft, ImagePlus, Loader2, X } from "lucide-react";
+import { createArticle, getArticleById, updateArticle, uploadArticleBanner } from "@/lib/api";
+
+type ArticleStatus = "draft" | "published";
 
 export default function ArticleEditorPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const isNew = params.id === "new";
-  const existing = isNew ? undefined : articles.find((a) => a.id === params.id);
 
-  const [title, setTitle] = useState(existing?.title ?? "");
-  const [category, setCategory] = useState(existing?.category ?? "");
-  const [duration, setDuration] = useState(existing?.duration ?? "");
-  const [summary, setSummary] = useState(existing?.summary ?? "");
-  const [content, setContent] = useState(existing?.content ?? "");
-  const [status, setStatus] = useState<ArticleStatus>(existing?.status ?? "draft");
-  const [bannerImage, setBannerImage] = useState<string | undefined>(existing?.bannerImage);
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [duration, setDuration] = useState("");
+  const [summary, setSummary] = useState("");
+  const [content, setContent] = useState("");
+  const [status, setStatus] = useState<ArticleStatus>("draft");
+  // Only ever a URL the API returned: a local preview URL is never stored.
+  const [bannerImage, setBannerImage] = useState<string | undefined>(undefined);
+
+  const [loading, setLoading] = useState(!isNew);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const fetchArticle = useCallback(async () => {
+    if (isNew) return;
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const article = await getArticleById(params.id);
+      setTitle(article.title);
+      setCategory(article.category);
+      setDuration(article.duration ?? "");
+      setSummary(article.summary);
+      setContent(article.content);
+      setStatus(article.status === "published" ? "published" : "draft");
+      setBannerImage(article.bannerImage || undefined);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load article");
+    } finally {
+      setLoading(false);
+    }
+  }, [isNew, params.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchArticle();
+  }, [fetchArticle]);
 
   const pickBannerImage = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
-    input.onchange = (e: Event) => {
+    input.accept = "image/png,image/jpeg,image/webp";
+    input.onchange = async (e: Event) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) setBannerImage(URL.createObjectURL(file));
+      if (!file) return;
+      setUploading(true);
+      setActionError(null);
+      try {
+        const uploaded = await uploadArticleBanner(file);
+        setBannerImage(uploaded.url);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "Failed to upload the banner image");
+      } finally {
+        setUploading(false);
+      }
     };
     input.click();
   };
 
-  if (!isNew && !existing) {
-    return <p className="text-sm text-kb-text-muted">Article not found.</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <Loader2 size={24} className="animate-spin text-kb-primary" />
+        <span className="ml-2 text-sm text-kb-text-muted">Loading article...</span>
+      </div>
+    );
   }
 
-  const isValid = title.trim() && category.trim() && summary.trim() && content.trim();
+  if (loadError) {
+    return (
+      <div>
+        <div className="flex items-center gap-2 text-sm text-kb-text-body">
+          <AlertCircle size={18} className="text-kb-error" />
+          <span>{loadError}</span>
+        </div>
+        <div className="flex items-center gap-4 mt-3">
+          <button onClick={fetchArticle} className="text-sm text-kb-primary font-semibold hover:underline">
+            Retry
+          </button>
+          <button onClick={() => router.push("/content/articles")} className="text-sm text-kb-primary font-semibold">
+            Back to Career Resources
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const handleSave = () => {
+  const isValid = Boolean(title.trim() && category.trim() && summary.trim() && content.trim());
+
+  const handleSave = async () => {
     if (!isValid) return;
-    // No backend yet — this mock demo just returns to the list.
-    router.push("/content/articles");
+    setSaving(true);
+    setActionError(null);
+    const fields = {
+      title: title.trim(),
+      category: category.trim(),
+      duration: duration.trim(),
+      summary: summary.trim(),
+      content: content.trim(),
+      status,
+    };
+    try {
+      if (isNew) {
+        await createArticle(bannerImage ? { ...fields, bannerImage } : fields);
+      } else {
+        // An empty string clears a removed banner.
+        await updateArticle(params.id, { ...fields, bannerImage: bannerImage ?? "" });
+      }
+      router.push("/content/articles");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to save the article");
+      setSaving(false);
+    }
   };
+
+  const saveLabel = isNew ? (status === "published" ? "Publish Article" : "Save Draft") : "Save Changes";
 
   return (
     <div className="max-w-2xl">
@@ -71,18 +160,26 @@ export default function ArticleEditorPage() {
               </button>
               <button
                 onClick={pickBannerImage}
-                className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-black/60 hover:bg-black/75 text-white text-xs font-semibold transition-colors"
+                disabled={uploading}
+                className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-black/60 hover:bg-black/75 text-white text-xs font-semibold transition-colors disabled:opacity-60"
               >
-                Replace
+                {uploading ? "Uploading..." : "Replace"}
               </button>
             </div>
           ) : (
             <button
               onClick={pickBannerImage}
-              className="flex flex-col items-center justify-center gap-2 w-full h-40 rounded-lg border border-dashed border-kb-border-input bg-kb-bg-alt hover:border-kb-primary transition-colors"
+              disabled={uploading}
+              className="flex flex-col items-center justify-center gap-2 w-full h-40 rounded-lg border border-dashed border-kb-border-input bg-kb-bg-alt hover:border-kb-primary transition-colors disabled:opacity-60"
             >
-              <ImagePlus size={22} className="text-kb-text-placeholder" />
-              <span className="text-sm text-kb-text-muted">Click to upload a banner image</span>
+              {uploading ? (
+                <Loader2 size={22} className="animate-spin text-kb-primary" />
+              ) : (
+                <ImagePlus size={22} className="text-kb-text-placeholder" />
+              )}
+              <span className="text-sm text-kb-text-muted">
+                {uploading ? "Uploading..." : "Click to upload a banner image"}
+              </span>
             </button>
           )}
         </Field>
@@ -153,12 +250,14 @@ export default function ArticleEditorPage() {
           </div>
         </Field>
 
+        {actionError && <p className="text-sm text-kb-error">{actionError}</p>}
+
         <button
           onClick={handleSave}
-          disabled={!isValid}
+          disabled={!isValid || saving || uploading}
           className="mt-2 h-11 rounded-lg bg-kb-primary text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
         >
-          {isNew ? "Publish Article" : "Save Changes"}
+          {saving ? "Saving..." : saveLabel}
         </button>
       </div>
     </div>

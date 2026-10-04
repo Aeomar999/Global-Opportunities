@@ -5,6 +5,15 @@ const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Password123';
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000';
 const API_URL = process.env.E2E_API_URL || 'http://localhost:4000/api';
 
+/** A valid 1x1 PNG, for upload tests. */
+const PNG_BYTES = [
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+  0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
+  0x00, 0x05, 0xFE, 0x02, 0xFE, 0x3C, 0xF2, 0xD5, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,
+  0xAE, 0x42, 0x60, 0x82,
+];
+
 /**
  * Fill the login form and submit it. Text typed before React hydrates never
  * reaches component state, which leaves the submit button disabled on a cold dev
@@ -286,5 +295,39 @@ test.describe('Grants', () => {
 
     await page.reload();
     await expect(page.locator('div.rounded-2xl').filter({ hasText: 'E2E Applicant' }).getByText('Approved')).toBeVisible();
+  });
+});
+
+test.describe('Articles', () => {
+  test('creating a draft and publishing it persist; a failed banner upload saves nothing', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/content/articles/new`);
+    // The e2e API has no Cloudinary credentials, so the upload is refused: the
+    // editor must show the server's message and keep no local preview.
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByText('Click to upload a banner image').click();
+    await (await chooser).setFiles({ name: 'banner.png', mimeType: 'image/png', buffer: Buffer.from(PNG_BYTES) });
+    await expect(page.getByText(/Cloudinary is not configured/)).toBeVisible();
+    await expect(page.getByAltText('Article banner')).toHaveCount(0);
+
+    await page.getByPlaceholder('e.g. How to write a developer resume that gets noticed').fill('E2E Article');
+    await page.getByPlaceholder('e.g. Resume Writing').fill('Careers');
+    await page.getByPlaceholder('One or two sentences shown in the article list').fill('E2E summary');
+    await page.getByPlaceholder('Full article body').fill('E2E body');
+    await page.getByRole('button', { name: 'Save Draft' }).click();
+
+    await expect(page).toHaveURL(`${BASE_URL}/content/articles`);
+    const row = page.getByRole('link', { name: /E2E Article/ });
+    await expect(row.getByText('Draft')).toBeVisible();
+
+    await row.click();
+    await expect(page.getByPlaceholder('e.g. How to write a developer resume that gets noticed')).toHaveValue('E2E Article');
+    await page.getByRole('button', { name: 'Published', exact: true }).click();
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+
+    await expect(page).toHaveURL(`${BASE_URL}/content/articles`);
+    await expect(page.getByRole('link', { name: /E2E Article/ }).getByText('Published')).toBeVisible();
   });
 });
