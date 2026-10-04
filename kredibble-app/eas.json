@@ -23,7 +23,7 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.globalopportunitydesk.com/api"
+        "EXPO_PUBLIC_API_URL": "https://kredibble-api.onrender.com/api"
       },
       "channel": "production"
     }

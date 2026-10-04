@@ -4,7 +4,7 @@ Prepares this repository (GOD — Global Opportunity Desk, codename Kredibble) t
 
 The work is split into seven plans, each on its own branch and PR, plus a manual track for IT. Only **Plan 4a** is written in full (`PLAN-4a-repair-sec-090.md`). Like Plans 1–2c, each later plan is written once the previous one has merged and the decisions below are confirmed, so it reflects the code as it actually is.
 
-**Written:** 2026-10-04, from `main` @ `46b6e69` and branch `security/SEC-090-infrastructure-preparation` @ `b804a81`.
+**Written:** 2026-10-04. **Revised the same day** against `origin/main` @ `60c1de6`, after PR #30 (SEC-090) merged and PRs #31–#33 landed. Other sessions work in the same checkout and commit from it, so every fact below was re-checked against `origin/main`, the live hosts and the CI logs.
 
 ---
 
@@ -12,22 +12,26 @@ The work is split into seven plans, each on its own branch and PR, plus a manual
 
 | Area | Today | Infra-plan target |
 |---|---|---|
-| API host | Render free plan (`kredibble-api.onrender.com`), Docker, deploy hook from `cd-backend.yml` | Hostinger VPS behind Cloudflare |
+| API host | Render (`kredibble-api.onrender.com`), Docker, deployed by Render's GitHub integration. `render.yaml` and Q7 say Starter (always-on), but the first request on 2026-10-04 19:33 UTC timed out after 60 s while the service woke, so it still sleeps | Hostinger VPS behind Cloudflare |
 | Admin (Next.js) | Vercel project in the personal scope `jerry-amoahs-projects`, same-origin `/api` proxy to Render | Company Vercel team, `admin.` + `staging-admin.` |
 | Mobile (Expo) | EAS project owned by personal account `amoahjerry835`; production channel → Render URL | Company Expo org; `development` / `staging` / `production` channels |
 | Database | MongoDB Atlas (one production DB; a test admin was once created against it, `task.md` § P0) | Company Atlas org; separate staging and production projects |
 | Source / CI | `Aeomar999/Global-Opportunities` (personal); `ci.yml` gates backend, admin, admin-e2e and app | Company GitHub org, branch protection, environments with approvals |
-| DNS | `globalopportunitydesk.com` resolves to Hostinger (2a02:4780::/32); `api.globalopportunitydesk.com` does **not** resolve; `kredibble.com` resolves to an unrelated-looking IP; `kredibble.app` doesn't resolve | Cloudflare-managed company zone |
+| DNS | `globalopportunitydesk.com` resolves to Hostinger (2a02:4780::/32); `api.globalopportunitydesk.com` does **not** resolve; `kredibble.com` resolves to an unrelated-looking IP; `kredibble.app` and `api.kredibble.app` (chosen in Q7) don't resolve | Cloudflare-managed company zone |
 | Monitoring | None (SEC-090) | Errors, uptime, logs, alerts |
 | Backups | None of our own; Atlas tier unknown (M0 has none) | Off-site, encrypted, restore-tested |
 
-### What the SEC-090 commits did, and what's wrong with them
+### What PR #30 (SEC-090) put on `main`, and what's wrong with it
 
-`7f8be2c` ("Prepare infrastructure for Hostinger VPS and multi-environment setup") and `b804a81` (task.md) are pushed on `security/SEC-090-infrastructure-preparation` and **not merged**. They contain useful direction (branch-to-environment mapping, env templates, a DR playbook) but cannot ship as they are:
+PR #30 merged `7f8be2c` ("Prepare infrastructure for Hostinger VPS and multi-environment setup"), `b804a81` (task.md) and `712ea6c` (encoding repair) at 14:58 UTC on 2026-10-04. It has useful direction (branch-to-environment mapping, env templates, a DR playbook), but some of it is live and dangerous:
 
-1. **Every file they touched is UTF-16** (SEC-110). Three CD workflows, `eas.json`, three `.env.example`, `docker-compose.prod.yml`, `DISASTER_RECOVERY.md` and two shell scripts. GitHub rejects UTF-16 workflow files, `require('./eas.json')` throws, and bash can't run the scripts. `task.md` was re-saved as Windows-1252, which turned every ✅ ❌ ⚠️ into `?`. Cause: Windows PowerShell 5.1, whose `>` and `Out-File` write UTF-16.
-2. **The production app would lose its API** (SEC-111). `eas.json` production points at `api.globalopportunitydesk.com`, which has no DNS record. `cd-app.yml` publishes a production OTA update on every push to `main`. The staging/dev names (`staging.api.…`) are also two levels deep, and Cloudflare's free edge certificate covers only one level.
-3. **The VPS deploy can't work and isn't safe** (SEC-112):
+1. **Files saved as UTF-16** (SEC-110, *fixed*). `7f8be2c` wrote three CD workflows, `eas.json`, three `.env.example`, `docker-compose.prod.yml`, `DISASTER_RECOVERY.md` and two shell scripts as UTF-16, and `b804a81` re-saved `task.md` as Windows-1252. `712ea6c` repaired all of them before the merge. Cause: Windows PowerShell 5.1, whose `>` and `Out-File` write UTF-16. Still missing: a CI check so it can't recur.
+2. **The production app is one bug-fix away from losing its API** (SEC-111, **P0, live**).
+   - `eas.json` production points at `api.globalopportunitydesk.com`, which has no DNS record.
+   - Since the merge, CD App has tried to publish that to the production update channel three times (runs 37211222000, 37222652003, 37227876413; `EXPO_TOKEN` is set).
+   - Only an unrelated web-bundling failure stopped it (SEC-118). EAS shows no published production updates, so nobody is affected yet.
+   - The staging/dev names (`staging.api.…`) are also two levels deep, and Cloudflare's free edge certificate covers only one level.
+3. **The VPS deploy fails on every push and isn't safe** (SEC-112). The job has no `VPS_*` secrets and replaced the Render deploy step. Beyond that:
    - every branch overwrites `:latest`, the tag the production compose file runs;
    - the compose file is never copied to the VPS;
    - all `environment:` values are blank (so `NODE_ENV` is empty and the API would run development code paths);
@@ -36,10 +40,16 @@ The work is split into seven plans, each on its own branch and PR, plus a manual
    - port 4000 is published without TLS;
    - fixed container names collide when dev, staging and production share the VPS;
    - nothing checks the new container's health or rolls back.
-4. **SEC-090 was marked Done** although neither error tracking nor uptime monitoring was added (SEC-090 reopened).
-5. **Agent state was committed** (SEC-113): `.claude/ralph-loop.local.md` holds the e2e admin login. That login is a throwaway default already present in `scripts/e2e-server.js`, so this is hygiene, not a leak. The commit also tracked `.idea/`, a UTF-16 `test-results.json` and empty log files.
+4. **SEC-090 is marked Done** although neither error tracking nor uptime monitoring exists (reopened).
+5. **Agent state was committed** (SEC-113). `712ea6c` untracked `.claude/ralph-loop.local.md`, which held the e2e admin login (a public default in `scripts/e2e-server.js`, so hygiene rather than a leak). `.claude/scheduled_tasks.lock`, `.idea/`, a UTF-16 `test-results.json` and empty log files are still tracked.
+6. **OTA updates have never worked** (SEC-118). Every CD App run, before and after PR #30, fails at `expo export` for web. This has to be fixed **after** SEC-111, never before.
 
 The other changes in `7f8be2c` (real totals on `GET /admin/opportunities`, more third-party keys blanked in the e2e server) are fine and stay.
+
+**Also on `main` (outside this plan):**
+- CI is red: run 37222652035 failed at backend lint and at the admin Playwright real-API run.
+- Q7 in `task.md` records "Render Starter + `api.kredibble.app`" as resolved, but `kredibble.app` doesn't resolve and Render still sleeps.
+- This roadmap and Plan 4a were committed to `main` as drafts by another session's `81129fb`. Plan 4a Task 1 replaces them with this revision.
 
 ---
 
@@ -49,7 +59,7 @@ Recommended defaults are in **bold**. Plan 4a doesn't depend on any of them.
 
 | # | Decision | Recommendation | Why |
 |---|---|---|---|
-| D1 | Domain and hostnames | **`globalopportunitydesk.com`**, single-level names: `api.`, `staging-api.`, `dev-api.`, `admin.`, `staging-admin.`; mail from `globalopportunitydesk.com` (SEC-091) | The company already holds it (it resolves to Hostinger). Single-level names are covered by Cloudflare's free Universal SSL; `staging.api.` is not. `admin.` rather than the infra plan's example `app.`, because this dashboard is staff-only and `app` reads as the mobile app. Retire `kredibble.com` / `kredibble.app` from CORS and docs unless the company confirms it owns them. |
+| D1 | Domain and hostnames | **`globalopportunitydesk.com`**, single-level names: `api.`, `staging-api.`, `dev-api.`, `admin.`, `staging-admin.`; mail from `globalopportunitydesk.com` (SEC-091) | The company already holds it (it resolves to Hostinger). Single-level names are covered by Cloudflare's free Universal SSL; `staging.api.` is not. `admin.` rather than the infra plan's example `app.`, because this dashboard is staff-only and `app` reads as the mobile app. **This conflicts with Q7 in `task.md` (`kredibble.app`)**: that domain has no DNS records, so confirm whether the company owns it. If it does and the product brand is Kredibble, the same single-level pattern applies under `kredibble.app`. Retire whichever domain loses from CORS and docs. |
 | D2 | How code reaches production | **Build once, promote.** Merging to `main` builds one image tagged with the commit SHA and deploys it to staging. Production runs *the same image* after someone approves it in a GitHub Environment. Development is local plus an on-demand `dev-api` deploy from any branch. | SEC-090's branch-per-environment model (`dev` → `staging` → `main`) rebuilds for each environment, so production never runs the exact artifact staging tested, and the branches drift apart. The infra plan's flow (tests → staging → approval → production) maps directly onto one pipeline with an approval gate. |
 | D3 | Runtime secrets | **GitHub Environment secrets are the source of truth.** One multi-line secret per environment, `API_ENV_FILE`, holds the whole env file; each deploy writes it to the VPS with mode `0600`. Human credentials and recovery codes live in a **company password manager** (1Password Business or Bitwarden Teams). | One place to rotate, nothing secret on disk that a rebuild can't recreate, and a new VPS is a redeploy away (disaster recovery). Revisit with a dedicated secrets manager (Infisical, Doppler) when BexieMart joins. |
 | D4 | Monitoring vendors | **Sentry** for errors and **Better Stack** for uptime (already decided 2026-10-03 in `PLAN-phase-3-roadmap.md`). Proposed addition: Better Stack also for logs and heartbeats. | One alerting tool for uptime, SSL/domain expiry, backup heartbeats and logs keeps on-call simple for a small team. |
@@ -105,9 +115,9 @@ rollback any time: run the deploy workflow with an older sha
 
 | # | Plan | Items | Depends on | Status |
 |---|---|---|---|---|
-| 4a | [Repair SEC-090 and add repo guardrails](PLAN-4a-repair-sec-090.md) | SEC-110, SEC-111 (revert), SEC-113, SEC-116, SEC-112 (health reports environment and release) | — | **Written** |
+| 4a | [Disarm SEC-090's live config and add repo guardrails](PLAN-4a-repair-sec-090.md): **PR 1 is urgent** | SEC-111 (disarm), SEC-112 (Render CD back, health reports environment and release), SEC-113, SEC-116; records SEC-110–118 | — | **Written** |
 | 4b | GOD API on the VPS, staging first | SEC-112, SEC-089 (always-on host) | 4a; M1–M4; D1, D3, D5, D6 | Not written |
-| 4c | Build-once promotion pipeline | SEC-115, SEC-112 (rollback) | 4b; M1, M6, M7; D2, D9 | Not written |
+| 4c | Build-once promotion pipeline | SEC-115, SEC-112 (rollback), SEC-118 (OTA publishing) | 4b; M1, M6, M7; D2, D9 | Not written |
 | 4d | Observability | SEC-090, SEC-095 | 4a (Sentry can start right away); 4b for logs; M8 | Not written |
 | 4e | Backups and disaster recovery | SEC-089 (backups, restore drill) | 4b; M5, M9; D7, D8 | Not written |
 | 4f | Cutover from Render, domain and decommission | SEC-111 (re-point), SEC-091, SEC-094, SEC-117 | 4b–4e; M10, M11 | Not written |
@@ -115,8 +125,8 @@ rollback any time: run the deploy workflow with an older sha
 
 Plans 4d and 4g can run in parallel with 4b/4c. Plan 4f must come last: monitoring and backups exist **before** production moves.
 
-### 4a — Repair SEC-090 and add repo guardrails *(written)*
-Fixes the encodings, restores `task.md`, returns the CD workflows and `eas.json` to the working Render baseline, stops tracking local state, and adds a CI hygiene job (encoding, actionlint, shellcheck, gitleaks) plus Dependabot. Teaches the API its `APP_ENV` and release SHA, which every later deploy check depends on. Production behaviour doesn't change.
+### 4a — Disarm SEC-090's live config and add repo guardrails *(written)*
+**PR 1 (urgent):** records SEC-110–118, points production `eas.json` back at Render, and restores the Render-era `cd-backend.yml`. **PR 2:** a UTF-8 check, stops tracking local state, adds a CI hygiene job (encoding, actionlint, shellcheck, gitleaks) and Dependabot, and teaches the API its `APP_ENV` and release SHA, which every later deploy check depends on. Production behaviour returns to what it was before PR #30. Both PRs are built in separate worktrees from `origin/main`, because other sessions switch branches in the shared checkout.
 
 ### 4b — GOD API on the VPS, staging first
 **Files:** `deploy/compose.yml` (api + redis; no published ports; joins the external `edge` network with alias `god-<env>-api`; memory limits; log rotation; project name `god-<env>`, so no `container_name`); `deploy/env/api.env.example` (canonical variable list, replaces the SEC-090 compose `environment:` block); `deploy/bin/god-deploy` (pull `:<sha>`, start, wait until `/api/v1/health` reports `release=<sha>` and `environment=<env>`, otherwise restore the previous sha and exit non-zero); `deploy/bin/god-deploy-gate` (SSH forced-command parser, D6) with a shell test; `platform/vps/bootstrap.sh` (idempotent: Docker from Docker's apt repo, `deploy` user, SSH hardening, unattended upgrades, fail2ban, `edge` network, `/opt/god/<env>`); `platform/vps/edge/{compose.yml,Caddyfile}` (Caddy 2.11; per-host sites; `trusted_proxies` = Cloudflare ranges with `client_ip_headers CF-Connecting-IP`, and `header_up X-Forwarded-For {client_ip}` so the API's `trust proxy 1` sees the real client); `docs/infrastructure/VPS.md`. Removes `docker-compose.prod.yml` and `kredibble-backend/scripts/db-{dump,restore}.sh` (replaced in 4b/4e).
@@ -128,7 +138,7 @@ Fixes the encodings, restores `task.md`, returns the CD workflows and `eas.json`
 - Deploying an image with a broken env file rolls back automatically and fails the job.
 
 ### 4c — Build-once promotion pipeline
-**Files:** rewrite `cd-backend.yml` (build `:<sha>` once → `deploy-staging` → smoke → `deploy-production` with `environment: production`; `workflow_dispatch` input `sha` for rollback; plain `ssh` with `known_hosts` from a secret; the env file piped over stdin to the gate); rewrite `cd-admin.yml` (Vercel custom environment `staging`: `vercel pull --environment=staging`, `vercel build --target=staging`, `vercel deploy --prebuilt --target=staging`; production after approval, from the same commit); rewrite `cd-app.yml` (`eas update --channel staging` on merge, `--channel production` after approval; `eas.json` profiles `development` / `staging` / `production` with single-level hostnames, **production stays on Render until 4f**); `scripts/smoke.mjs <baseUrl> <sha>` (health, one public read, CORS preflight from the admin origin); `kredibble-backend/scripts/migrate.js` + `kredibble-backend/migrations/` (ordered, idempotent, recorded in a `migrations` collection; run by `god-deploy` before switching containers; expand/contract rule in `DEPLOYMENT.md`, because old and new API versions and old mobile builds run side by side); `docs/infrastructure/DEPLOYMENT.md`.
+**Files:** rewrite `cd-backend.yml` (build `:<sha>` once → `deploy-staging` → smoke → `deploy-production` with `environment: production`; `workflow_dispatch` input `sha` for rollback; plain `ssh` with `known_hosts` from a secret; the env file piped over stdin to the gate); rewrite `cd-admin.yml` (Vercel custom environment `staging`: `vercel pull --environment=staging`, `vercel build --target=staging`, `vercel deploy --prebuilt --target=staging`; production after approval, from the same commit); rewrite `cd-app.yml` (`eas update --channel staging` on merge, `--channel production` after approval; `eas.json` profiles `development` / `staging` / `production` with single-level hostnames, **production stays on Render until 4f**). Fix SEC-118 here, by publishing native platforms only or fixing NativeWind's web cache, and prove it on the staging channel first; `scripts/smoke.mjs <baseUrl> <sha>` (health, one public read, CORS preflight from the admin origin); `kredibble-backend/scripts/migrate.js` + `kredibble-backend/migrations/` (ordered, idempotent, recorded in a `migrations` collection; run by `god-deploy` before switching containers; expand/contract rule in `DEPLOYMENT.md`, because old and new API versions and old mobile builds run side by side); `docs/infrastructure/DEPLOYMENT.md`.
 **Done when:**
 - A merged PR reaches staging with no manual step, and production waits for approval.
 - Staging and production report the same release SHA, from the same image digest.
@@ -243,13 +253,14 @@ These happen in provider consoles, not in the repo. Each line notes what the rep
 
 | ID | Finding | Priority |
 |---|---|---|
-| SEC-110 | SEC-090 files saved as UTF-16; `task.md` re-saved as Windows-1252 | P0 |
-| SEC-111 | Production mobile build pointed at a hostname that doesn't exist; two-level staging/dev names | P0 |
-| SEC-112 | VPS deploy pipeline unsafe (mutable `:latest`, blank env, no host-key pinning, no TLS, collisions, no rollback, health can't identify the release) | P1 |
+| SEC-110 | SEC-090 files saved as UTF-16; `task.md` re-saved as Windows-1252 (fixed in 712ea6c; guard pending) | P0 |
+| SEC-111 | Production mobile build on `main` points at a hostname that doesn't exist; two-level staging/dev names | P0 |
+| SEC-112 | Deploy pipeline unsafe (CD Backend fails every push; mutable `:latest`, blank env, no host-key pinning, no TLS, collisions, no rollback, health can't identify the release) | P1 |
 | SEC-113 | Local agent/IDE state and generated output tracked in git | P2 |
 | SEC-114 | Infrastructure owned by personal accounts | P1 |
 | SEC-115 | No production approval gate, no build-once promotion | P1 |
 | SEC-116 | No repo hygiene gates (encoding, workflow lint, shell lint, secret scan, dependency updates) | P2 |
 | SEC-117 | Known-password test accounts may exist in real databases | P1 |
+| SEC-118 | EAS Update has never published (web export fails in every CD App run); fix only after SEC-111 | P1 |
 
 SEC-089 (backups and always-on hosting) and SEC-090 (monitoring) are reopened; their real scope moves to 4b, 4e and 4d.
