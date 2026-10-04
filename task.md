@@ -1139,7 +1139,7 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 ### SEC-077 — 20 of ~25 admin pages run on mock data
 **Evidence:** These pages import `src/lib/mock-*.ts`: analytics, community (+ detail), content/articles (+ detail), events (+ detail), grants (+ detail), hirers (+ detail), `opportunities/[id]`, reports (+ detail), seekers (+ detail), staff (+ invite, + detail), `verification/[id]`. Approve, suspend and resolve actions only change in-memory arrays.
 **Fix:** Wire each page to the admin API (SEC-075), deleting its mock file as you go, with empty, error and loading states. Admin mutations must be audit-logged.
-**Status:** Admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents have been added to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. Remaining work: wire admin pages to use these API methods, delete mock files, add loading/error/empty states.
+**Status:** Admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents have been added to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. **Seekers and Hirers list/detail pages wired to API.** Remaining work: wire remaining admin pages to API, delete mock files, add loading/error/empty states.
 **Acceptance criteria:**
 - [ ] `rg "lib/mock-" kredibble-admin/src/app` returns nothing
 - [ ] Every admin action persists and appears in `AuditLog`
