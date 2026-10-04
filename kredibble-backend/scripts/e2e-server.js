@@ -27,8 +27,12 @@ process.env.CORS_ORIGIN ||= 'http://localhost:3000,http://localhost:3100';
 // One Playwright suite from one IP would otherwise trip the API rate limits (see env.isE2E).
 process.env.E2E_SERVER = '1';
 // Never reach real third-party services from the e2e API, whatever .env holds:
-// empty values make uploads answer "Cloudinary is not configured" and email a no-op.
-for (const key of ['CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'RESEND_API_KEY']) {
+// empty values make uploads answer "Cloudinary is not configured", email a no-op, approving a posting leave its
+// WordPress sync "pending" (not configured), and the assistant unable to call an AI provider.
+for (const key of [
+  'CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'RESEND_API_KEY',
+  'WORDPRESS_SYNC_BASE_URL', 'WORDPRESS_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY',
+]) {
   process.env[key] = '';
 }
 

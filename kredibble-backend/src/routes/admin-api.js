@@ -37,7 +37,7 @@ const escapedRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\
 const pageOptions = (query) => {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, Number.parseInt(query.limit, 10) || 25));
-  return { skip: (page - 1) * limit, limit };
+  return { page, skip: (page - 1) * limit, limit };
 };
 
 const toClientObject = (document) => {
@@ -173,9 +173,13 @@ adminApiRouter.get('/opportunities', requireAdminOrStaffAuth, requirePortalRoles
     if (typeof value !== 'string') throw new ApiError(400, 'Invalid query parameters');
     filter[key] = key === 'vetted' ? value === 'true' : value;
   }
-  const { skip, limit } = pageOptions(req.query);
-  const records = await Opportunity.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
-  listResponse(res, records.map(toClientObject));
+  const { page, skip, limit } = pageOptions(req.query);
+  // Real totals, so a client can tell when it has read every page (the admin's Opportunities Queue does).
+  const [records, total] = await Promise.all([
+    Opportunity.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Opportunity.countDocuments(filter),
+  ]);
+  listResponse(res, records.map(toClientObject), total, page, limit);
 }));
 
 adminApiRouter.post('/opportunities', requireAdminOrStaffAuth, requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {

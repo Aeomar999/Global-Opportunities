@@ -5,27 +5,22 @@
  * Built on the shared list template; this file holds the column config, the type filter and the
  * data loader.
  *
- * Data: loadOpportunityRows() (mock data in mock mode, GET /opportunities in real mode). Everything
- * loads once; the type filter and its counts are computed here. A failed request shows inline
- * with "Try again".
+ * Data: loadOpportunityRows() in src/lib/services/opportunities.ts (mock data in mock mode, every page of
+ * GET /admin/opportunities in real mode). Everything loads once; the type filter and its counts are computed here.
+ * Type labels and icons come from src/lib/opportunity-types.ts, shared with the review page.
+ * A failed request shows inline with "Try again".
  */
 import { useMemo, useState } from "react";
-import { Briefcase, CalendarDays, GraduationCap, HandCoins, type LucideIcon } from "lucide-react";
+import { Briefcase } from "lucide-react";
 import { formatDate } from "@/lib/format";
-import { loadOpportunityRows, type OpportunityRow } from "@/lib/services/lists";
+import { opportunityTypeMeta } from "@/lib/opportunity-types";
+import { loadOpportunityRows, type OpportunityRow } from "@/lib/services/opportunities";
 import { subscribeMockStore } from "@/lib/mock-store";
 import { useListData } from "@/lib/use-list-data";
 import { DataTable } from "@/components/list/DataTable";
 import { ListPage } from "@/components/list/ListPage";
 import { TableToolbar } from "@/components/list/TableToolbar";
 import type { Column } from "@/components/list/types";
-
-const TYPE_META: Record<string, { label: string; icon: LucideIcon }> = {
-  jobs: { label: "Job", icon: Briefcase },
-  internships: { label: "Internship", icon: GraduationCap },
-  events: { label: "Event", icon: CalendarDays },
-  grants: { label: "Grant", icon: HandCoins },
-};
 
 type Filter = "all" | "jobs" | "internships" | "events" | "grants";
 const FILTERS: { value: Filter; label: string }[] = [
@@ -44,8 +39,8 @@ const COLUMNS: Column<OpportunityRow>[] = [
     header: "Type",
     type: "text",
     width: "15%",
-    value: (r) => (TYPE_META[r.type] ?? TYPE_META.jobs).label,
-    icon: (r) => (TYPE_META[r.type] ?? TYPE_META.jobs).icon,
+    value: (r) => opportunityTypeMeta(r.type).label,
+    icon: (r) => opportunityTypeMeta(r.type).icon,
   },
   { key: "posted", header: "Posted", type: "text", width: "15%", value: (r) => formatDate(r.date) },
   { key: "status", header: "Status", type: "status", width: "20%", status: (r) => r.moderationStatus },
