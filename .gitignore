@@ -12,3 +12,6 @@ coverage/
 .pgadmin/
 .mongodb-binaries/
 .cache/
+
+# Local agent state (e.g. the Ralph loop file); it can hold test credentials and is never shared
+.claude/*.local.*
