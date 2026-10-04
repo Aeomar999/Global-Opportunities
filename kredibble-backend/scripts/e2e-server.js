@@ -49,6 +49,19 @@ const hirer = await User.create({ name: 'E2E Recruiter', email: 'e2e-hirer@kredi
 const account = await HirerAccount.create({ userId: hirer._id, companyName: 'E2E Holdings', industry: 'Finance', location: 'Accra' });
 await CompanyVerification.create({ hirerId: account._id, name: 'E2E Holdings', overallStatus: 'pending' });
 
+const { Report } = await import('../src/models/Community.js');
+
+// Reports queue (SEC-077 Task 4).
+await Report.create({
+  targetType: 'post',
+  targetLabel: 'E2E Reported Post',
+  reporterName: 'E2E Reporter',
+  reason: 'Scam / Fraud',
+  details: 'E2E report details',
+  date: '04 Oct 2026',
+  status: 'open',
+});
+
 const server = http.createServer(app).listen(env.port, () => {
   console.log(`e2e API listening on http://localhost:${env.port}/api`);
 });

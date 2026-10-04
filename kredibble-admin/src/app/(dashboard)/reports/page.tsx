@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
-import { reports, type ReportStatus } from "@/lib/mock-reports";
+import { AlertCircle, ChevronRight, Loader2 } from "lucide-react";
+import { getReports, type ReportRecord } from "@/lib/api";
 
-const STATUS_STYLES: Record<ReportStatus, { bg: string; text: string; label: string }> = {
+type ReportStatus = "open" | "resolved" | "dismissed";
+
+const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   open: { bg: "#FFFBEB", text: "#B7791F", label: "Open" },
   resolved: { bg: "#F0FDF4", text: "#16A34A", label: "Resolved" },
   dismissed: { bg: "#F3F4F6", text: "#6B7280", label: "Dismissed" },
@@ -20,9 +22,32 @@ const FILTERS: { label: string; value: ReportStatus | "all" }[] = [
 
 export default function ReportsQueuePage() {
   const [filter, setFilter] = useState<ReportStatus | "all">("open");
+  const [reports, setReports] = useState<ReportRecord[]>([]);
+  const [openCount, setOpenCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtered = filter === "all" ? reports : reports.filter((r) => r.status === filter);
-  const openCount = reports.filter((r) => r.status === "open").length;
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [list, open] = await Promise.all([
+        getReports({ status: filter === "all" ? undefined : filter, limit: 100 }),
+        getReports({ status: "open", limit: 1 }),
+      ]);
+      setReports(list.data);
+      setOpenCount(open.meta.total);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load reports");
+    } finally {
+      setLoading(false);
+    }
+  }, [filter]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchReports();
+  }, [fetchReports]);
 
   return (
     <div>
@@ -47,45 +72,63 @@ export default function ReportsQueuePage() {
         ))}
       </div>
 
-      <div className="bg-kb-bg-card border border-kb-border rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_20px] gap-4 px-5 py-3 border-b border-kb-border text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder">
-          <span>Target</span>
-          <span>Type</span>
-          <span>Reason</span>
-          <span>Reported by</span>
-          <span>Status</span>
-          <span />
+      {loading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 size={24} className="animate-spin text-kb-primary" />
+          <span className="ml-2 text-sm text-kb-text-muted">Loading reports...</span>
         </div>
+      ) : error ? (
+        <div className="flex items-center justify-center py-10 text-center">
+          <AlertCircle size={24} className="text-kb-error mr-2" />
+          <div className="text-sm text-kb-text-body">
+            <p className="font-medium">Failed to load reports</p>
+            <p className="text-xs text-kb-text-muted mt-1">{error}</p>
+            <button onClick={fetchReports} className="mt-3 text-sm text-kb-primary hover:underline">
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-kb-bg-card border border-kb-border rounded-2xl overflow-hidden">
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_20px] gap-4 px-5 py-3 border-b border-kb-border text-xs font-semibold uppercase tracking-wide text-kb-text-placeholder">
+            <span>Target</span>
+            <span>Type</span>
+            <span>Reason</span>
+            <span>Reported by</span>
+            <span>Status</span>
+            <span />
+          </div>
 
-        {filtered.map((report) => {
-          const style = STATUS_STYLES[report.status];
-          return (
-            <Link
-              key={report.id}
-              href={`/reports/${report.id}`}
-              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_20px] gap-4 px-5 py-4 items-center border-b border-kb-border last:border-b-0 hover:bg-kb-bg-alt transition-colors"
-            >
-              <span className="text-sm font-semibold text-kb-text-body min-w-0 truncate" title={report.targetLabel}>
-                {report.targetLabel}
-              </span>
-              <span className="text-sm text-kb-text-muted capitalize truncate">{report.targetType}</span>
-              <span className="text-sm text-kb-text-muted truncate">{report.reason}</span>
-              <span className="text-sm text-kb-text-muted truncate">{report.reporterName}</span>
-              <span
-                className="inline-flex w-fit text-xs font-semibold rounded-full px-2.5 py-1"
-                style={{ backgroundColor: style.bg, color: style.text }}
+          {reports.map((report) => {
+            const style = STATUS_STYLES[report.status] || STATUS_STYLES.open;
+            return (
+              <Link
+                key={report.id}
+                href={`/reports/${report.id}`}
+                className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_20px] gap-4 px-5 py-4 items-center border-b border-kb-border last:border-b-0 hover:bg-kb-bg-alt transition-colors"
               >
-                {style.label}
-              </span>
-              <ChevronRight size={18} className="text-kb-text-placeholder justify-self-end" />
-            </Link>
-          );
-        })}
+                <span className="text-sm font-semibold text-kb-text-body min-w-0 truncate" title={report.targetLabel}>
+                  {report.targetLabel || "—"}
+                </span>
+                <span className="text-sm text-kb-text-muted capitalize truncate">{report.targetType}</span>
+                <span className="text-sm text-kb-text-muted truncate">{report.reason}</span>
+                <span className="text-sm text-kb-text-muted truncate">{report.reporterName || "—"}</span>
+                <span
+                  className="inline-flex w-fit text-xs font-semibold rounded-full px-2.5 py-1"
+                  style={{ backgroundColor: style.bg, color: style.text }}
+                >
+                  {style.label}
+                </span>
+                <ChevronRight size={18} className="text-kb-text-placeholder justify-self-end" />
+              </Link>
+            );
+          })}
 
-        {filtered.length === 0 && (
-          <div className="px-5 py-10 text-center text-sm text-kb-text-muted">No reports in this category.</div>
-        )}
-      </div>
+          {reports.length === 0 && (
+            <div className="px-5 py-10 text-center text-sm text-kb-text-muted">No reports in this category.</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

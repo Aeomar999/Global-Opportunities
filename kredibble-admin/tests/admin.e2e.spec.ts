@@ -228,3 +228,21 @@ test.describe('Directory pages show real data', () => {
     await expect(page.getByText('E2E Holdings')).toBeVisible();
   });
 });
+
+test.describe('Reports queue', () => {
+  test('lists a seeded report and resolving it persists', async ({ page }) => {
+    await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
+
+    await page.goto(`${BASE_URL}/reports`);
+    await page.getByText('E2E Reported Post').click();
+    await expect(page.getByRole('heading', { name: 'E2E Reported Post' })).toBeVisible();
+    await expect(page.getByText('E2E report details')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Mark resolved' }).click();
+    await expect(page.getByText('Resolved', { exact: true })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText('Resolved', { exact: true })).toBeVisible();
+  });
+});
