@@ -634,6 +634,23 @@ const mountAdminDataRoutes = (router) => {
     Model: Channel, resourceName: 'Channel', policyKey: 'community/channels',
     searchFields: ['name', 'category'], filterFields: ['status', 'category', 'visibility'],
   });
+  adminCollection('/community/posts', {
+    Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts',
+    populate: { path: 'authorId', select: 'name email avatarUrl' },
+    searchFields: ['title', 'body'], filterFields: ['channelId', 'flagged'],
+  });
+  adminCollection('/grant-applications', {
+    Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications',
+    searchFields: ['applicantName'], filterFields: ['grantId', 'status'],
+  });
+
+  // The staff-portal router has list/update/delete for postings but no read by id.
+  router.get('/admin/opportunities/:id', requireAdminAuth, asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) throw notFound('Opportunity');
+    const opportunity = await Opportunity.findById(req.params.id);
+    if (!opportunity) throw notFound('Opportunity');
+    itemResponse(res, toClientObject(opportunity));
+  }));
 };
 
 /**

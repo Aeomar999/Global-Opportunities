@@ -166,7 +166,13 @@ const prepareOpportunity = (data, actorId, existing = {}) => {
 
 adminApiRouter.get('/opportunities', requireAdminOrStaffAuth, requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
   const filter = {};
-  for (const key of ['country', 'type', 'moderationStatus', 'vetted']) if (req.query[key] !== undefined) filter[key] = req.query[key];
+  for (const key of ['country', 'type', 'moderationStatus', 'vetted']) {
+    const value = req.query[key];
+    if (value === undefined) continue;
+    // SEC-061: a filter value is a plain string, never an operator object.
+    if (typeof value !== 'string') throw new ApiError(400, 'Invalid query parameters');
+    filter[key] = key === 'vetted' ? value === 'true' : value;
+  }
   const { skip, limit } = pageOptions(req.query);
   const records = await Opportunity.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
   listResponse(res, records.map(toClientObject));
