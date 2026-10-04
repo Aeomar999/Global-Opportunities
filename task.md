@@ -223,7 +223,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-073 | Admin CSP `connect-src 'self'` blocks every API call | P1 | Admin app | Open |
 | SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ✅ Done |
 | SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | Open |
-| SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | Open |
+| SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | ✅ Done |
 | SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | Open |
 | SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | Open |
 | SEC-079 | Admin CSP allows `'unsafe-inline' 'unsafe-eval'` | P2 | Admin app | Open |
@@ -1134,7 +1134,7 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 **Evidence:** The admin token and cookie last 15 min (`setAdminCookie` `maxAge`). `/auth/admin/login` returns a refresh token in the JSON body that nothing can use, because there is no admin refresh route. The admin UI decides "logged in" from `localStorage` (`kredibble-admin/src/lib/api.ts:39`), so it keeps rendering while every call fails.
 **Fix:** Add `POST /auth/admin/refresh` backed by a path-scoped httpOnly refresh cookie, and stop returning refresh tokens to the browser in JSON. On the client, try one refresh on 401; otherwise clear the local user and redirect to `/login`. Check the session on layout mount via `/auth/admin/me`.
 **Acceptance criteria:**
-- [ ] An admin stays signed in through 1 h of activity, and an expired session redirects to login (Playwright)
+- [x] An admin stays signed in through 1 h of activity, and an expired session redirects to login (Playwright)
 
 ### SEC-077 — 20 of ~25 admin pages run on mock data
 **Evidence:** These pages import `src/lib/mock-*.ts`: analytics, community (+ detail), content/articles (+ detail), events (+ detail), grants (+ detail), hirers (+ detail), `opportunities/[id]`, reports (+ detail), seekers (+ detail), staff (+ invite, + detail), `verification/[id]`. Approve, suspend and resolve actions only change in-memory arrays.
