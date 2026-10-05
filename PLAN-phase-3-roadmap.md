@@ -20,7 +20,8 @@ Covers SEC-065, SEC-075, SEC-077, SEC-081, SEC-083, SEC-084, SEC-087, SEC-090 an
 | 2a | [Admin data API](PLAN-2a-admin-data-api.md) | SEC-075 routes, contract test | — | Merged (PR #26) |
 | 2b | [Admin pages on real data](PLAN-2b-admin-pages.md) | SEC-077 remaining 16 pages | 2a | In review (PR #28) |
 | 3 | Mobile launch surface | SEC-081, SEC-083/084 screens, SEC-087, legal links | Plan 1; SEC-072 for "my applications" | Not written |
-| 4 | Operations and legal | SEC-090, SEC-092 | Plan 3 for in-app links | Not written |
+| 4 | Operations: see [Plan 4 roadmap](PLAN-4-infrastructure-roadmap.md) | SEC-089, SEC-090, SEC-110–118 | — | 4a in progress |
+| 5 | Legal | SEC-092 | Plan 3 for in-app links | Not written |
 
 Each plan is written once the previous one is merged, so it reflects the code as it really is.
 

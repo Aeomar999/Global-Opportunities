@@ -258,12 +258,12 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-108 | `collectionRoutes` audited admin updates only when an admin-only field changed, so report, event, grant, channel and staff decisions left no audit row | P1 | Backend | ✅ Done (1a418c9) |
 | SEC-109 | The admin e2e server loaded `kredibble-backend/.env`, so an upload test reached the real Cloudinary account (3 × 1×1 PNG, 67 B, `kredibble/kredibble/admin/article-banner/`, 2026-10-04 03:21 UTC) | P2 | Tests / Ops | ✅ Done (5ebe9a9); test files left for the owner to delete |
 | SEC-110 | SEC-090 commit saved 11 files as UTF-16 (3 CD workflows, `eas.json`, 3 `.env.example`, `docker-compose.prod.yml`, `DISASTER_RECOVERY.md`, 2 shell scripts); b804a81 re-saved `task.md` as Windows-1252 | P0 | Repo / CI/CD | ✅ Fixed in 712ea6c (re-encoded, task.md repaired); CI guard in SEC-116 |
-| SEC-111 | Production mobile config on `main` (PR #30) points at `api.globalopportunitydesk.com`, which does not resolve; CD App tried to publish it to the production channel on three pushes and was stopped only by SEC-118; staging/dev names are two levels deep (`staging.api.…`), which Cloudflare's free edge certificate doesn't cover | P0 | Deployment | Open — Plan 4a Task 2 |
-| SEC-112 | Deploy pipeline unsafe: CD Backend fails on every push since PR #30 (no SSH secrets; Render deploy step removed); every branch overwrites `:latest`, which the VPS compose file runs; compose never copied; blank `environment:` values; mixed-case image ref; no SSH host-key pinning; API port published without TLS; container names collide across environments; no health-gated rollback; health check can't identify the release | P1 | CI/CD + Deployment | Open — Plan 4a (revert, health), Plans 4b/4c |
-| SEC-113 | Local agent/IDE state and generated output tracked in git (`.claude/scheduled_tasks.lock`, `.idea/`, UTF-16 `kredibble-backend/test-results.json`, `server_*.log`; the Ralph-loop file was untracked in 712ea6c) | P2 | Repo hygiene | Open — Plan 4a |
+| SEC-111 | Production mobile config on `main` (PR #30) points at `api.globalopportunitydesk.com`, which does not resolve; CD App tried to publish it to the production channel on three pushes and was stopped only by SEC-118; staging/dev names are two levels deep (`staging.api.…`), which Cloudflare's free edge certificate doesn't cover | P0 | Deployment | ✅ Production back on Render (PR 1); single-level staging/dev names in Plan 4c, production switch in Plan 4f |
+| SEC-112 | Deploy pipeline unsafe: CD Backend fails on every push since PR #30 (no SSH secrets; Render deploy step removed); every branch overwrites `:latest`, which the VPS compose file runs; compose never copied; blank `environment:` values; mixed-case image ref; no SSH host-key pinning; API port published without TLS; container names collide across environments; no health-gated rollback; health check can't identify the release | P1 | CI/CD + Deployment | 🟡 Render-era CD restored (PR 1); health reports environment and release (PR 2); deploy and rollback in Plans 4b/4c |
+| SEC-113 | Local agent/IDE state and generated output tracked in git (`.claude/scheduled_tasks.lock`, `.idea/`, UTF-16 `kredibble-backend/test-results.json`, `server_*.log`; the Ralph-loop file was untracked in 712ea6c) | P2 | Repo hygiene | ✅ Done (Plan 4a) |
 | SEC-114 | Infrastructure owned by personal accounts (GitHub repo and GHCR namespace, Expo owner, Vercel scope, Render service) | P1 | Ownership | Open — Plan 4 track M, Plan 4g |
 | SEC-115 | No production approval gate and no build-once promotion: every push to `main` deploys straight to production | P1 | CI/CD | Open — Plan 4c |
-| SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | Open — Plan 4a |
+| SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | ✅ Done (Plan 4a; Dependabot confirmed after merge) |
 | SEC-117 | Known-password test accounts may exist in real databases (`@test.com` seed accounts; a test admin was created against production; the e2e admin login is a public default) | P1 | Data / Access | Open — Plan 4 track M5 |
 | SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | Open — Plan 4c; fix only after SEC-111 |
 
@@ -1339,22 +1339,22 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Evidence:** on `main` since PR #30, `eas.json` production `EXPO_PUBLIC_API_URL` is `https://api.globalopportunitydesk.com/api`, which has no DNS record on 2026-10-04 (the apex resolves to Hostinger). CD App runs 37211222000, 37222652003 and 37227876413 logged `EXPO_PUBLIC_API_URL=https://api.globalopportunitydesk.com/api` and ran `eas update --channel production`. Only the web-export failure (SEC-118) stopped them. `eas update:list --branch production` shows no updates. Q7 (*Open Questions*) names `api.kredibble.app`, which doesn't resolve either. The staging and dev names (`staging.api.…`, `dev.api.…`) are two levels below the apex, and Cloudflare's free Universal SSL certificate covers only one level.
 **Fix:** point production back at `https://kredibble-api.onrender.com/api` (Plan 4a Task 2). Settle the domain (roadmap D1), use single-level names (Plan 4c), and switch production only in the Plan 4f cutover, after the API answers on the new name.
 **Acceptance criteria:**
-- [ ] The production profile names a host that answers `/api/v1/health` with 200
+- [x] The production profile names a host that answers `/api/v1/health` with 200
 - [ ] The production API URL changes only in the Plan 4f cutover commit
 
 ### SEC-112 — Deploy pipeline is unsafe
 **Evidence:** since PR #30, `cd-backend.yml` runs `deploy-vps` (`appleboy/ssh-action`) on every push and fails, because no `VPS_*` secrets exist; the Render deploy step it replaced is gone. The workflow tags every branch build `latest` while `docker-compose.prod.yml` runs `:latest`. Nothing copies the compose file to the VPS. Every `environment:` entry is blank (`NODE_ENV=`, `DATABASE_URL=` …). `docker pull ghcr.io/${{ github.repository }}/…` is mixed case, which GHCR rejects (the pre-SEC-090 workflow had a comment warning about this). No host-key fingerprint is pinned. `ports: "4000:4000"` exposes plain HTTP. `container_name` collides across environments. There's no health-gated rollback, and `/api/v1/health` doesn't say which release or environment answered.
 **Fix:** Plan 4a: restore the Render-era `cd-backend.yml`; add `APP_ENV` and the release SHA to the health check. Plan 4b: per-environment compose projects with no published ports, the env file outside git, Caddy + Cloudflare TLS, a health-gated deploy with automatic rollback. Plan 4c: images tagged by commit SHA only, a pinned host key, a forced-command deploy key.
 **Acceptance criteria:**
-- [ ] CD Backend no longer fails on pushes to `main`
-- [ ] `/api/v1/health` reports `environment` and `release` (test)
+- [x] CD Backend no longer fails on pushes to `main`
+- [x] `/api/v1/health` reports `environment` and `release` (test)
 - [ ] A deploy whose new container never reports the expected release rolls back and fails the job (staging)
 
 ### SEC-113 — Local agent and IDE state tracked in git
 **Evidence:** `git ls-files` on `main` lists `.claude/scheduled_tasks.lock`, 6 files under `.idea/`, `kredibble-backend/test-results.json` (a UTF-16 Jest report) and `kredibble-backend/server_{stdout,stderr}.log`. 712ea6c already untracked `.claude/ralph-loop.local.md`, which held the e2e admin login; that login is the public default in `scripts/e2e-server.js`, so SEC-117 covers the real databases.
 **Fix:** `git rm --cached` the files and ignore their paths.
 **Acceptance criteria:**
-- [ ] `git ls-files .claude .idea` lists nothing; the files remain on disk
+- [x] `git ls-files .claude .idea` lists nothing; the files remain on disk
 
 ### SEC-114 — Infrastructure owned by personal accounts
 **Evidence:** repository `Aeomar999/Global-Opportunities` and its GHCR images; `app.json` `"owner": "amoahjerry835"`; Vercel scope `jerry-amoahs-projects` (also in `render.yaml` `CORS_ORIGIN`); the Render service and the JWT secrets it generated. The infra plan's key principle is that company infrastructure must not depend on a developer's personal account.
@@ -1373,7 +1373,7 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Evidence:** SEC-110 reached a commit because nothing checks file encodings, workflow syntax or shell scripts. There's no secret scanner (a login was committed in 7f8be2c) and no automated dependency updates (SEC-078 and SEC-088 were found by hand).
 **Fix:** Plan 4a: `scripts/check-encoding.mjs`; a `Repo hygiene` CI job running the encoding check, actionlint, shellcheck and gitleaks; `.github/dependabot.yml`.
 **Acceptance criteria:**
-- [ ] `Repo hygiene` runs on every PR and is green
+- [x] `Repo hygiene` runs on every PR and is green
 - [ ] Dependabot opens weekly update PRs
 
 ### SEC-117 — Known-password test accounts may exist in real databases
@@ -1599,6 +1599,10 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-04 | SEC-045, 068, 070, 082, 087, 088, 094 | security/production-hardening-completion | Done | Production deployment & ecosystem readiness: (1) SEC-087: App name "Kredibble", iOS buildNumber "1", Android versionCode 1, and cross-env scripts across start, android, ios, and web. (2) SEC-088: Mobile dependencies checked against Expo SDK line, build-time tooling advisories documented. (3) SEC-045: Deleted dead routes/admin.js (616 lines), assistantRouter mounted at /api/v1/assistant with server-chosen provider and guarded with aiEnabled, newsRouter mounted at /api/v1/news with test coverage. (4) SEC-068: Gated AI, Resend, and WordPress integrations behind explicit flags; render.yaml updated with Cloudinary and feature flags; CI boot-smoke job added; verified 100% clean production boot. (5) SEC-070: Verified all CI workflows gate without masks; cd-admin verifies production build. (6) SEC-094: Rewrote README.md and AGENTS.md baseline tables to reflect current Mongoose 9, Node 22/24, and /api/v1 architecture with no weak-password seeds. Backend suite 196/196 passing across 16 test suites. |
 | 2026-10-04 | Q1–Q11 Resolutions | security/open-questions-resolutions | Done | Resolved and implemented all 11 open-ended architecture questions: (1) Admin token transport: httpOnly cookie. (2) Refresh token storage: MongoDB collection with SHA-256 hash & TTL. (3) Public read surface: Public reads enabled for /opportunities, /events, and /articles with strict scope filtering (cancelled events & drafts filtered out) and PII projection stripping. (4) Grant economy: Two-phase resource allocation (atomic reserve on approval, reviewed disbursement). (5) Swagger staging: ENABLE_SWAGGER environment flag. (6) Post authorship: ChannelPost.authorId nullable ref to User. (7) Host: Render starter plan, kredibble.app canonical domain. (8) v1 scope: Unused admin.js deleted, assistant & news mounted with flags and tests. (9) Email verification: Progressive gating via requireEmailVerified on applications, opportunity posting, and company verification docs returning 403 EMAIL_VERIFICATION_REQUIRED. (10) hirerId: createdBy for ownership, hirerId for display. (11) Retention lifecycle: Automated sweep service for 180-day rejected CV redaction and 90-day rejected verification doc purge. Added 14 new integration tests (sec-open-questions.test.js); 210/210 backend tests green across 17 test suites. |
 | 2026-10-04 | SEC-110–118 | — | Findings recorded | Plan 4 roadmap; SEC-089 and SEC-090 statuses corrected; SEC-111 hazard confirmed from CD App logs (no production update was published) |
+| 2026-10-05 | SEC-111 | 0652afd (PR #34) | ✅ Disarmed | eas.json production → kredibble-api.onrender.com (health 200); cd-backend restored to 374eae1 |
+| 2026-10-05 | SEC-113 | d5be84a | ✅ Done | test-results.json, .claude lock, .idea/, server logs untracked; files kept on disk |
+| 2026-10-05 | SEC-116 | 570ec08, 2556b30, 5852436, d7dac40, 3b2de90 | ✅ Done | check-encoding (8 node:test tests), Repo hygiene green (run 37253008290), Dependabot config |
+| 2026-10-05 | SEC-112 | a27466c | 🟡 Health | tests/sec-112-environment-release.test.js 6/6; full suite: 18 passed, 216 passed; e2e server health showed environment=development and release=3b2de90c5059b10f03f78b35807416082c2d8cc3 |
 
 ---
 

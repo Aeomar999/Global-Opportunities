@@ -15,3 +15,12 @@ coverage/
 
 # Local agent state (e.g. the Ralph loop file); it can hold test credentials and is never shared
 .claude/*.local.*
+.claude/*.lock
+.idea/
+.kilo/
+.remember/
+.superpowers/
+
+# Generated test output (SEC-113)
+kredibble-backend/test-results.json
+

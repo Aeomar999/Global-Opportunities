@@ -12,6 +12,38 @@ const parseOrigins = (value) =>
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 
+/** Deployments this API can be. Staging and production both run with NODE_ENV=production. */
+const APP_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+
+const defaultAppEnv = () => {
+  if (isProduction) return 'production';
+  return nodeEnv === 'test' ? 'test' : 'development';
+};
+
+/**
+ * Which deployment this process is (SEC-112). NODE_ENV only says whether production
+ * code paths run, so it can't tell staging from production; APP_ENV can. When unset
+ * it follows NODE_ENV, so the Render service (NODE_ENV=production) stays production.
+ * @returns {'development' | 'test' | 'staging' | 'production'}
+ */
+const resolveAppEnv = () => {
+  const appEnv = process.env.APP_ENV || defaultAppEnv();
+  if (!APP_ENVIRONMENTS.includes(appEnv)) {
+    throw new Error(`CRITICAL ERROR: APP_ENV must be one of ${APP_ENVIRONMENTS.join(', ')} (got "${appEnv}").`);
+  }
+  if ((appEnv === 'staging' || appEnv === 'production') && !isProduction) {
+    throw new Error(`CRITICAL ERROR: APP_ENV=${appEnv} requires NODE_ENV=production. A deployed API must not run development code paths.`);
+  }
+  return appEnv;
+};
+
+/**
+ * The commit this process was built from: RELEASE_SHA from the CI Docker build,
+ * else Render's RENDER_GIT_COMMIT, else "unknown".
+ * @returns {string}
+ */
+const resolveRelease = () => process.env.RELEASE_SHA || process.env.RENDER_GIT_COMMIT || 'unknown';
+
 /**
  * The admin Playwright server (scripts/e2e-server.js) sets E2E_SERVER=1 so a whole
  * suite from one IP isn't throttled. It is never honoured in production.
@@ -49,6 +81,8 @@ const resolveSecret = (name) => {
 
 const env = {
   nodeEnv,
+  appEnv: resolveAppEnv(),
+  release: resolveRelease(),
   isDevelopment: !isProduction,
   isTest: nodeEnv === 'test',
   isE2E: e2eModeEnabled({ NODE_ENV: nodeEnv, E2E_SERVER: process.env.E2E_SERVER }),

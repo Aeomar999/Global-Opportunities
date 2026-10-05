@@ -1,0 +1,47 @@
+# Weekly dependency updates (SEC-116). Security updates are configured separately:
+# enable "Dependabot security updates" in the repository settings (Plan 4 track M1).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /kredibble-backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /kredibble-admin
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  # Expo pins React Native and native modules to the SDK, so routine bumps come from
+  # `npx expo install --fix` during SDK upgrades. A limit of 0 keeps security updates only.
+  - package-ecosystem: npm
+    directory: /kredibble-app
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /kredibble-backend
+    schedule:
+      interval: weekly
+      day: monday
