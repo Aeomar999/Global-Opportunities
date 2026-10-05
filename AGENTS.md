@@ -160,7 +160,7 @@ The workflows in `.github/workflows/` are the source of truth; this is a summary
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| `ci.yml` | PR to `main`, push to `main` | **Backend:** `lint`, `test` (Jest + mongodb-memory-server). **Backend image:** Docker build. **Admin:** `lint`, `typecheck`, `next build`. **Admin E2E:** Playwright against the real API (`npm run e2e:server`, in-memory Mongo with a seeded admin) and the admin dev server. **App:** `lint`, `typecheck`, `test`, Metro bundle export. |
+| `ci.yml` | PR to `main`, push to `main` | **Backend:** `lint`, `test` (Jest + mongodb-memory-server). **Backend image:** Docker build. **Admin:** `lint`, `typecheck`, `next build`. **Admin E2E:** Playwright against the real API (`npm run e2e:server`, in-memory Mongo with a seeded admin) and the admin dev server. **App:** `lint`, `typecheck`, `test`, Metro bundle export. **Hygiene:** text files are UTF-8, actionlint (with shellcheck on `run:` blocks), shellcheck on `*.sh`, gitleaks on the working tree. |
 | `cd-backend.yml` | push to `main` touching `kredibble-backend/` | Re-verifies, pushes `ghcr.io/aeomar999/global-opportunities/kredibble-backend:{latest,sha}`, calls `RENDER_DEPLOY_HOOK_URL` if set. |
 | `cd-admin.yml` | push to `main` touching `kredibble-admin/` | Re-verifies, then `vercel pull/build/deploy --prebuilt --prod`. Skips with a notice until `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` are set. |
 | `cd-app.yml` | push to `main` touching `kredibble-app/` | Re-verifies, then `eas update --channel production` with `EXPO_PUBLIC_API_URL` from `eas.json`. Skips without `EXPO_TOKEN`. |
