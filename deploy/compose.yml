@@ -1,0 +1,72 @@
+name: god-${APP_ENV}
+
+services:
+  api:
+    image: ${API_IMAGE:-ghcr.io/aeomar999/global-opportunities/kredibble-backend}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-/opt/god/${APP_ENV}/api.env}
+    environment:
+      - APP_ENV=${APP_ENV}
+      - RELEASE_SHA=${RELEASE_SHA:-unknown}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      default:
+      edge:
+        aliases:
+          - god-${APP_ENV}-api
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1024M
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/v1/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  redis_data:
+
+networks:
+  default:
+    name: god-${APP_ENV}-internal
+  edge:
+    external: true

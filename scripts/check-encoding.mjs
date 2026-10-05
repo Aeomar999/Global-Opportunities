@@ -56,11 +56,13 @@ export const findEncodingProblems = (filePath, content) => {
 
   const problems = [];
   const extension = extname(filePath).toLowerCase();
-  const isBomSensitive = BOM_SENSITIVE_EXTENSIONS.has(extension) || basename(filePath).startsWith('.env');
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const isShellScript = extension === '.sh' || normalizedPath.startsWith('deploy/bin/');
+  const isBomSensitive = BOM_SENSITIVE_EXTENSIONS.has(extension) || basename(filePath).startsWith('.env') || isShellScript;
   if (isBomSensitive && startsWith(0xef, 0xbb, 0xbf)) {
     problems.push('starts with a UTF-8 byte-order mark, which its parser rejects; remove it');
   }
-  if (extension === '.sh' && content.includes('\r\n')) {
+  if (isShellScript && content.includes('\r\n')) {
     problems.push('has CRLF line endings; bash needs LF');
   }
   return problems;

@@ -38,6 +38,7 @@ test('rejects a UTF-8 byte-order mark in YAML, JSON, shell and dotenv files', ()
 
 test('rejects CRLF line endings in shell scripts only', () => {
   assert.match(findEncodingProblems('scripts/backup.sh', Buffer.from('#!/bin/bash\r\necho hi\r\n'))[0] ?? '', /CRLF/);
+  assert.match(findEncodingProblems('deploy/bin/god-deploy', Buffer.from('#!/bin/bash\r\necho hi\r\n'))[0] ?? '', /CRLF/);
   assert.deepEqual(findEncodingProblems('README.md', Buffer.from('line\r\nline\r\n')), []);
 });
 
