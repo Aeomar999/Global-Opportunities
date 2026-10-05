@@ -14,9 +14,6 @@ const PRODUCTION_ENV = {
   ADMIN_JWT_SECRET: 'b'.repeat(64),
   DATABASE_URL: 'mongodb://127.0.0.1:27017/kredibble-config-test',
   CORS_ORIGIN: 'https://admin.example.com',
-  OPENAI_API_KEY: 'sk-test-not-a-real-key',
-  RESEND_API_KEY: 're_test_not_a_real_key',
-  RESEND_FROM_EMAIL: 'GOD <verify@example.com>',
 };
 
 // Run from an empty temp dir so dotenv can't load the developer's .env (same approach as the SEC-006 tests).

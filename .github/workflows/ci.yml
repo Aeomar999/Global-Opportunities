@@ -196,5 +196,5 @@ jobs:
         run: git ls-files -z '*.sh' | xargs -0 --no-run-if-empty shellcheck
       # Working tree only. A one-off full-history scan is part of Plan 4 track M1.
       - name: Scan for committed secrets
-        run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" --workdir /repo ghcr.io/gitleaks/gitleaks:v8.30.1 dir /repo -i /repo/.gitleaksignore --redact --no-banner
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" --workdir /repo ghcr.io/gitleaks/gitleaks:v8.30.1 dir /repo -i /repo/.gitleaksignore -v --redact --no-banner
 
