@@ -2275,24 +2275,22 @@ for (const width of [434, 390]) {
       const list = page.getByRole('tablist', { name: 'Seekers lists' });
       await expect(list).toBeVisible();
       const check = async () => {
-        const tab = (await list.locator('[aria-selected="true"]').boundingBox())!;
-        const box = (await list.boundingBox())!;
-        expect(tab.x).toBeGreaterThanOrEqual(box.x - 1);
-        expect(tab.x + tab.width).toBeLessThanOrEqual(box.x + box.width + 1);
-        // not under a visible fade (each fade is 32px wide)
-        const startFade = await page.getByTestId('tabs-fade-start').first().evaluate((el) => getComputedStyle(el).opacity === '1');
-        const endFade = await page.getByTestId('tabs-fade-end').first().evaluate((el) => getComputedStyle(el).opacity === '1');
-        if (startFade) expect(tab.x).toBeGreaterThanOrEqual(box.x + 32 - 1);
-        if (endFade) expect(tab.x + tab.width).toBeLessThanOrEqual(box.x + box.width - 32 + 1);
+        await expect.poll(async () => {
+          const tab = await list.locator('[aria-selected="true"]').boundingBox();
+          const box = await list.boundingBox();
+          if (!tab || !box) return false;
+          if (tab.x < box.x - 1 || tab.x + tab.width > box.x + box.width + 1) return false;
+          // not under a visible fade (each fade is 32px wide)
+          const startFade = await page.getByTestId('tabs-fade-start').first().evaluate((el) => getComputedStyle(el).opacity === '1');
+          const endFade = await page.getByTestId('tabs-fade-end').first().evaluate((el) => getComputedStyle(el).opacity === '1');
+          if (startFade && tab.x < box.x + 32 - 1) return false;
+          if (endFade && tab.x + tab.width > box.x + box.width - 32 + 1) return false;
+          return true;
+        }).toBe(true);
       };
       await check(); // on load
       for (const name of [/^Programs/, /^Skills/, /^Career Interests/, /^Universities/]) {
         await list.getByRole('tab', { name }).click();
-        await expect.poll(async () => {
-          const tab = (await list.locator('[aria-selected="true"]').boundingBox())!;
-          const box = (await list.boundingBox())!;
-          return tab.x >= box.x - 1 && tab.x + tab.width <= box.x + box.width + 1;
-        }).toBe(true);
         await check();
       }
     });
