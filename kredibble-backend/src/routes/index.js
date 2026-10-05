@@ -846,6 +846,9 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     res.status(isHealthy ? 200 : 503).json({
       status: isHealthy ? 'ok' : 'error',
       service: 'kredibble-backend',
+      // SEC-112: lets a deploy confirm the new release is the one answering.
+      environment: env.appEnv,
+      release: env.release,
       database: {
         status: statusMap[dbStatus] || 'unknown',
         connected: isHealthy,
