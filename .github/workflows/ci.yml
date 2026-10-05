@@ -186,6 +186,8 @@ jobs:
           node-version-file: .nvmrc
       - name: Encoding check tests
         run: node --test scripts/check-encoding.test.mjs
+      - name: Deploy gate tests
+        run: node --test deploy/bin/god-deploy-gate.test.mjs
       # SEC-110: UTF-16 workflow files are rejected by GitHub; Windows-1252 destroys task.md.
       - name: Text files are UTF-8
         run: node scripts/check-encoding.mjs
@@ -193,7 +195,7 @@ jobs:
       - name: Lint workflows
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
       - name: Lint shell scripts
-        run: git ls-files -z '*.sh' | xargs -0 --no-run-if-empty shellcheck
+        run: git ls-files -z '*.sh' 'deploy/bin/*' | xargs -0 --no-run-if-empty shellcheck
       # Working tree only. A one-off full-history scan is part of Plan 4 track M1.
       - name: Scan for committed secrets
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" --workdir /repo ghcr.io/gitleaks/gitleaks:v8.30.1 dir /repo -i /repo/.gitleaksignore -v --redact --no-banner

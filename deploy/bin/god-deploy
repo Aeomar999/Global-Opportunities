@@ -103,7 +103,7 @@ deploy_action() {
 
   local current_sha=""
   if [[ -f "$CURRENT_RELEASE_FILE" ]]; then
-    current_sha="$(cat "$CURRENT_RELEASE_FILE" | tr -d '[:space:]')"
+    current_sha="$(tr -d '[:space:]' < "$CURRENT_RELEASE_FILE")"
   fi
 
   echo "god-deploy: Starting deployment of ${API_IMAGE}:${TARGET_SHA} to ${TARGET_ENV}..."
@@ -164,7 +164,7 @@ rollback_action() {
   fi
 
   local rollback_sha
-  rollback_sha="$(cat "$PREVIOUS_RELEASE_FILE" | tr -d '[:space:]')"
+  rollback_sha="$(tr -d '[:space:]' < "$PREVIOUS_RELEASE_FILE")"
 
   if [[ -z "$rollback_sha" ]]; then
     echo "god-deploy: Error: Previous release file is empty." >&2
@@ -173,7 +173,7 @@ rollback_action() {
 
   local current_sha=""
   if [[ -f "$CURRENT_RELEASE_FILE" ]]; then
-    current_sha="$(cat "$CURRENT_RELEASE_FILE" | tr -d '[:space:]')"
+    current_sha="$(tr -d '[:space:]' < "$CURRENT_RELEASE_FILE")"
   fi
 
   echo "god-deploy: Rolling back ${TARGET_ENV} from ${current_sha:-unknown} to ${rollback_sha}..."
