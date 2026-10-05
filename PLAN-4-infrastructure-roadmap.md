@@ -115,7 +115,7 @@ rollback any time: run the deploy workflow with an older sha
 
 | # | Plan | Items | Depends on | Status |
 |---|---|---|---|---|
-| 4a | [Disarm SEC-090's live config and add repo guardrails](PLAN-4a-repair-sec-090.md): **PR 1 is urgent** | SEC-111 (disarm), SEC-112 (Render CD back, health reports environment and release), SEC-113, SEC-116; records SEC-110–118 | — | **Written** |
+| 4a | [Disarm SEC-090's live config and add repo guardrails](PLAN-4a-repair-sec-090.md) | SEC-111 (disarm), SEC-112 (Render CD back, health reports environment and release), SEC-113, SEC-116; records SEC-110–118 | — | ✅ **Done** (PR #34, PR #35) |
 | 4b | GOD API on the VPS, staging first | SEC-112, SEC-089 (always-on host) | 4a; M1–M4; D1, D3, D5, D6 | Not written |
 | 4c | Build-once promotion pipeline | SEC-115, SEC-112 (rollback), SEC-118 (OTA publishing) | 4b; M1, M6, M7; D2, D9 | Not written |
 | 4d | Observability | SEC-090, SEC-095 | 4a (Sentry can start right away); 4b for logs; M8 | Not written |
@@ -125,7 +125,7 @@ rollback any time: run the deploy workflow with an older sha
 
 Plans 4d and 4g can run in parallel with 4b/4c. Plan 4f must come last: monitoring and backups exist **before** production moves.
 
-### 4a — Disarm SEC-090's live config and add repo guardrails *(written)*
+### 4a — Disarm SEC-090's live config and add repo guardrails *(✅ Done)*
 **PR 1 (urgent):** records SEC-110–118, points production `eas.json` back at Render, and restores the Render-era `cd-backend.yml`. **PR 2:** a UTF-8 check, stops tracking local state, adds a CI hygiene job (encoding, actionlint, shellcheck, gitleaks) and Dependabot, and teaches the API its `APP_ENV` and release SHA, which every later deploy check depends on. Production behaviour returns to what it was before PR #30. Both PRs are built in separate worktrees from `origin/main`, because other sessions switch branches in the shared checkout.
 
 ### 4b — GOD API on the VPS, staging first
