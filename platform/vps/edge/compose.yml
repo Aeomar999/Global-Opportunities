@@ -1,0 +1,29 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: edge-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /etc/ssl/cloudflare:/etc/ssl/cloudflare:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  edge:
+    name: edge
+    external: true
