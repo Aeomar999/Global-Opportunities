@@ -118,6 +118,7 @@ Run these skills in sequence for each phase. Each skill produces artifacts that 
 
 - **No direct commits to `main`** — all work on feature branches: `security/phase-{n}-{skill}`
 - **No secrets in code** — use `.env.local` (gitignored) for local; CI injects production secrets
+- **Text files are UTF-8** — never write repo files with Windows PowerShell 5.1: `>`, `Out-File` and `Set-Content` produce UTF-16 or ANSI (SEC-110). Use the editor tools, Git Bash or Node. `npm run check:encoding` at the repo root must report 0 failing files; CI enforces it.
 - **No `console.log` in production code** — use structured logger (Pino/Winston)
 - **No `any` types** — strict TypeScript across all apps
 - **No unguarded routes** — every route must declare `auth: 'public' | 'user' | 'admin'`
