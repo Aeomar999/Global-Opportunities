@@ -74,7 +74,7 @@
 **Interfaces:**
 - Produces: finding ids SEC-110 … SEC-118, used in every later commit message and Progress Log row.
 
-- [ ] **Step 1: Bring in the revised plans**
+- [x] **Step 1: Bring in the revised plans**
 
 ```bash
 cp "../Global-Opportunities/PLAN-4-infrastructure-roadmap.md" "../Global-Opportunities/PLAN-4a-repair-sec-090.md" .
@@ -82,7 +82,7 @@ git diff --stat -- PLAN-4-infrastructure-roadmap.md PLAN-4a-repair-sec-090.md
 ```
 Expected: both files show changes against `main`'s copies.
 
-- [ ] **Step 2: Correct the SEC-089 and SEC-090 rows**
+- [x] **Step 2: Correct the SEC-089 and SEC-090 rows**
 
 In the *Findings Summary* table, replace:
 ```
@@ -101,7 +101,7 @@ with:
 | SEC-090 | No error tracking or uptime monitoring | P1 | Operations | Open — PR #30 marked it Done, but it added deploy scaffolding only (no error tracking, no uptime checks); Plan 4d |
 ```
 
-- [ ] **Step 3: Add the new rows after the SEC-109 row**
+- [x] **Step 3: Add the new rows after the SEC-109 row**
 
 Insert directly below the row that starts `| SEC-109 | The admin e2e server loaded`:
 ```
@@ -116,7 +116,7 @@ Insert directly below the row that starts `| SEC-109 | The admin e2e server load
 | SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | Open — Plan 4c; fix only after SEC-111 |
 ```
 
-- [ ] **Step 4: Add the task cards**
+- [x] **Step 4: Add the task cards**
 
 Insert on the line before `# Execution Order`, followed by a blank line:
 
@@ -133,22 +133,22 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Evidence:** on `main` since PR #30, `eas.json` production `EXPO_PUBLIC_API_URL` is `https://api.globalopportunitydesk.com/api`, which has no DNS record on 2026-10-04 (the apex resolves to Hostinger). CD App runs 37211222000, 37222652003 and 37227876413 logged `EXPO_PUBLIC_API_URL=https://api.globalopportunitydesk.com/api` and ran `eas update --channel production`. Only the web-export failure (SEC-118) stopped them. `eas update:list --branch production` shows no updates. Q7 (*Open Questions*) names `api.kredibble.app`, which doesn't resolve either. The staging and dev names (`staging.api.…`, `dev.api.…`) are two levels below the apex, and Cloudflare's free Universal SSL certificate covers only one level.
 **Fix:** point production back at `https://kredibble-api.onrender.com/api` (Plan 4a Task 2). Settle the domain (roadmap D1), use single-level names (Plan 4c), and switch production only in the Plan 4f cutover, after the API answers on the new name.
 **Acceptance criteria:**
-- [ ] The production profile names a host that answers `/api/v1/health` with 200
+- [x] The production profile names a host that answers `/api/v1/health` with 200
 - [ ] The production API URL changes only in the Plan 4f cutover commit
 
 ### SEC-112 — Deploy pipeline is unsafe
 **Evidence:** since PR #30, `cd-backend.yml` runs `deploy-vps` (`appleboy/ssh-action`) on every push and fails, because no `VPS_*` secrets exist; the Render deploy step it replaced is gone. The workflow tags every branch build `latest` while `docker-compose.prod.yml` runs `:latest`. Nothing copies the compose file to the VPS. Every `environment:` entry is blank (`NODE_ENV=`, `DATABASE_URL=` …). `docker pull ghcr.io/${{ github.repository }}/…` is mixed case, which GHCR rejects (the pre-SEC-090 workflow had a comment warning about this). No host-key fingerprint is pinned. `ports: "4000:4000"` exposes plain HTTP. `container_name` collides across environments. There's no health-gated rollback, and `/api/v1/health` doesn't say which release or environment answered.
 **Fix:** Plan 4a: restore the Render-era `cd-backend.yml`; add `APP_ENV` and the release SHA to the health check. Plan 4b: per-environment compose projects with no published ports, the env file outside git, Caddy + Cloudflare TLS, a health-gated deploy with automatic rollback. Plan 4c: images tagged by commit SHA only, a pinned host key, a forced-command deploy key.
 **Acceptance criteria:**
-- [ ] CD Backend no longer fails on pushes to `main`
-- [ ] `/api/v1/health` reports `environment` and `release` (test)
+- [x] CD Backend no longer fails on pushes to `main`
+- [x] `/api/v1/health` reports `environment` and `release` (test)
 - [ ] A deploy whose new container never reports the expected release rolls back and fails the job (staging)
 
 ### SEC-113 — Local agent and IDE state tracked in git
 **Evidence:** `git ls-files` on `main` lists `.claude/scheduled_tasks.lock`, 6 files under `.idea/`, `kredibble-backend/test-results.json` (a UTF-16 Jest report) and `kredibble-backend/server_{stdout,stderr}.log`. 712ea6c already untracked `.claude/ralph-loop.local.md`, which held the e2e admin login; that login is the public default in `scripts/e2e-server.js`, so SEC-117 covers the real databases.
 **Fix:** `git rm --cached` the files and ignore their paths.
 **Acceptance criteria:**
-- [ ] `git ls-files .claude .idea` lists nothing; the files remain on disk
+- [x] `git ls-files .claude .idea` lists nothing; the files remain on disk
 
 ### SEC-114 — Infrastructure owned by personal accounts
 **Evidence:** repository `Aeomar999/Global-Opportunities` and its GHCR images; `app.json` `"owner": "amoahjerry835"`; Vercel scope `jerry-amoahs-projects` (also in `render.yaml` `CORS_ORIGIN`); the Render service and the JWT secrets it generated. The infra plan's key principle is that company infrastructure must not depend on a developer's personal account.
@@ -167,8 +167,8 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Evidence:** SEC-110 reached a commit because nothing checks file encodings, workflow syntax or shell scripts. There's no secret scanner (a login was committed in 7f8be2c) and no automated dependency updates (SEC-078 and SEC-088 were found by hand).
 **Fix:** Plan 4a: `scripts/check-encoding.mjs`; a `Repo hygiene` CI job running the encoding check, actionlint, shellcheck and gitleaks; `.github/dependabot.yml`.
 **Acceptance criteria:**
-- [ ] `Repo hygiene` runs on every PR and is green
-- [ ] Dependabot opens weekly update PRs
+- [x] `Repo hygiene` runs on every PR and is green
+- [x] Dependabot opens weekly update PRs
 
 ### SEC-117 — Known-password test accounts may exist in real databases
 **Evidence:** the gitignored `kredibble-backend/scripts/seed-test-credentials.js` creates `admin@test.com`, `seeker@test.com` and `hirer@test.com` with weak passwords. The P0 section above records a test admin created against the production database. The e2e admin login (`test-admin@kredibble.com`) is a public default in `scripts/e2e-server.js`.
@@ -183,21 +183,21 @@ Found while planning the move to the company infrastructure platform (`Company_I
 - [ ] A staging-channel update publishes from CI and a test device receives it
 ````
 
-- [ ] **Step 5: Annotate Q7**
+- [x] **Step 5: Annotate Q7**
 
 In `# Open Questions`, directly below the line `   - API & WebSockets: \`https://api.kredibble.app\``, add:
 ```
    - **2026-10-04 note (Plan 4):** `kredibble.app` and `api.kredibble.app` have no DNS records, the first request to Render took over 60 s (still sleeping), and the company infrastructure plan specifies a Hostinger VPS behind Cloudflare. Hosting and domain are re-decided in `PLAN-4-infrastructure-roadmap.md` (D1, D2); until then production stays on `kredibble-api.onrender.com`.
 ```
 
-- [ ] **Step 6: Add a Progress Log row**
+- [x] **Step 6: Add a Progress Log row**
 
 Append after the last row of the `# Progress Log` table (the line before the blank line that precedes `# Open Questions`):
 ```
 | 2026-10-04 | SEC-110–118 | — | Findings recorded | Plan 4 roadmap; SEC-089 and SEC-090 statuses corrected; SEC-111 hazard confirmed from CD App logs (no production update was published) |
 ```
 
-- [ ] **Step 7: Verify**
+- [x] **Step 7: Verify**
 
 ```bash
 file task.md
@@ -206,7 +206,7 @@ git diff --stat
 ```
 Expected: `UTF-8 text …` (not "Non-ISO"); the SEC-11x count is at least 19 (9 rows + 9 card headings + the log row). The diff touches `task.md` and the two plan files only.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git branch --show-current   # must print security/SEC-111-disarm-deploy-config
@@ -231,7 +231,7 @@ git push -u origin security/SEC-111-disarm-deploy-config
 **Interfaces:**
 - Produces: `eas.json` `build.production.env.EXPO_PUBLIC_API_URL === "https://kredibble-api.onrender.com/api"`. PR 2 (Task 7) adds a build arg to the restored `cd-backend.yml` `image` job.
 
-- [ ] **Step 1: Confirm the hazard**
+- [x] **Step 1: Confirm the hazard**
 
 ```bash
 node -p "require('./kredibble-app/eas.json').build.production.env.EXPO_PUBLIC_API_URL"
@@ -240,7 +240,7 @@ git diff b8c1e2f origin/main --stat -- .github/workflows/cd-backend.yml kredibbl
 ```
 Expected: `https://api.globalopportunitydesk.com/api`; nslookup finds no address for the name; the last command prints nothing (neither file changed since PR #30).
 
-- [ ] **Step 2: Point the production profile at Render**
+- [x] **Step 2: Point the production profile at Render**
 
 In `kredibble-app/eas.json`, inside `"production"`, replace:
 ```json
@@ -252,7 +252,7 @@ with:
 ```
 Leave the `development` and `staging` profiles as they are. A staging build that can't connect fails safe; pointing it at Render would let testers write to the production database. Plan 4c gives them real hosts.
 
-- [ ] **Step 3: Restore the Render-era backend CD**
+- [x] **Step 3: Restore the Render-era backend CD**
 
 ```bash
 git checkout 374eae1 -- .github/workflows/cd-backend.yml
@@ -261,7 +261,7 @@ grep -n "branches\|RENDER_DEPLOY_HOOK_URL\|ssh-action" .github/workflows/cd-back
 ```
 Expected: the diff is empty. The grep shows `branches: [main]` and the `RENDER_DEPLOY_HOOK_URL` lines, and no `ssh-action`. (Without the hook secret, the step prints a notice and skips; Render still deploys `main` through its GitHub integration, the `main - kredibble-api` deployments.)
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 node -e "const p = require('./kredibble-app/eas.json').build.production.env.EXPO_PUBLIC_API_URL; if (p !== 'https://kredibble-api.onrender.com/api') { throw new Error(p); } console.log('production ->', p)"
@@ -269,7 +269,7 @@ curl -s --max-time 120 https://kredibble-api.onrender.com/api/v1/health
 ```
 Expected: `production -> https://kredibble-api.onrender.com/api`, then JSON with `"status":"ok"`. The first call can take over a minute while Render wakes; that delay is the SEC-089 evidence.
 
-- [ ] **Step 5: Commit, push, open PR 1**
+- [x] **Step 5: Commit, push, open PR 1**
 
 ```bash
 git branch --show-current   # must print security/SEC-111-disarm-deploy-config
@@ -330,7 +330,7 @@ Start only after PR 1 is merged. Create the `GO-plan4a-guardrails` worktree from
 **Interfaces:**
 - Produces: `findEncodingProblems(filePath: string, content: Buffer): string[]` and `isCheckedPath(filePath: string): boolean` (exported). `node scripts/check-encoding.mjs` exits 1 when any tracked file fails. Task 5 runs both in CI.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `scripts/check-encoding.test.mjs`:
 ```js
@@ -384,12 +384,12 @@ test('skips binary formats', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and see it fail**
+- [x] **Step 2: Run the test and see it fail**
 
 Run: `node --test scripts/check-encoding.test.mjs`
 Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `…/scripts/check-encoding.mjs`.
 
-- [ ] **Step 3: Write the checker**
+- [x] **Step 3: Write the checker**
 
 Create `scripts/check-encoding.mjs`:
 ```js
@@ -492,12 +492,12 @@ if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
 }
 ```
 
-- [ ] **Step 4: Run the test and see it pass**
+- [x] **Step 4: Run the test and see it pass**
 
 Run: `node --test scripts/check-encoding.test.mjs`
 Expected: `# pass 8`, `# fail 0`. (These exact files were run on 2026-10-04 with Node 24: 8/8.)
 
-- [ ] **Step 5: Run the checker on the repo**
+- [x] **Step 5: Run the checker on the repo**
 
 Run: `node scripts/check-encoding.mjs`
 Expected: exit code 1 and exactly one failing file (as measured against `main` @ `60c1de6`):
@@ -507,7 +507,7 @@ check-encoding: … files checked, 1 failing
 ```
 If more files fail, something new was written with PowerShell. Record it as a SEC row before fixing it. Task 4 untracks the test report; CI doesn't run the check until Task 5.
 
-- [ ] **Step 6: Keep shell scripts LF on Windows checkouts**
+- [x] **Step 6: Keep shell scripts LF on Windows checkouts**
 
 Create `.gitattributes`:
 ```
@@ -515,7 +515,7 @@ Create `.gitattributes`:
 *.sh text eol=lf
 ```
 
-- [ ] **Step 7: Add the root scripts**
+- [x] **Step 7: Add the root scripts**
 
 In the root `package.json` `"scripts"` object, after `"build:admin"`, add:
 ```json
@@ -524,14 +524,14 @@ In the root `package.json` `"scripts"` object, after `"build:admin"`, add:
 ```
 (Put a comma after the `"build:admin"` line.) Run: `npm run test:scripts`. Expected: `# pass 8`.
 
-- [ ] **Step 8: Add the guardrail to `AGENTS.md`**
+- [x] **Step 8: Add the guardrail to `AGENTS.md`**
 
 In `## Guardrails`, after the `- **No secrets in code**` bullet, add:
 ```
 - **Text files are UTF-8** — never write repo files with Windows PowerShell 5.1: `>`, `Out-File` and `Set-Content` produce UTF-16 or ANSI (SEC-110). Use the editor tools, Git Bash or Node. `npm run check:encoding` at the repo root must report 0 failing files; CI enforces it.
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git branch --show-current   # must print security/SEC-116-repo-guardrails
@@ -553,12 +553,12 @@ git push -u origin security/SEC-116-repo-guardrails
 **Interfaces:**
 - Produces: an index with no local or generated files, so the checker reports 0 and Task 5's secret scan covers only project files.
 
-- [ ] **Step 1: List what's tracked**
+- [x] **Step 1: List what's tracked**
 
 Run: `git ls-files .claude .idea .kilo .remember .superpowers kredibble-backend/test-results.json kredibble-backend/server_stderr.log kredibble-backend/server_stdout.log`
 Expected: `.claude/scheduled_tasks.lock`, 6 `.idea/` files, `kredibble-backend/test-results.json` and the two `.log` files. If anything else under `.claude/` is listed (for example a shared `settings.json`), leave it tracked.
 
-- [ ] **Step 2: Ignore them**
+- [x] **Step 2: Ignore them**
 
 Append to the root `.gitignore` (`.claude/*.local.*` is already there from 712ea6c; `*.log` already covers the logs, which were force-added earlier):
 ```
@@ -572,13 +572,13 @@ Append to the root `.gitignore` (`.claude/*.local.*` is already there from 712ea
 kredibble-backend/test-results.json
 ```
 
-- [ ] **Step 3: Remove them from the index only**
+- [x] **Step 3: Remove them from the index only**
 
 ```bash
 git rm --cached -r --quiet .claude/scheduled_tasks.lock .idea kredibble-backend/test-results.json kredibble-backend/server_stderr.log kredibble-backend/server_stdout.log
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```bash
 git ls-files .claude .idea kredibble-backend/test-results.json
@@ -587,7 +587,7 @@ node scripts/check-encoding.mjs
 ```
 Expected: the first prints nothing; the second prints a `.gitignore` match for each path; the third prints `0 failing` and exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git branch --show-current   # must print security/SEC-116-repo-guardrails
@@ -612,7 +612,7 @@ git push
 - Consumes: `scripts/check-encoding.mjs` and its test (Task 3).
 - Produces: the check `Repo hygiene (encoding, workflows, shell, secrets)`. Roadmap track M1 makes it a required check.
 
-- [ ] **Step 1: Add the job**
+- [x] **Step 1: Add the job**
 
 In `.github/workflows/ci.yml`, add this job at the end of `jobs:`, at the same indentation as the other jobs:
 ```yaml
@@ -640,7 +640,7 @@ In `.github/workflows/ci.yml`, add this job at the end of `jobs:`, at the same i
         run: docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 dir /repo --redact --no-banner
 ```
 
-- [ ] **Step 2: Run what can run locally**
+- [x] **Step 2: Run what can run locally**
 
 ```bash
 node --test scripts/check-encoding.test.mjs
@@ -656,20 +656,20 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "$(cygpath -w "$PWD"):/repo" --workdir /re
 
 Run gitleaks **only in CI**. A local working tree contains `node_modules/` and the real, gitignored `.env` files, which aren't in git and would drown the report.
 
-- [ ] **Step 3: Fix findings at the source**
+- [x] **Step 3: Fix findings at the source**
 
 - **actionlint / shellcheck:** fix each finding in the workflow or script. Don't disable rules globally. A single `# shellcheck disable=SCnnnn` is allowed only with a comment on the same line explaining why.
 - **gitleaks, real secret** (a live token or key, including JWTs in `kredibble-backend/kredibble-postman-collection.json`): stop. Add a SEC row to `task.md`, ask the owner to rotate it, then remove it from the file. Rotation comes before cleanup.
 - **gitleaks, false positive** (a test fixture, or an obviously fake value such as the boot-smoke-test secrets in `ci.yml`): add its `Fingerprint:` line from the report to `.gitleaksignore`, each with a `#` comment line above it saying why it's safe.
 
-- [ ] **Step 4: Update the CI table in `AGENTS.md`**
+- [x] **Step 4: Update the CI table in `AGENTS.md`**
 
 In the `## CI/CD Pipeline (GitHub Actions)` table, append to the end of the `ci.yml` row's "What it does" cell:
 ```
  **Hygiene:** text files are UTF-8, actionlint (with shellcheck on `run:` blocks), shellcheck on `*.sh`, gitleaks on the working tree.
 ```
 
-- [ ] **Step 5: Commit, push, run CI on the branch**
+- [x] **Step 5: Commit, push, run CI on the branch**
 
 If Step 3 created `.gitleaksignore`, add it to the `git add` line.
 ```bash
@@ -694,7 +694,7 @@ gh run list --branch security/SEC-116-repo-guardrails --workflow CI --limit 1
 **Interfaces:**
 - Produces: weekly update PRs. Required checks (track M1) gate them like any other PR.
 
-- [ ] **Step 1: Write the config**
+- [x] **Step 1: Write the config**
 
 Create `.github/dependabot.yml`:
 ```yaml
@@ -747,12 +747,12 @@ updates:
       day: monday
 ```
 
-- [ ] **Step 2: Check it**
+- [x] **Step 2: Check it**
 
 Run: `node scripts/check-encoding.mjs`. Expected: `0 failing`.
 Dependabot reads the file from the default branch, so check GitHub → Insights → Dependency graph → Dependabot after PR 2 merges: all five entries should show a "last checked" time and no configuration error. Note this in the PR body.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git branch --show-current   # must print security/SEC-116-repo-guardrails
@@ -784,7 +784,7 @@ git push
   - `GET /api/v1/health` (and legacy `/api/health`) JSON gains `environment` (= `env.appEnv`) and `release` (= `env.release`). Plan 4b's `god-deploy` waits for `release === <sha>` and `environment === <env>`; Plan 4d's Sentry setup uses both.
   - Docker build arg `RELEASE_SHA`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `kredibble-backend/tests/sec-112-environment-release.test.js`:
 ```js
@@ -872,12 +872,12 @@ describe('SEC-112: the API reports which environment and release it is', () => {
 ```
 (The child-process approach was checked against `env.js` on this Windows machine on 2026-10-04: both a full production config and `APP_ENV=staging` without `NODE_ENV` load, and neither resolves `appEnv` or `release` yet.)
 
-- [ ] **Step 2: Run it and see it fail**
+- [x] **Step 2: Run it and see it fail**
 
 Run: `(cd kredibble-backend && npx cross-env NODE_OPTIONS=--experimental-vm-modules npx jest tests/sec-112-environment-release.test.js)`
 Expected: FAIL. The health test gets `undefined` for `environment`; the boot tests get `appEnv` `undefined`; `APP_ENV: 'prod'` and `APP_ENV: 'staging'` without `NODE_ENV` don't throw.
 
-- [ ] **Step 3: Resolve `appEnv` and `release` in `env.js`**
+- [x] **Step 3: Resolve `appEnv` and `release` in `env.js`**
 
 In `kredibble-backend/src/config/env.js`, directly after `const isProduction = nodeEnv === 'production';`, add:
 ```js
@@ -919,7 +919,7 @@ Then in the `env` object, directly after `nodeEnv,`, add:
   release: resolveRelease(),
 ```
 
-- [ ] **Step 4: Report both on the health check**
+- [x] **Step 4: Report both on the health check**
 
 In `kredibble-backend/src/routes/index.js` (`env` is already imported on line 10; don't add a second import), in the `router.get('/health', …)` handler change:
 ```js
@@ -939,12 +939,12 @@ to:
       database: {
 ```
 
-- [ ] **Step 5: Run the test and see it pass**
+- [x] **Step 5: Run the test and see it pass**
 
 Run: `(cd kredibble-backend && npx cross-env NODE_OPTIONS=--experimental-vm-modules npx jest tests/sec-112-environment-release.test.js)`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 6: Bake the release into the image**
+- [x] **Step 6: Bake the release into the image**
 
 In `kredibble-backend/Dockerfile`, add after `COPY --chown=node:node src ./src` (late, so the `npm ci` layer stays cached):
 ```dockerfile
@@ -961,7 +961,7 @@ In `.github/workflows/ci.yml`, job `backend-image`, add under the `docker/build-
 ```
 In `.github/workflows/cd-backend.yml`, job `image`, add the same two lines under the `docker/build-push-action@v7` step's `with:` (after `labels: ${{ steps.meta.outputs.labels }}`).
 
-- [ ] **Step 7: Make the Render environment explicit and document the variables**
+- [x] **Step 7: Make the Render environment explicit and document the variables**
 
 In `render.yaml`, after the `NODE_ENV` entry (`value: production`), add:
 ```yaml
@@ -978,7 +978,7 @@ In `kredibble-backend/.env.example`, after the line `PORT=4000`, add:
 ```
 The `Production boot smoke test` step in `ci.yml` sets `NODE_ENV=production` without `APP_ENV`, so it exercises the default and must still print `Boot smoke test passed!`.
 
-- [ ] **Step 8: Run the backend checks**
+- [x] **Step 8: Run the backend checks**
 
 Run: `(cd kredibble-backend && npm run lint && npm test)`
 Expected: lint clean and every suite passing. If lint fails, check whether this task caused it by linting only its files:
@@ -987,7 +987,7 @@ Expected: lint clean and every suite passing. If lint fails, check whether this 
 ```
 If that passes, the failure is the pre-existing red `main` (Global Constraints): record it in the PR body and continue. Don't use `git stash` to compare; the stash is shared by every worktree and other sessions keep entries there. Copy the `Tests:` summary line for the Progress Log.
 
-- [ ] **Step 9: Verify against a running server**
+- [x] **Step 9: Verify against a running server**
 
 In a second Git Bash terminal, from the worktree:
 ```bash
@@ -1006,7 +1006,7 @@ docker run --rm --entrypoint node god-api:local -e "console.log(process.env.RELE
 ```
 Expected: the HEAD sha. (Without Docker, CI's `backend-image` job builds it with the build arg.)
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git branch --show-current   # must print security/SEC-116-repo-guardrails
@@ -1034,7 +1034,7 @@ git push
 **Interfaces:**
 - Consumes: the commit SHAs and test summary from Tasks 1–7, and PR 1's number.
 
-- [ ] **Step 1: Update the status table in `task.md`**
+- [x] **Step 1: Update the status table in `task.md`**
 
 Replace the last cell of these rows:
 - SEC-111: `✅ Production back on Render (PR 1); single-level staging/dev names in Plan 4c, production switch in Plan 4f`
@@ -1044,7 +1044,7 @@ Replace the last cell of these rows:
 
 In the cards, tick the acceptance boxes these tasks proved: SEC-111 (first box), SEC-112 (first two boxes), SEC-113, SEC-116 ("Repo hygiene runs on every PR").
 
-- [ ] **Step 2: Add Progress Log rows**
+- [x] **Step 2: Add Progress Log rows**
 
 Append, using real short SHAs (`git log --oneline -10`), PR 1's number and the real test summary:
 ```
@@ -1054,7 +1054,7 @@ Append, using real short SHAs (`git log --oneline -10`), PR 1's number and the r
 | <date> | SEC-112 | <sha T7> | 🟡 Health | tests/sec-112-environment-release.test.js 6/6; full suite: <Tests: line>; e2e server health showed environment=development and release=<sha> |
 ```
 
-- [ ] **Step 3: Point the Phase 3 roadmap at Plan 4**
+- [x] **Step 3: Point the Phase 3 roadmap at Plan 4**
 
 In `PLAN-phase-3-roadmap.md`, replace the row:
 ```
@@ -1066,7 +1066,7 @@ with:
 | 5 | Legal | SEC-092 | Plan 3 for in-app links | Not written |
 ```
 
-- [ ] **Step 4: Add the lesson to the journal**
+- [x] **Step 4: Add the lesson to the journal**
 
 Append under `## Lessons Learned Per Project` in `C:\Users\Jerry\Desktop\PROJECT 2026\SYSTEM_DESIGN_LESSONS.md`, after the last Kredibble entry (use the execution date):
 ```markdown
@@ -1082,7 +1082,7 @@ Add a row to the `## Concepts Introduced So Far` table:
 ```
 Update the `*Last updated:*` date at the bottom of the file.
 
-- [ ] **Step 5: Commit the records**
+- [x] **Step 5: Commit the records**
 
 ```bash
 git branch --show-current   # must print security/SEC-116-repo-guardrails
@@ -1093,7 +1093,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 git push
 ```
 
-- [ ] **Step 6: Open PR 2**
+- [x] **Step 6: Open PR 2**
 
 ```bash
 BODY="$(mktemp)"
@@ -1122,7 +1122,7 @@ rm "$BODY"
 ```
 Fill in the `<…>` lines before running. Expected: the PR URL is printed.
 
-- [ ] **Step 7: Clean up the worktrees after both PRs merge**
+- [x] **Step 7: Clean up the worktrees after both PRs merge**
 
 ```bash
 cd "/c/Users/Jerry/Desktop/PROJECT 2026/Global-Opportunities"

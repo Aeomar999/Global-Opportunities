@@ -125,7 +125,7 @@ rollback any time: run the deploy workflow with an older sha
 
 Plans 4d and 4g can run in parallel with 4b/4c. Plan 4f must come last: monitoring and backups exist **before** production moves.
 
-### 4a — Disarm SEC-090's live config and add repo guardrails *(written)*
+### 4a — Disarm SEC-090's live config and add repo guardrails *(✅ Done)*
 **PR 1 (urgent):** records SEC-110–118, points production `eas.json` back at Render, and restores the Render-era `cd-backend.yml`. **PR 2:** a UTF-8 check, stops tracking local state, adds a CI hygiene job (encoding, actionlint, shellcheck, gitleaks) and Dependabot, and teaches the API its `APP_ENV` and release SHA, which every later deploy check depends on. Production behaviour returns to what it was before PR #30. Both PRs are built in separate worktrees from `origin/main`, because other sessions switch branches in the shared checkout.
 
 ### 4b — GOD API on the VPS, staging first ([Implementation Plan](PLAN-4b-api-on-vps.md) · *Scaffolding implemented*)
