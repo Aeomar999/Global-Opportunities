@@ -263,7 +263,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-113 | Local agent/IDE state and generated output tracked in git (`.claude/scheduled_tasks.lock`, `.idea/`, UTF-16 `kredibble-backend/test-results.json`, `server_*.log`; the Ralph-loop file was untracked in 712ea6c) | P2 | Repo hygiene | ✅ Done (Plan 4a) |
 | SEC-114 | Infrastructure owned by personal accounts (GitHub repo and GHCR namespace, Expo owner, Vercel scope, Render service) | P1 | Ownership | Open — Plan 4 track M, Plan 4g |
 | SEC-115 | No production approval gate and no build-once promotion: every push to `main` deploys straight to production | P1 | CI/CD | Open — Plan 4c |
-| SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | ✅ Done (Plan 4a; Dependabot confirmed after merge) |
+| SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | ✅ Done (Plan 4a, PR #35; Repo hygiene green in CI run 37253915991, Dependabot PRs #36–#44 open) |
 | SEC-117 | Known-password test accounts may exist in real databases (`@test.com` seed accounts; a test admin was created against production; the e2e admin login is a public default) | P1 | Data / Access | Open — Plan 4 track M5 |
 | SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | Open — Plan 4c; fix only after SEC-111 |
 
@@ -1374,7 +1374,7 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Fix:** Plan 4a: `scripts/check-encoding.mjs`; a `Repo hygiene` CI job running the encoding check, actionlint, shellcheck and gitleaks; `.github/dependabot.yml`.
 **Acceptance criteria:**
 - [x] `Repo hygiene` runs on every PR and is green
-- [ ] Dependabot opens weekly update PRs
+- [x] Dependabot opens weekly update PRs
 
 ### SEC-117 — Known-password test accounts may exist in real databases
 **Evidence:** the gitignored `kredibble-backend/scripts/seed-test-credentials.js` creates `admin@test.com`, `seeker@test.com` and `hirer@test.com` with weak passwords. The P0 section above records a test admin created against the production database. The e2e admin login (`test-admin@kredibble.com`) is a public default in `scripts/e2e-server.js`.
@@ -1600,9 +1600,9 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-04 | Q1–Q11 Resolutions | security/open-questions-resolutions | Done | Resolved and implemented all 11 open-ended architecture questions: (1) Admin token transport: httpOnly cookie. (2) Refresh token storage: MongoDB collection with SHA-256 hash & TTL. (3) Public read surface: Public reads enabled for /opportunities, /events, and /articles with strict scope filtering (cancelled events & drafts filtered out) and PII projection stripping. (4) Grant economy: Two-phase resource allocation (atomic reserve on approval, reviewed disbursement). (5) Swagger staging: ENABLE_SWAGGER environment flag. (6) Post authorship: ChannelPost.authorId nullable ref to User. (7) Host: Render starter plan, kredibble.app canonical domain. (8) v1 scope: Unused admin.js deleted, assistant & news mounted with flags and tests. (9) Email verification: Progressive gating via requireEmailVerified on applications, opportunity posting, and company verification docs returning 403 EMAIL_VERIFICATION_REQUIRED. (10) hirerId: createdBy for ownership, hirerId for display. (11) Retention lifecycle: Automated sweep service for 180-day rejected CV redaction and 90-day rejected verification doc purge. Added 14 new integration tests (sec-open-questions.test.js); 210/210 backend tests green across 17 test suites. |
 | 2026-10-04 | SEC-110–118 | — | Findings recorded | Plan 4 roadmap; SEC-089 and SEC-090 statuses corrected; SEC-111 hazard confirmed from CD App logs (no production update was published) |
 | 2026-10-05 | SEC-111 | 0652afd (PR #34) | ✅ Disarmed | eas.json production → kredibble-api.onrender.com (health 200); cd-backend restored to 374eae1 |
-| 2026-10-05 | SEC-113 | d5be84a | ✅ Done | test-results.json, .claude lock, .idea/, server logs untracked; files kept on disk |
-| 2026-10-05 | SEC-116 | 570ec08, 2556b30, 5852436, d7dac40, 3b2de90 | ✅ Done | check-encoding (8 node:test tests), Repo hygiene green (run 37253008290), Dependabot config |
-| 2026-10-05 | SEC-112 | a27466c | 🟡 Health | tests/sec-112-environment-release.test.js 6/6; full suite: 18 passed, 216 passed; e2e server health showed environment=development and release=3b2de90c5059b10f03f78b35807416082c2d8cc3 |
+| 2026-10-05 | SEC-113 | d5be84a (PR #35) | ✅ Done | test-results.json, .claude lock, .idea/, server logs untracked; files kept on disk |
+| 2026-10-05 | SEC-116 | a4b8345 (PR #35) | ✅ Done | check-encoding (8 node:test tests), Repo hygiene green (run 37253915991), Dependabot config (PRs #36–#44 open) |
+| 2026-10-05 | SEC-112 | a4b8345 (PR #35) | 🟡 Health | tests/sec-112-environment-release.test.js 6/6; full suite: 18 passed, 216 passed; health endpoint reports environment and release; Dockerfile RELEASE_SHA build arg wired |
 
 ---
 
