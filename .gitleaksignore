@@ -1,0 +1,15 @@
+# Test fixtures and false positives (SEC-116)
+
+# Test dummy password for wrong password unit tests
+kredibble-backend/tests/sec-083-084.test.js:generic-api-key:126
+kredibble-backend/tests/sec-065.test.js:generic-api-key:197
+PLAN-1-account-security.md:generic-api-key:545
+PLAN-1-account-security.md:generic-api-key:827
+
+# Policy key name 'verification/companies' falsely flagged as generic-api-key
+kredibble-backend/src/routes/index.js:generic-api-key:767
+kredibble-backend/src/routes/index.js:generic-api-key:1298
+PLAN-2a-admin-data-api.md:generic-api-key:583
+
+# Local IDE configuration key
+.idea/planningMode.xml:generic-api-key:6
