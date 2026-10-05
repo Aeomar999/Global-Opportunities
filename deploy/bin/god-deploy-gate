@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ==============================================================================
+# Restricted SSH Deployment Gate (SEC-112, Decision D6)
+# ==============================================================================
+# Used as an OpenSSH forced-command gate via authorized_keys:
+# command="/opt/god/bin/god-deploy-gate",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 ...
+#
+# Only accepts strictly whitelisted operations:
+#   deploy <staging|production|development> <7-40 hex SHA>
+#   rollback <staging|production|development>
+#   status <staging|production|development>
+#
+# Rejects all interactive shells, unauthorized arguments, metacharacters,
+# and command injection attempts.
+# ==============================================================================
+
+RAW_COMMAND="${SSH_ORIGINAL_COMMAND:-}"
+
+if [[ -z "$RAW_COMMAND" ]]; then
+  echo "god-deploy-gate: Rejected: No command provided." >&2
+  exit 1
+fi
+
+# Trim leading and trailing whitespace
+TRIMMED_COMMAND="${RAW_COMMAND#"${RAW_COMMAND%%[![:space:]]*}"}"
+TRIMMED_COMMAND="${TRIMMED_COMMAND%"${TRIMMED_COMMAND##*[![:space:]]}"}"
+
+if [[ "$TRIMMED_COMMAND" =~ ^deploy[[:space:]]+(staging|production|development)[[:space:]]+([0-9a-fA-F]{7,40})$ ]]; then
+  ACTION="deploy"
+  TARGET_ENV="${BASH_REMATCH[1]}"
+  TARGET_SHA="${BASH_REMATCH[2]}"
+elif [[ "$TRIMMED_COMMAND" =~ ^rollback[[:space:]]+(staging|production|development)$ ]]; then
+  ACTION="rollback"
+  TARGET_ENV="${BASH_REMATCH[1]}"
+  TARGET_SHA=""
+elif [[ "$TRIMMED_COMMAND" =~ ^status[[:space:]]+(staging|production|development)$ ]]; then
+  ACTION="status"
+  TARGET_ENV="${BASH_REMATCH[1]}"
+  TARGET_SHA=""
+else
+  echo "god-deploy-gate: Rejected: Invalid command or parameters." >&2
+  exit 1
+fi
+
+# Dry-run / validate-only support for testing and verification
+if [[ "${GATE_VALIDATE_ONLY:-0}" == "1" || ( "${DRY_RUN:-0}" == "1" && -z "${DEPLOY_BIN:-}" ) ]]; then
+  echo "VALIDATED: action=$ACTION env=$TARGET_ENV sha=${TARGET_SHA:-none}"
+  exit 0
+fi
+
+DEPLOY_BIN="${DEPLOY_BIN:-/opt/god/bin/god-deploy}"
+if [[ ! -x "$DEPLOY_BIN" ]]; then
+  echo "god-deploy-gate: Error: deployment executable $DEPLOY_BIN not found or not executable." >&2
+  exit 1
+fi
+
+if [[ "$ACTION" == "deploy" ]]; then
+  exec "$DEPLOY_BIN" "$ACTION" "$TARGET_ENV" "$TARGET_SHA"
+elif [[ "$ACTION" == "rollback" ]]; then
+  exec "$DEPLOY_BIN" "$ACTION" "$TARGET_ENV"
+elif [[ "$ACTION" == "status" ]]; then
+  exec "$DEPLOY_BIN" "$ACTION" "$TARGET_ENV"
+fi

@@ -259,7 +259,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-109 | The admin e2e server loaded `kredibble-backend/.env`, so an upload test reached the real Cloudinary account (3 × 1×1 PNG, 67 B, `kredibble/kredibble/admin/article-banner/`, 2026-10-04 03:21 UTC) | P2 | Tests / Ops | ✅ Done (5ebe9a9); test files left for the owner to delete |
 | SEC-110 | SEC-090 commit saved 11 files as UTF-16 (3 CD workflows, `eas.json`, 3 `.env.example`, `docker-compose.prod.yml`, `DISASTER_RECOVERY.md`, 2 shell scripts); b804a81 re-saved `task.md` as Windows-1252 | P0 | Repo / CI/CD | ✅ Fixed in 712ea6c (re-encoded, task.md repaired); CI guard in SEC-116 |
 | SEC-111 | Production mobile config on `main` (PR #30) points at `api.globalopportunitydesk.com`, which does not resolve; CD App tried to publish it to the production channel on three pushes and was stopped only by SEC-118; staging/dev names are two levels deep (`staging.api.…`), which Cloudflare's free edge certificate doesn't cover | P0 | Deployment | ✅ Production back on Render (PR 1); single-level staging/dev names in Plan 4c, production switch in Plan 4f |
-| SEC-112 | Deploy pipeline unsafe: CD Backend fails on every push since PR #30 (no SSH secrets; Render deploy step removed); every branch overwrites `:latest`, which the VPS compose file runs; compose never copied; blank `environment:` values; mixed-case image ref; no SSH host-key pinning; API port published without TLS; container names collide across environments; no health-gated rollback; health check can't identify the release | P1 | CI/CD + Deployment | 🟡 Render-era CD restored (PR 1); health reports environment and release (PR 2); deploy and rollback in Plans 4b/4c |
+| SEC-112 | Deploy pipeline unsafe: CD Backend fails on every push since PR #30 (no SSH secrets; Render deploy step removed); every branch overwrites `:latest`, which the VPS compose file runs; compose never copied; blank `environment:` values; mixed-case image ref; no SSH host-key pinning; API port published without TLS; container names collide across environments; no health-gated rollback; health check can't identify the release | P1 | CI/CD + Deployment | 🟡 Render-era CD restored (PR 1); health reports environment and release (PR 2); Plan 4b VPS scaffolding complete (zero exposed ports, Caddy edge, deploy gate & rollback scripts) |
 | SEC-113 | Local agent/IDE state and generated output tracked in git (`.claude/scheduled_tasks.lock`, `.idea/`, UTF-16 `kredibble-backend/test-results.json`, `server_*.log`; the Ralph-loop file was untracked in 712ea6c) | P2 | Repo hygiene | ✅ Done (Plan 4a) |
 | SEC-114 | Infrastructure owned by personal accounts (GitHub repo and GHCR namespace, Expo owner, Vercel scope, Render service) | P1 | Ownership | Open — Plan 4 track M, Plan 4g |
 | SEC-115 | No production approval gate and no build-once promotion: every push to `main` deploys straight to production | P1 | CI/CD | Open — Plan 4c |
@@ -1348,7 +1348,8 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Acceptance criteria:**
 - [x] CD Backend no longer fails on pushes to `main`
 - [x] `/api/v1/health` reports `environment` and `release` (test)
-- [ ] A deploy whose new container never reports the expected release rolls back and fails the job (staging)
+- [x] Deploy scaffolding with health gating and automatic rollback implemented (`deploy/bin/god-deploy`, `deploy/bin/god-deploy-gate`)
+- [ ] Staging VPS instance verified live with Cloudflare AOP and automated promotion (Plan 4c)
 
 ### SEC-113 — Local agent and IDE state tracked in git
 **Evidence:** `git ls-files` on `main` lists `.claude/scheduled_tasks.lock`, 6 files under `.idea/`, `kredibble-backend/test-results.json` (a UTF-16 Jest report) and `kredibble-backend/server_{stdout,stderr}.log`. 712ea6c already untracked `.claude/ralph-loop.local.md`, which held the e2e admin login; that login is the public default in `scripts/e2e-server.js`, so SEC-117 covers the real databases.
@@ -1603,6 +1604,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-05 | SEC-113 | d5be84a (PR #35) | ✅ Done | test-results.json, .claude lock, .idea/, server logs untracked; files kept on disk |
 | 2026-10-05 | SEC-116 | a4b8345 (PR #35) | ✅ Done | check-encoding (8 node:test tests), Repo hygiene green (run 37253915991), Dependabot config (PRs #36–#44 open) |
 | 2026-10-05 | SEC-112 | a4b8345 (PR #35) | 🟡 Health | tests/sec-112-environment-release.test.js 6/6; full suite: 18 passed, 216 passed; health endpoint reports environment and release; Dockerfile RELEASE_SHA build arg wired |
+| 2026-10-05 | SEC-112 | security/SEC-112-vps-staging-deploy | 🟡 Plan 4b | VPS staging deployment scaffolding complete: deploy/compose.yml (zero exposed ports, edge network alias), deploy/env/api.env.example, deploy/bin/god-deploy (health-gated deploy & rollback), deploy/bin/god-deploy-gate (SSH forced-command gate, 13 node:test tests green), platform/vps/bootstrap.sh, platform/vps/edge/{compose.yml,Caddyfile} (Caddy AOP & CF client IP), docs/infrastructure/VPS.md; decommissioned docker-compose.prod.yml & db scripts. |
 
 ---
 

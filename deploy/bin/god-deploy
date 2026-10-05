@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ==============================================================================
+# Global Opportunity Desk (GOD) Deployment Controller (SEC-112, D2, D6)
+# ==============================================================================
+# Usage:
+#   god-deploy deploy <staging|production|development> <sha>
+#   god-deploy rollback <staging|production|development>
+#   god-deploy status <staging|production|development>
+#
+# Enforces:
+#   1. Zero downtime deployments via Docker Compose
+#   2. Pre-promotion / post-boot health check gating (/api/v1/health)
+#   3. Release SHA & environment verification
+#   4. Automatic rollback to previous release on health check failure
+# ==============================================================================
+
+ACTION="${1:-}"
+TARGET_ENV="${2:-}"
+TARGET_SHA="${3:-}"
+
+if [[ -z "$ACTION" || -z "$TARGET_ENV" ]]; then
+  echo "Usage: god-deploy <deploy|rollback|status> <staging|production|development> [sha]" >&2
+  exit 1
+fi
+
+case "$TARGET_ENV" in
+  staging|production|development) ;;
+  *)
+    echo "god-deploy: Error: Invalid environment '$TARGET_ENV'. Must be staging, production, or development." >&2
+    exit 1
+    ;;
+esac
+
+# Paths and configuration
+GOD_BASE_DIR="${GOD_BASE_DIR:-/opt/god}"
+COMPOSE_FILE="${COMPOSE_FILE:-${GOD_BASE_DIR}/deploy/compose.yml}"
+ENV_DIR="${GOD_BASE_DIR}/${TARGET_ENV}"
+ENV_FILE="${ENV_FILE:-${ENV_DIR}/api.env}"
+CURRENT_RELEASE_FILE="${ENV_DIR}/current_release"
+PREVIOUS_RELEASE_FILE="${ENV_DIR}/previous_release"
+API_IMAGE="${API_IMAGE:-ghcr.io/aeomar999/global-opportunities/kredibble-backend}"
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
+HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-3}"
+DRY_RUN="${DRY_RUN:-0}"
+
+run_compose() {
+  local tag="$1"
+  local sha="$2"
+  APP_ENV="$TARGET_ENV" \
+  API_IMAGE="$API_IMAGE" \
+  IMAGE_TAG="$tag" \
+  RELEASE_SHA="$sha" \
+  ENV_FILE="$ENV_FILE" \
+  docker compose -f "$COMPOSE_FILE" --project-name "god-${TARGET_ENV}" up -d --remove-orphans
+}
+
+wait_for_health() {
+  local expected_sha="$1"
+  local elapsed=0
+
+  echo "god-deploy: Polling /api/v1/health for environment=${TARGET_ENV} release=${expected_sha}..."
+  while (( elapsed < HEALTH_TIMEOUT_SECONDS )); do
+    if docker compose -f "$COMPOSE_FILE" --project-name "god-${TARGET_ENV}" exec -T api node -e "
+      fetch('http://127.0.0.1:4000/api/v1/health')
+        .then(res => {
+          if (!res.ok) process.exit(1);
+          return res.json();
+        })
+        .then(body => {
+          if (body.environment === '${TARGET_ENV}' && body.release === '${expected_sha}') {
+            process.exit(0);
+          } else {
+            console.error('Waiting... Health mismatch: environment=' + body.environment + ', release=' + body.release);
+            process.exit(1);
+          }
+        })
+        .catch(() => process.exit(1));
+    " >/dev/null 2>&1; then
+      echo "god-deploy: Container healthy and verified in ${elapsed}s (release=${expected_sha}, env=${TARGET_ENV})."
+      return 0
+    fi
+
+    sleep "$HEALTH_INTERVAL_SECONDS"
+    elapsed=$(( elapsed + HEALTH_INTERVAL_SECONDS ))
+  done
+
+  echo "god-deploy: Timeout reached (${HEALTH_TIMEOUT_SECONDS}s) waiting for healthy release ${expected_sha}." >&2
+  return 1
+}
+
+deploy_action() {
+  if [[ -z "$TARGET_SHA" ]]; then
+    echo "god-deploy: Error: deploy action requires commit SHA." >&2
+    exit 1
+  fi
+
+  if [[ ! -f "$ENV_FILE" && "$DRY_RUN" == "0" ]]; then
+    echo "god-deploy: Error: Environment file $ENV_FILE does not exist." >&2
+    exit 1
+  fi
+
+  local current_sha=""
+  if [[ -f "$CURRENT_RELEASE_FILE" ]]; then
+    current_sha="$(cat "$CURRENT_RELEASE_FILE" | tr -d '[:space:]')"
+  fi
+
+  echo "god-deploy: Starting deployment of ${API_IMAGE}:${TARGET_SHA} to ${TARGET_ENV}..."
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "DRY_RUN: Pulling ${API_IMAGE}:${TARGET_SHA}"
+    echo "DRY_RUN: Deploying compose project god-${TARGET_ENV}"
+    echo "DRY_RUN: Verified health check for ${TARGET_SHA}"
+    if [[ -d "$ENV_DIR" || -w "$(dirname "$ENV_DIR")" ]]; then
+      mkdir -p "$ENV_DIR" 2>/dev/null || true
+      if [[ -w "$ENV_DIR" ]]; then
+        [[ -n "$current_sha" ]] && echo "$current_sha" > "$PREVIOUS_RELEASE_FILE"
+        echo "$TARGET_SHA" > "$CURRENT_RELEASE_FILE"
+      fi
+    fi
+    echo "god-deploy: Deployment completed (dry run)."
+    return 0
+  fi
+
+  mkdir -p "$ENV_DIR"
+  echo "god-deploy: Pulling image ${API_IMAGE}:${TARGET_SHA}..."
+  docker pull "${API_IMAGE}:${TARGET_SHA}"
+
+  echo "god-deploy: Applying containers via Docker Compose..."
+  run_compose "$TARGET_SHA" "$TARGET_SHA"
+
+  if wait_for_health "$TARGET_SHA"; then
+    if [[ -n "$current_sha" && "$current_sha" != "$TARGET_SHA" ]]; then
+      echo "$current_sha" > "$PREVIOUS_RELEASE_FILE"
+    fi
+    echo "$TARGET_SHA" > "$CURRENT_RELEASE_FILE"
+    echo "god-deploy: Successfully deployed ${TARGET_SHA} to ${TARGET_ENV}."
+    exit 0
+  else
+    echo "god-deploy: Health check FAILED for release ${TARGET_SHA} in ${TARGET_ENV}!" >&2
+    echo "god-deploy: Dumping recent container logs for debugging:" >&2
+    docker compose -f "$COMPOSE_FILE" --project-name "god-${TARGET_ENV}" logs --tail 50 api >&2 || true
+
+    if [[ -n "$current_sha" ]]; then
+      echo "god-deploy: Initiating automatic rollback to previous release ${current_sha}..." >&2
+      run_compose "$current_sha" "$current_sha"
+      if wait_for_health "$current_sha"; then
+        echo "god-deploy: Rollback to ${current_sha} successful." >&2
+      else
+        echo "god-deploy: CRITICAL: Rollback to ${current_sha} also failed!" >&2
+      fi
+    else
+      echo "god-deploy: No previous release recorded to rollback to." >&2
+    fi
+    exit 1
+  fi
+}
+
+rollback_action() {
+  if [[ ! -f "$PREVIOUS_RELEASE_FILE" ]]; then
+    echo "god-deploy: Error: No previous release file found at $PREVIOUS_RELEASE_FILE." >&2
+    exit 1
+  fi
+
+  local rollback_sha
+  rollback_sha="$(cat "$PREVIOUS_RELEASE_FILE" | tr -d '[:space:]')"
+
+  if [[ -z "$rollback_sha" ]]; then
+    echo "god-deploy: Error: Previous release file is empty." >&2
+    exit 1
+  fi
+
+  local current_sha=""
+  if [[ -f "$CURRENT_RELEASE_FILE" ]]; then
+    current_sha="$(cat "$CURRENT_RELEASE_FILE" | tr -d '[:space:]')"
+  fi
+
+  echo "god-deploy: Rolling back ${TARGET_ENV} from ${current_sha:-unknown} to ${rollback_sha}..."
+
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "DRY_RUN: Rolling back to ${rollback_sha}"
+    if [[ -d "$ENV_DIR" || -w "$(dirname "$ENV_DIR")" ]]; then
+      mkdir -p "$ENV_DIR" 2>/dev/null || true
+      if [[ -w "$ENV_DIR" ]]; then
+        echo "$rollback_sha" > "$CURRENT_RELEASE_FILE"
+        [[ -n "$current_sha" ]] && echo "$current_sha" > "$PREVIOUS_RELEASE_FILE"
+      fi
+    fi
+    echo "god-deploy: Rollback completed (dry run)."
+    return 0
+  fi
+
+  run_compose "$rollback_sha" "$rollback_sha"
+
+  if wait_for_health "$rollback_sha"; then
+    echo "$rollback_sha" > "$CURRENT_RELEASE_FILE"
+    if [[ -n "$current_sha" ]]; then
+      echo "$current_sha" > "$PREVIOUS_RELEASE_FILE"
+    fi
+    echo "god-deploy: Rollback to ${rollback_sha} completed successfully."
+    exit 0
+  else
+    echo "god-deploy: Error: Health check failed during rollback to ${rollback_sha}!" >&2
+    exit 1
+  fi
+}
+
+status_action() {
+  echo "=== Deployment Status for god-${TARGET_ENV} ==="
+  if [[ -f "$CURRENT_RELEASE_FILE" ]]; then
+    echo "Current Release:  $(cat "$CURRENT_RELEASE_FILE")"
+  else
+    echo "Current Release:  None recorded"
+  fi
+
+  if [[ -f "$PREVIOUS_RELEASE_FILE" ]]; then
+    echo "Previous Release: $(cat "$PREVIOUS_RELEASE_FILE")"
+  else
+    echo "Previous Release: None recorded"
+  fi
+
+  if [[ "$DRY_RUN" == "0" && -f "$COMPOSE_FILE" ]]; then
+    echo ""
+    echo "=== Compose Services ==="
+    docker compose -f "$COMPOSE_FILE" --project-name "god-${TARGET_ENV}" ps || true
+  fi
+}
+
+case "$ACTION" in
+  deploy)
+    deploy_action
+    ;;
+  rollback)
+    rollback_action
+    ;;
+  status)
+    status_action
+    ;;
+  *)
+    echo "god-deploy: Error: Unknown action '$ACTION'. Valid actions: deploy, rollback, status." >&2
+    exit 1
+    ;;
+esac

@@ -1,2 +1,3 @@
 # Shell scripts must keep LF line endings, or bash fails with "$'\r': command not found" (SEC-116).
 *.sh text eol=lf
+deploy/bin/* text eol=lf
