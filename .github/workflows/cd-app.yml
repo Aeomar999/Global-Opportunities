@@ -91,7 +91,7 @@ jobs:
           EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build['staging'].env.EXPO_PUBLIC_API_URL")
           export EXPO_PUBLIC_API_URL
           echo "EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
-          eas update --channel staging --platform ios --platform android --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive
+          eas update --channel staging --platform ios,android --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive
 
   publish-production:
     name: Publish EAS Update (Production)
@@ -140,4 +140,4 @@ jobs:
           EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build['production'].env.EXPO_PUBLIC_API_URL")
           export EXPO_PUBLIC_API_URL
           echo "EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
-          eas update --channel production --platform ios --platform android --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive
+          eas update --channel production --platform ios,android --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive
