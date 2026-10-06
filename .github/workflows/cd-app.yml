@@ -2,45 +2,39 @@ name: CD App
 
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [main]
     paths:
       - 'kredibble-app/**'
       - '.nvmrc'
       - '.github/workflows/cd-app.yml'
   workflow_dispatch:
+    inputs:
+      target_channel:
+        description: 'Target EAS channel to publish to'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - staging
+          - production
 
 concurrency:
-  group: cd-app-${{ github.ref }}
+  group: cd-app
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  eas-update:
-    name: Publish EAS Update
+  verify:
+    name: Verify (lint, typecheck, test)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    environment: 
-      name: ${{ github.ref == 'refs/heads/main' && 'Production' || github.ref == 'refs/heads/staging' && 'Staging' || 'Development' }}
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: kredibble-app
-    env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EXPO_NO_TELEMETRY: 1
-      EAS_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/staging' && 'staging' || 'development' }}
     steps:
-      - name: Check Expo token
-        id: creds
-        working-directory: .
-        run: |
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "::notice title=EAS update skipped::Set the EXPO_TOKEN repository secret to publish app updates."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -51,6 +45,40 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test -- --ci
+
+  publish-staging:
+    name: Publish EAS Update (Staging)
+    needs: verify
+    if: inputs.target_channel != 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: kredibble-app
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - name: Check Expo token
+        id: creds
+        working-directory: .
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::notice title=EAS staging update skipped::Set the EXPO_TOKEN repository secret to publish app updates."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.creds.outputs.ready == 'true'
+        uses: actions/checkout@v7
+      - if: steps.creds.outputs.ready == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-app/package-lock.json
+      - if: steps.creds.outputs.ready == 'true'
+        run: npm ci
       - if: steps.creds.outputs.ready == 'true'
         uses: expo/expo-github-action@v9
         with:
@@ -58,10 +86,58 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
           packager: npm
       - if: steps.creds.outputs.ready == 'true'
-        name: Publish update
+        name: Publish staging update
         run: |
-          # Read env from eas.json based on channel profile
-          EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build['${{ env.EAS_CHANNEL }}'].env.EXPO_PUBLIC_API_URL")
+          EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build['staging'].env.EXPO_PUBLIC_API_URL")
           export EXPO_PUBLIC_API_URL
           echo "EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
-          eas update --channel ${{ env.EAS_CHANNEL }} --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive
+          eas update --channel staging --platform ios --platform android --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive
+
+  publish-production:
+    name: Publish EAS Update (Production)
+    needs: [verify, publish-staging]
+    if: always() && needs.verify.result == 'success' && (needs.publish-staging.result == 'success' || needs.publish-staging.result == 'skipped') && inputs.target_channel != 'staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: Production
+    defaults:
+      run:
+        working-directory: kredibble-app
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - name: Check Expo token
+        id: creds
+        working-directory: .
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::notice title=EAS production update skipped::Set the EXPO_TOKEN repository secret to publish app updates."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.creds.outputs.ready == 'true'
+        uses: actions/checkout@v7
+      - if: steps.creds.outputs.ready == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-app/package-lock.json
+      - if: steps.creds.outputs.ready == 'true'
+        run: npm ci
+      - if: steps.creds.outputs.ready == 'true'
+        uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+      - if: steps.creds.outputs.ready == 'true'
+        name: Publish production update
+        run: |
+          EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build['production'].env.EXPO_PUBLIC_API_URL")
+          export EXPO_PUBLIC_API_URL
+          echo "EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
+          eas update --channel production --platform ios --platform android --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive

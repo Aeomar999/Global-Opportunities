@@ -13,6 +13,10 @@
     "icon": "./assets/images/icon.png",
     "scheme": "kredibbleapp",
     "userInterfaceStyle": "automatic",
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "ios": {
       "bundleIdentifier": "com.kredibble.app",
       "supportsTablet": true,
