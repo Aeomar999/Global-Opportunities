@@ -18,16 +18,16 @@
  * In real-API mode a muted note under the header says curated listings are only kept in memory for now (mock mode
  * shows nothing).
  *
- * Data: loadOpportunityRows() merges the hirer postings (mock or GET /opportunities) with the curated listings of the
- * shared store. Everything loads once; filtering is done here. A failed request shows inline with "Try again".
+ * Data: loadOpportunityRows() (services/opportunities.ts) merges the hirer postings (mock, or every page of
+ * GET /admin/opportunities) with the curated listings of the shared store. Everything loads once; filtering is done here. A failed request shows inline with "Try again".
  */
 import { useMemo, useState } from "react";
-import { Award, Briefcase, CalendarDays, GraduationCap, HandCoins, Plus, Sparkles, type LucideIcon } from "lucide-react";
+import { Briefcase, Plus } from "lucide-react";
 import { useRoles } from "@/components/access/RoleProvider";
 import { isMockMode } from "@/lib/services/mock-mode";
 import { formatDate } from "@/lib/format";
-import { loadOpportunityRows, type OpportunityRow, type OpportunitySource } from "@/lib/services/lists";
-import type { ListingType } from "@/lib/mock-entities";
+import { opportunityTypeMeta } from "@/lib/opportunity-types";
+import { loadOpportunityRows, type OpportunityRow, type OpportunitySource } from "@/lib/services/opportunities";
 import { subscribeMockStore } from "@/lib/mock-store";
 import { useListData } from "@/lib/use-list-data";
 import { DataTable } from "@/components/list/DataTable";
@@ -37,25 +37,18 @@ import type { Column } from "@/components/list/types";
 import { Select, type SelectOption } from "@/components/ui/form/Select";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
-const TYPE_META: Record<ListingType, { label: string; icon: LucideIcon }> = {
-  job: { label: "Job", icon: Briefcase },
-  internship: { label: "Internship", icon: GraduationCap },
-  event: { label: "Event", icon: CalendarDays },
-  grant: { label: "Grant", icon: HandCoins },
-  scholarship: { label: "Scholarship", icon: Award },
-  fellowship: { label: "Fellowship", icon: Sparkles },
-};
-
-/** The tabs. "Other" holds the curated types that have no tab of their own. */
+/** The tabs. "Other" holds every type that has no tab of its own (scholarships, fellowships, competitions, trainings...). */
 type TypeTab = "all" | "jobs" | "internships" | "events" | "grants" | "other";
-const TABS: { value: TypeTab; label: string; types?: ListingType[] }[] = [
+const OWN_TABS = ["jobs", "internships", "events", "grants"];
+const TABS: { value: TypeTab; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "jobs", label: "Jobs", types: ["job"] },
-  { value: "internships", label: "Internships", types: ["internship"] },
-  { value: "events", label: "Events", types: ["event"] },
-  { value: "grants", label: "Grants", types: ["grant"] },
-  { value: "other", label: "Other", types: ["scholarship", "fellowship"] },
+  { value: "jobs", label: "Jobs" },
+  { value: "internships", label: "Internships" },
+  { value: "events", label: "Events" },
+  { value: "grants", label: "Grants" },
+  { value: "other", label: "Other" },
 ];
+const inTab = (row: OpportunityRow, tab: TypeTab) => (tab === "all" ? true : tab === "other" ? !OWN_TABS.includes(row.type) : row.type === tab);
 
 type SourceFilter = "all" | OpportunitySource;
 const SOURCES: { value: SourceFilter; label: string }[] = [
@@ -74,7 +67,7 @@ const STATUS_OPTIONS: SelectOption<string>[] = [
   { value: "published", label: "Published" },
 ];
 
-const typeOf = (row: OpportunityRow) => TYPE_META[row.type] ?? TYPE_META.job;
+const typeOf = (row: OpportunityRow) => opportunityTypeMeta(row.type);
 
 const COLUMNS: Column<OpportunityRow>[] = [
   {
@@ -90,7 +83,7 @@ const COLUMNS: Column<OpportunityRow>[] = [
   { key: "source", header: "Source", type: "pill", width: "12%", label: (r) => (r.source === "curated" ? "Staff-curated" : "Hirer") },
   { key: "vetting", header: "Vetting", type: "status", width: "11%", status: (r) => r.vetting },
   { key: "posted", header: "Posted", type: "text", width: "11%", value: (r) => formatDate(r.date) },
-  { key: "status", header: "Status", type: "status", width: "14%", status: (r) => r.status },
+  { key: "status", header: "Status", type: "status", width: "14%", status: (r) => r.moderationStatus },
 ];
 
 export default function OpportunitiesQueuePage() {
@@ -112,16 +105,15 @@ export default function OpportunitiesQueuePage() {
 
   // Source, Country and Status first; the type tabs and their counts then work on what is left.
   const scoped = all.filter(
-    (row) => (source === "all" || row.source === source) && (country === ALL || row.country === country) && (status === ALL || row.status === status),
+    (row) => (source === "all" || row.source === source) && (country === ALL || row.country === country) && (status === ALL || row.moderationStatus === status),
   );
-  const activeTypes = TABS.find((entry) => entry.value === tab)?.types;
-  const visible = activeTypes ? scoped.filter((row) => activeTypes.includes(row.type)) : scoped;
+  const visible = scoped.filter((row) => inTab(row, tab));
   const options = TABS.map((entry) => ({
     value: entry.value,
     label: entry.label,
-    count: rows ? (entry.types ? scoped.filter((row) => entry.types!.includes(row.type)).length : scoped.length) : undefined,
+    count: rows ? scoped.filter((row) => inTab(row, entry.value)).length : undefined,
   }));
-  const pendingCount = all.filter((row) => row.source === "hirer" && row.status === "pending").length;
+  const pendingCount = all.filter((row) => row.source === "hirer" && row.moderationStatus === "pending").length;
   const filtered = tab !== "all" || source !== "all" || country !== ALL || status !== ALL;
 
   return (

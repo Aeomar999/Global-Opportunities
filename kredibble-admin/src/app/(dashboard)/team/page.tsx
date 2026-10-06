@@ -18,6 +18,7 @@ import { MembersTab } from "@/components/team/MembersTab";
 import { RolesTab } from "@/components/team/RolesTab";
 import { buttonClasses } from "@/components/ui/Button";
 import { Tabs, tabId, tabPanelId } from "@/components/ui/Tabs";
+import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 
 type TeamTab = "members" | "roles";
 const ID_PREFIX = "team";
@@ -47,6 +48,8 @@ export default function TeamPage() {
           </Link>
         )}
       </header>
+
+      <NotConnectedNotice />
 
       {/* With no access to Roles & permissions there is only one tab, so no tab row at all. */}
       {canSeeRoles && (

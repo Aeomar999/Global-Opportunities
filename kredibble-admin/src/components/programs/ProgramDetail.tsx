@@ -34,6 +34,7 @@ import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { KeyValueList } from "@/components/ui/KeyValueList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TagPill } from "@/components/ui/TagPill";
+import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { useToast } from "@/components/ui/Toast";
 import { PROGRAM_FORMAT_LABELS, PROGRAM_STATUS_LABELS, PROGRAM_TYPE_META } from "./program-meta";
@@ -89,6 +90,7 @@ export function ProgramDetail({ id }: { id: string }) {
 
   return (
     <>
+      <NotConnectedNotice className="mb-4" />
       <DetailPage
         header={
           <DetailHeader

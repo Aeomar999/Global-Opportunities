@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { authRouter } from './auth.js';
-import { uploadRouter } from './upload.js';
+import { uploadRouter, createUploadRouter, IMAGE_MIME_TYPES } from './upload.js';
 import { assistantRouter } from './assistant.js';
 import { newsRouter } from './news.js';
 import { adminApiRouter } from './admin-api.js';
 import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination } from '../utils/http.js';
-import { requireAuth, requireAdminAuth, optionalAuth } from '../middleware/auth.js';
+import { requireAuth, requireAdminAuth, optionalAuth, requireEmailVerified } from '../middleware/auth.js';
+import { env } from '../config/env.js';
+import { validate } from '../middleware/validate.js';
+import { staffInviteSchema } from '../schemas/admin.js';
 import {
   RESOURCE_POLICIES,
   ADMIN,
@@ -158,6 +161,15 @@ const assertOwnership = (document, ownerField, req, label) => {
   if (!ownerField) return;
   if (req.auth?.role === ADMIN) return;
 
+  if (label === 'Opportunity') {
+    const isOwner = (document.createdBy && String(document.createdBy) === String(req.auth?.sub)) ||
+                    (document.hirerId && String(document.hirerId) === String(req.auth?.sub));
+    if (!isOwner) {
+      throw new ApiError(403, `You do not have permission to modify this ${label}`);
+    }
+    return;
+  }
+
   const owner = document?.[ownerField];
   if (!owner || String(owner) !== String(req.auth?.sub)) {
     throw new ApiError(403, `You do not have permission to modify this ${label}`);
@@ -248,12 +260,7 @@ const collectionRoutes = ({
         }
       }
 
-      // SEC-026: for notifications, filter by authenticated user unless admin
-      if (policyKey === 'notifications' && req.auth?.role !== ADMIN) {
-        filter.userId = req.auth.sub;
-      }
-
-      const scoped = withScope(filter, readScope(req));
+      const scoped = withScope(filter, await readScope(req));
       let listQuery = Model.find(scoped).sort({ createdAt: -1 }).skip(skip).limit(limit);
       if (populateAlways && populate) listQuery = listQuery.populate(populate);
       const [data, total] = await Promise.all([listQuery, Model.countDocuments(scoped)]);
@@ -268,7 +275,7 @@ const collectionRoutes = ({
     '/:id',
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'read', req, resourceName);
-      let query = Model.findOne(withScope({ _id: req.params.id }, readScope(req)));
+      let query = Model.findOne(withScope({ _id: req.params.id }, await readScope(req)));
       if ((enablePopulate || populateAlways) && populate) {
         query = query.populate(populate);
       }
@@ -285,7 +292,7 @@ const collectionRoutes = ({
     '/',
     asyncHandler(async (req, res) => {
       assertPolicy(policy, 'create', req, resourceName);
-      assertWritable(req.body, req);
+      await assertWritable(req.body, req);
       // SEC-007: the body is reduced to an explicit allowlist before it reaches the model.
       const allowed = buildCreatePayload(policy, req.body);
       // SEC-002: the owner is derived from the token, never from the body. Otherwise
@@ -293,6 +300,15 @@ const collectionRoutes = ({
       // post an opportunity under someone else's company.
       if (ownerField && req.auth?.role !== ADMIN) {
         allowed[ownerField] = req.auth.sub;
+      }
+      if (resourceName === 'Opportunity' && req.auth?.role !== ADMIN) {
+        allowed.createdBy = req.auth.sub;
+        if (!allowed.hirerId) {
+          const hirerAccount = await HirerAccount.findOne({ userId: req.auth.sub }).select('_id').lean();
+          if (hirerAccount) {
+            allowed.hirerId = hirerAccount._id;
+          }
+        }
       }
       const data = normalizeIn ? normalizeIn(allowed) : allowed;
       const item = new Model(data);
@@ -319,7 +335,7 @@ const collectionRoutes = ({
       const existing = await Model.findById(req.params.id);
       if (!existing) throw notFound(resourceName);
       assertOwnership(existing, ownerField, req, resourceName);
-      assertWritable(req.body, req);
+      await assertWritable(req.body, req);
 
       // SEC-007: unknown keys are dropped, admin-only keys only for admins.
       const allowed = buildUpdatePayload(policy, req.body, req.auth?.role);
@@ -331,9 +347,9 @@ const collectionRoutes = ({
       );
       if (!item) throw notFound(resourceName);
 
-      // SEC-017: audit log for admin mutations
-      const isAdminMutation = req.auth?.role === ADMIN && policy.adminUpdateFields && Object.keys(data).some(k => policy.adminUpdateFields.includes(k));
-      if (isAdminMutation) {
+      // SEC-017 / SEC-077: every admin update is audited, not only admin-only fields
+      // (a report decision or a staff role change touches ordinary fields).
+      if (req.auth?.role === ADMIN) {
         await auditReq(req, {
           action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
           resourceType: AUDIT_RESOURCE_TYPES[resourceName.toUpperCase().replace(/ /g, '_')] || resourceName.toLowerCase().replace(/ /g, '_'),
@@ -397,11 +413,49 @@ const redactOpportunity = (opportunity, req) => {
 };
 
 /** Vetting and publishing go through the admin opportunity API, never the standard one. */
-const assertOpportunityWritable = (body, req) => {
+const assertOpportunityWritable = async (body, req) => {
   if (req.auth?.role === ADMIN) return;
   if (body?.vetted === true || ['published', 'approved'].includes(body?.moderationStatus)) {
     throw new ApiError(403, 'Only the admin opportunity API can vet or publish an opportunity');
   }
+  // SEC-062 / Q9: Enforce email verification on opportunity creation
+  if (req.method === 'POST' && (!env.isTest || process.env.REQUIRE_EMAIL_VERIFICATION === 'true')) {
+    const user = await User.findById(req.auth?.sub).select('emailVerified').lean();
+    if (!user?.emailVerified) {
+      const error = new ApiError(403, 'Email verification is required to create an opportunity');
+      error.code = 'EMAIL_VERIFICATION_REQUIRED';
+      throw error;
+    }
+  }
+};
+
+/** SEC-062 / Q9: Enforce email verification on company verification registration */
+const assertVerificationCompanyWritable = async (body, req) => {
+  if (req.auth?.role === ADMIN) return;
+  if (req.method === 'POST' && (!env.isTest || process.env.REQUIRE_EMAIL_VERIFICATION === 'true')) {
+    const user = await User.findById(req.auth?.sub).select('emailVerified').lean();
+    if (!user?.emailVerified) {
+      const error = new ApiError(403, 'Email verification is required to register a company verification');
+      error.code = 'EMAIL_VERIFICATION_REQUIRED';
+      throw error;
+    }
+  }
+};
+
+/**
+ * Q3: Events public read scope — non-admins see non-cancelled events.
+ */
+const eventReadScope = (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  return { status: { $ne: 'cancelled' } };
+};
+
+/**
+ * Q3: Articles public read scope — non-admins see published articles.
+ */
+const articleReadScope = (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  return { status: 'published' };
 };
 
 const findReferringAmbassador = async (rawCode) => {
@@ -410,6 +464,23 @@ const findReferringAmbassador = async (rawCode) => {
   const ambassador = await Ambassador.findOne({ referralCode });
   if (!ambassador) throw new ApiError(400, 'Invalid referral code');
   return { referralCode, ambassador };
+};
+
+/**
+ * SEC-044: Notifications are targeted by audience; non-admins see only matching and active notifications.
+ */
+const notificationReadScope = (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  const allowedAudiences = ['all', 'both'];
+  if (req.auth?.role === SEEKER) {
+    allowedAudiences.push('seekers', 'seeker');
+  } else if (req.auth?.role === HIRER) {
+    allowedAudiences.push('hirers', 'hirer');
+  }
+  return {
+    audience: { $in: allowedAudiences },
+    isActive: { $ne: false },
+  };
 };
 
 // --- Community ------------------------------------------------------------
@@ -438,7 +509,7 @@ const getMembership = (channelId, userId) =>
   userId ? CommunityMembership.findOne({ channelId, userId }) : null;
 
 const isLegacyMember = (channel, userId) =>
-  (channel.memberIds || []).some((memberId) => toId(memberId) === userId);
+  Boolean(userId) && (channel.memberIds || []).some((memberId) => Boolean(memberId) && toId(memberId) === String(userId));
 
 const canAccessChannel = async (channel, user) => {
   if (channel.visibility === 'public' || user?.role === ADMIN || isChannelCreator(channel, user)) return true;
@@ -452,8 +523,45 @@ const canManageChannel = async (channel, user) => {
   return membership?.status === 'active' && membership.role === 'admin';
 };
 
+/** SEC-077: a channel an admin removed is gone for everyone else, owner included. */
+const assertChannelVisible = (channel, user) => {
+  if (channel.status === 'removed' && user?.role !== ADMIN) throw notFound('Channel');
+};
+
 const requireChannelAdmin = async (channel, user) => {
   if (!await canManageChannel(channel, user)) throw new ApiError(403, 'Only a community admin can manage this group');
+};
+
+/**
+ * SEC-097: Private-channel posts are restricted to members, creator, or admin.
+ * Generic GET /community/posts and GET /community/posts/:id use this scope.
+ */
+const communityPostsReadScope = async (req) => {
+  if (req.auth?.role === ADMIN) return {};
+  const userId = req.auth?.sub;
+  if (!userId) {
+    const publicChannels = await Channel.find({ visibility: 'public', status: { $ne: 'removed' } }).select('_id').lean();
+    return { channelId: { $in: publicChannels.map((c) => c._id) } };
+  }
+
+  const [accessibleChannels, activeMemberships] = await Promise.all([
+    Channel.find({
+      status: { $ne: 'removed' },
+      $or: [
+        { visibility: 'public' },
+        { createdBy: userId },
+        { memberIds: userId },
+      ],
+    }).select('_id').lean(),
+    CommunityMembership.find({ userId, status: 'active' }).select('channelId').lean(),
+  ]);
+
+  const channelIds = [
+    ...accessibleChannels.map((c) => c._id),
+    ...activeMemberships.map((m) => m.channelId),
+  ];
+
+  return { channelId: { $in: channelIds } };
 };
 
 const submitJoinRequest = async (channel, userId, body = {}) => {
@@ -551,6 +659,59 @@ const decorateHirers = async (items) => {
  * the two together.
  */
 const mountAdminDataRoutes = (router) => {
+  router.get('/admin/analytics', requireAdminAuth, asyncHandler(async (req, res) => {
+    const [seekers, activeSeekers, hirers, verifiedHirers, applications, reports, openReports, byType] = await Promise.all([
+      SeekerProfile.countDocuments(),
+      SeekerProfile.countDocuments({ status: 'active' }),
+      HirerAccount.countDocuments(),
+      HirerAccount.countDocuments({ verified: true }),
+      Applicant.countDocuments(),
+      Report.countDocuments(),
+      Report.countDocuments({ status: 'open' }),
+      Opportunity.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
+    ]);
+    itemResponse(res, {
+      seekers: { total: seekers, active: activeSeekers },
+      hirers: { total: hirers, verified: verifiedHirers },
+      applications: { total: applications },
+      reports: { total: reports, open: openReports },
+      opportunitiesByType: byType.map(({ _id, count }) => ({ type: _id, count })),
+    });
+  }));
+
+  // Staff are existing Kredibble accounts; there is no email-invite flow (2026-10-04 decision).
+  router.post('/admin/staff/invite', requireAdminAuth, validate(staffInviteSchema), asyncHandler(async (req, res) => {
+    const user = await User.findOne({ emailNormalized: req.body.email.trim().toLowerCase(), role: { $ne: 'deleted' } });
+    if (!user) throw new ApiError(404, 'No Kredibble account uses that email. Ask them to sign up first.');
+    if (await StaffMember.exists({ userId: user._id })) {
+      throw new ApiError(409, 'That account is already on the staff list');
+    }
+    const staff = await StaffMember.create({
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      role: req.body.role,
+      status: 'active',
+      joinedDate: new Date().toISOString().slice(0, 10),
+    });
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      resourceId: user._id,
+      outcome: 'success',
+      metadata: { staffInvite: true, role: req.body.role },
+    });
+    res.status(201).json({ data: toClientObject(staff) });
+  }));
+
+  // Article banners: images only, stored outside any user's folder.
+  router.use('/admin/upload', createUploadRouter({
+    authenticate: requireAdminAuth,
+    purposes: ['article-banner'],
+    folderFor: (req, purpose) => `kredibble/admin/${purpose}`,
+    allowedMimeTypes: IMAGE_MIME_TYPES,
+  }));
+
   // Nested lists first, so the collection mounts' `/:id` never sees them.
   router.get('/admin/verification/companies/:companyId/documents', requireAdminAuth, asyncHandler(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.companyId)) throw notFound('Company verification');
@@ -634,6 +795,23 @@ const mountAdminDataRoutes = (router) => {
     Model: Channel, resourceName: 'Channel', policyKey: 'community/channels',
     searchFields: ['name', 'category'], filterFields: ['status', 'category', 'visibility'],
   });
+  adminCollection('/community/posts', {
+    Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts',
+    populate: { path: 'authorId', select: 'name email avatarUrl' },
+    searchFields: ['title', 'body'], filterFields: ['channelId', 'flagged'],
+  });
+  adminCollection('/grant-applications', {
+    Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications',
+    searchFields: ['applicantName'], filterFields: ['grantId', 'status'],
+  });
+
+  // The staff-portal router has list/update/delete for postings but no read by id.
+  router.get('/admin/opportunities/:id', requireAdminAuth, asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) throw notFound('Opportunity');
+    const opportunity = await Opportunity.findById(req.params.id);
+    if (!opportunity) throw notFound('Opportunity');
+    itemResponse(res, toClientObject(opportunity));
+  }));
 };
 
 /**
@@ -668,6 +846,9 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     res.status(isHealthy ? 200 : 503).json({
       status: isHealthy ? 'ok' : 'error',
       service: 'kredibble-backend',
+      // SEC-112: lets a deploy confirm the new release is the one answering.
+      environment: env.appEnv,
+      release: env.release,
       database: {
         status: statusMap[dbStatus] || 'unknown',
         connected: isHealthy,
@@ -847,6 +1028,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       ? { $or: [{ visibility: 'public' }, { createdBy: req.auth.sub }, { memberIds: req.auth.sub }, { _id: { $in: membershipChannelIds } }] }
       : { visibility: 'public' };
     const clauses = [visible];
+    if (req.auth?.role !== ADMIN) clauses.push({ status: { $ne: 'removed' } });
     if (req.query.visibility) clauses.push({ visibility: String(req.query.visibility) });
     const pattern = searchPattern(req.query.q);
     if (pattern) clauses.push({ $or: [{ name: pattern }, { category: pattern }] });
@@ -890,6 +1072,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.get('/community/channels/:channelId', optionalAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     itemResponse(res, toClientObject(channel));
   }));
@@ -985,6 +1168,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.get('/community/channels/:channelId/posts', optionalAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     const { page, limit, skip } = parsePagination(req.query);
     const filter = { channelId: channel._id };
@@ -997,6 +1181,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.post('/community/channels/:channelId/posts', requireAuth, asyncHandler(async (req, res) => {
     const channel = await getChannelOrThrow(req.params.channelId);
+    assertChannelVisible(channel, req.auth);
     if (!await canAccessChannel(channel, req.auth)) throw new ApiError(403, 'You do not have access to this private group');
     const author = await User.findById(req.auth.sub);
     // SEC-007: author identity comes from the token; only content fields come from the body.
@@ -1089,14 +1274,39 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   }));
   router.use('/community/channels', collectionRoutes({ Model: Channel, resourceName: 'Channel', policyKey: 'community/channels', searchFields: ['name', 'category'], ownerField: 'createdBy', enablePopulate }));
   router.use('/reports', collectionRoutes({ Model: Report, resourceName: 'Report', policyKey: 'reports', searchFields: ['reason', 'details'], enablePopulate }));
-  router.use('/events', collectionRoutes({ Model: Event, resourceName: 'Event', policyKey: 'events', searchFields: ['title', 'location'], ownerField: 'createdBy', enablePopulate }));
+  router.use('/events', collectionRoutes({
+    Model: Event,
+    resourceName: 'Event',
+    policyKey: 'events',
+    searchFields: ['title', 'location'],
+    ownerField: 'createdBy',
+    enablePopulate,
+    publicRead: true,
+    readScope: eventReadScope,
+  }));
   router.use('/grants', collectionRoutes({ Model: Grant, resourceName: 'Grant', policyKey: 'grants', searchFields: ['title', 'sector'], enablePopulate }));
-  router.use('/articles', collectionRoutes({ Model: Article, resourceName: 'Article', policyKey: 'articles', searchFields: ['title', 'category'], enablePopulate }));
-  router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate }));
-  router.use('/verification/companies', collectionRoutes({ Model: CompanyVerification, resourceName: 'Company verification', policyKey: 'verification/companies', searchFields: ['name', 'industry'], ownerField: 'hirerId', enablePopulate }));
+  router.use('/articles', collectionRoutes({
+    Model: Article,
+    resourceName: 'Article',
+    policyKey: 'articles',
+    searchFields: ['title', 'category'],
+    enablePopulate,
+    publicRead: true,
+    readScope: articleReadScope,
+  }));
+  router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate, readScope: notificationReadScope }));
+  router.use('/verification/companies', collectionRoutes({
+    Model: CompanyVerification,
+    resourceName: 'Company verification',
+    policyKey: 'verification/companies',
+    searchFields: ['name', 'industry'],
+    ownerField: 'hirerId',
+    enablePopulate,
+    assertWritable: assertVerificationCompanyWritable,
+  }));
 
   // Special nested routes
-  router.post('/opportunities/:opportunityId/applicants', ...guard('applicants', 'create', 'applicant'), asyncHandler(async (req, res) => {
+  router.post('/opportunities/:opportunityId/applicants', ...guard('applicants', 'create', 'applicant'), requireEmailVerified, asyncHandler(async (req, res) => {
     // Applications are only accepted for listings this caller can see.
     const opportunity = await Opportunity.findOne(withScope({ _id: req.params.opportunityId }, opportunityReadScope(req)));
     if (!opportunity) throw notFound('Opportunity');
@@ -1143,7 +1353,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.get('/opportunities/:opportunityId/applicants', ...guard('applicants', 'read', 'applicant'), asyncHandler(async (req, res) => {
     const opportunity = await Opportunity.findById(req.params.opportunityId);
     if (!opportunity) throw notFound('Opportunity');
-    if (req.auth.role !== ADMIN && String(opportunity.createdBy) !== req.auth.sub) {
+    if (req.auth.role !== ADMIN && String(opportunity.createdBy) !== req.auth.sub && String(opportunity.hirerId) !== req.auth.sub) {
       throw new ApiError(403, 'You do not have permission to view applicants for this opportunity');
     }
 
@@ -1156,10 +1366,44 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     listResponse(res, data.map(toClientObject), total, page, limit);
   }));
 
-  router.post('/grants/:grantId/applications', ...guard('grant-applications', 'create', 'grantApplication'), asyncHandler(async (req, res) => {
-    const application = new GrantApplication(buildCreatePayload(RESOURCE_POLICIES['grant-applications'], req.body));
-    application.set('grantId', req.params.grantId);
+  router.post('/grants/:grantId/applications', ...guard('grant-applications', 'create', 'grantApplication'), requireEmailVerified, asyncHandler(async (req, res) => {
+    const grantId = req.params.grantId;
+    const grant = await Grant.findById(grantId);
+    if (!grant) throw notFound('Grant');
+    if (grant.status !== 'open') throw new ApiError(400, 'Grant is not open for applications');
+
+    const requestedAmount = Number(req.body.requestedAmount);
+    if (!requestedAmount || requestedAmount <= 0) {
+      throw new ApiError(400, 'Requested amount must be greater than 0');
+    }
+    if (requestedAmount > grant.fundingPool) {
+      throw new ApiError(400, 'Requested amount cannot exceed grant funding pool');
+    }
+
+    // SEC-060: Atomic conditional reservation on fundingPool
+    const updatedGrant = await Grant.findOneAndUpdate(
+      {
+        _id: grantId,
+        status: 'open',
+        $expr: { $lte: [{ $add: ['$allocated', requestedAmount] }, '$fundingPool'] },
+      },
+      { $inc: { allocated: requestedAmount } },
+      { returnDocument: 'after' },
+    );
+
+    if (!updatedGrant) {
+      throw new ApiError(400, 'Grant funding pool capacity exceeded');
+    }
+
+    const application = new GrantApplication({
+      ...buildCreatePayload(RESOURCE_POLICIES['grant-applications'], req.body),
+      grantId,
+      applicantUserId: req.auth?.sub,
+      applicantName: req.body.applicantName || req.auth?.name || 'Applicant',
+      requestedAmount,
+    });
     await application.save();
+
     await auditReq(req, {
       action: AUDIT_ACTIONS.GRANT_APPLY,
       resourceType: AUDIT_RESOURCE_TYPES.GRANT_APPLICATION,
@@ -1179,7 +1423,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     listResponse(res, data.map(toClientObject), total, page, limit);
   }));
 
-  router.post('/verification/companies/:companyId/documents', ...guard('verification/documents', 'create', 'document'), asyncHandler(async (req, res) => {
+  router.post('/verification/companies/:companyId/documents', ...guard('verification/documents', 'create', 'document'), requireEmailVerified, asyncHandler(async (req, res) => {
     // SEC-058: Verify companyId belongs to the caller
     if (req.auth.role !== ADMIN && String(req.params.companyId) !== req.auth.sub) {
       throw new ApiError(403, 'You do not have permission to attach documents to this company');
@@ -1219,7 +1463,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     if (!opportunity) throw notFound('Opportunity');
 
     if (req.auth.role === SEEKER && String(applicant.seekerId) === req.auth.sub) return applicant;
-    if (req.auth.role === HIRER && String(opportunity.createdBy) === req.auth.sub) return applicant;
+    if (req.auth.role === HIRER && (String(opportunity.createdBy) === req.auth.sub || String(opportunity.hirerId) === req.auth.sub)) return applicant;
     
     throw new ApiError(403, 'Insufficient permissions to access this applicant');
   };
@@ -1247,7 +1491,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   router.use('/grant-applications', collectionRoutes({ Model: GrantApplication, resourceName: 'GrantApplication', policyKey: 'grant-applications', enablePopulate }));
   router.use('/verification/documents', collectionRoutes({ Model: VerificationDoc, resourceName: 'VerificationDoc', policyKey: 'verification/documents', ownerField: 'companyId', enablePopulate }));
-  router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', ownerField: 'authorId', enablePopulate }));
+  router.use('/community/posts', collectionRoutes({ Model: ChannelPost, resourceName: 'ChannelPost', policyKey: 'community/posts', ownerField: 'authorId', enablePopulate, readScope: communityPostsReadScope }));
 
   /**
    * Saved items are private to their owner (SEC-026). The path is `/users/me/saved`
@@ -1294,6 +1538,60 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     const { SavedItem } = await import('../models/User.js');
     const savedItems = await SavedItem.find({ userId: req.auth.sub }).sort({ createdAt: -1 });
     listResponse(res, savedItems.map(toClientObject));
+  }));
+
+  /**
+   * SEC-072: Seekers can list their own applications populated with opportunity summary.
+   */
+  router.get('/users/me/applications', requireAuth, asyncHandler(async (req, res) => {
+    const { page, limit, skip } = parsePagination(req.query);
+    const filter = { seekerId: req.auth.sub };
+    const [applications, total] = await Promise.all([
+      Applicant.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+          path: 'opportunityId',
+          select: 'title company type location status moderationStatus',
+        })
+        .lean(),
+      Applicant.countDocuments(filter),
+    ]);
+
+    const formatted = applications.map((app) => ({
+      ...toClientObject(app),
+      opportunity: app.opportunityId ? toClientObject(app.opportunityId) : null,
+    }));
+
+    listResponse(res, formatted, total, page, limit);
+  }));
+
+  /**
+   * SEC-060: Authenticated users can list their own grant applications with populated grant info.
+   */
+  router.get('/users/me/grant-applications', requireAuth, asyncHandler(async (req, res) => {
+    const { page, limit, skip } = parsePagination(req.query);
+    const filter = { applicantUserId: req.auth.sub };
+    const [applications, total] = await Promise.all([
+      GrantApplication.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate({
+          path: 'grantId',
+          select: 'title hirer sector fundingPool status',
+        })
+        .lean(),
+      GrantApplication.countDocuments(filter),
+    ]);
+
+    const formatted = applications.map((app) => ({
+      ...toClientObject(app),
+      grant: app.grantId ? toClientObject(app.grantId) : null,
+    }));
+
+    listResponse(res, formatted, total, page, limit);
   }));
 
   // Event attendees

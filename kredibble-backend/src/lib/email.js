@@ -12,8 +12,8 @@ export const createVerificationCode = () => {
 };
 
 export const hashVerificationCode = (code) => {
-  // Simple hash for storage - in production use bcrypt or similar
-  return crypto.createHash('sha256').update(code).digest('hex');
+  // SEC-101: Keyed HMAC with server secret prevents offline brute-forcing of 6-digit codes
+  return crypto.createHmac('sha256', env.jwtSecret).update(String(code)).digest('hex');
 };
 
 export const sendVerificationEmail = async (email, code) => {

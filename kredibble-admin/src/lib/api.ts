@@ -43,51 +43,77 @@ export type HirerAccount = {
   linkedVerificationId?: string;
 };
 
+// Record types mirror the backend models in kredibble-backend/src/models/.
+// Keep them in step: a field that isn't on the model never arrives.
+
 export type EventRecord = {
   id: string;
   title: string;
-  description?: string;
-  location?: string;
-  organizer?: string;
-  type?: string;
-  status?: string;
-  country?: string;
-  startAt: string;
-  endAt?: string;
-  capacity?: number;
-  attendeesCount?: number;
-  createdBy?: string;
+  hirer: string;
+  location: string;
+  dateTime: string;
+  capacity: number;
+  attendeesCount: number;
+  status: string;
+  createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
-  createdByUser?: { id: string; name: string; email: string };
-  attendees?: { userId: { id: string; name: string; email: string } }[];
 };
 
 export type GrantRecord = {
   id: string;
   title: string;
-  description?: string;
-  sector?: string;
-  grantType?: string;
-  status?: string;
-  fundingPool?: number;
-  allocated?: number;
-  createdBy?: string;
+  hirer: string;
+  sector: string;
+  fundingPool: number;
+  allocated: number;
+  status: string;
   createdAt: string;
   updatedAt: string;
-  createdByUser?: { id: string; name: string; email: string };
+};
+
+export type GrantApplicationRecord = {
+  id: string;
+  grantId: string;
+  applicantName: string;
+  requestedAmount: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ArticleRecord = {
   id: string;
   title: string;
-  content?: string;
-  category?: string;
-  authorName?: string;
-  status?: string;
+  category: string;
+  duration?: string;
+  summary: string;
+  content: string;
+  status: string;
+  bannerImage?: string;
   createdAt: string;
   updatedAt: string;
 };
+
+export type ArticleInput = Pick<ArticleRecord, "title" | "category" | "summary" | "content" | "status"> &
+  Partial<Pick<ArticleRecord, "duration" | "bannerImage">>;
+
+/**
+ * Staff-portal roles: the values `requirePortalRoles` checks in
+ * kredibble-backend/src/routes/admin-api.js. A role outside this list grants nothing.
+ */
+export const STAFF_ROLES = [
+  "Desk Lead",
+  "Admin Support",
+  "Writer",
+  "Opportunities Officer",
+  "Partnerships Officer",
+  "Training and Capacity Development Officer",
+  "Database Officer",
+  "Communications Officer",
+  "Social Media Manager",
+  "Country Lead",
+] as const;
 
 export type StaffMember = {
   id: string;
@@ -96,6 +122,7 @@ export type StaffMember = {
   email: string;
   role: string;
   status: string;
+  joinedDate?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -103,50 +130,112 @@ export type StaffMember = {
 export type ChannelRecord = {
   id: string;
   name: string;
-  description?: string;
-  category?: string;
-  status?: string;
-  createdBy?: string;
+  category: string;
+  owner?: string;
+  bio?: string;
+  avatar?: string;
+  visibility: "public" | "private";
+  status: string;
+  followers?: string;
+  postsCount: number;
+  createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
-  createdByUser?: { id: string; name: string; email: string };
-  members?: { userId: { id: string; name: string; email: string } }[];
 };
 
 export type ChannelPost = {
   id: string;
   channelId: string;
-  content: string;
-  authorId?: string;
-  authorName?: string;
+  authorName: string;
+  authorId?: { id: string; name: string; email: string; avatarUrl?: string } | string | null;
+  title?: string;
+  body: string;
+  date?: string;
+  flagged: boolean;
   createdAt: string;
-  author?: { id: string; name: string; email: string; avatarUrl?: string };
+};
+
+export type ReportRecord = {
+  id: string;
+  targetType: string;
+  targetLabel?: string;
+  reporterName?: string;
+  reason: string;
+  details?: string;
+  date?: string;
+  status: string;
+  linkedChannelId?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CompanyVerification = {
   id: string;
-  name: string;
-  email?: string;
-  industry?: string;
-  overallStatus?: string;
   hirerId?: string;
+  name: string;
+  industry?: string;
+  companySize?: string;
+  location?: string;
+  website?: string;
+  companyEmail?: string;
+  recruiterName?: string;
+  recruiterRole?: string;
+  recruiterEmail?: string;
+  submittedDate?: string;
+  overallStatus: string;
   createdAt: string;
   updatedAt: string;
-  hirer?: { id: string; companyName: string; companyEmail: string };
-  documents?: VerificationDoc[];
 };
 
 export type VerificationDoc = {
   id: string;
   companyId: string;
-  documentType?: string;
-  fileUrl?: string;
-  status?: string;
-  uploadedBy?: string;
+  verificationCaseId?: string;
+  key: string;
+  label?: string;
+  fileName?: string;
+  status: string;
+};
+
+export type OpportunityRecord = {
+  id: string;
+  title: string;
+  type: string;
+  company: string;
+  offeringOrganization?: string;
+  organizationLogo?: string;
+  location: string;
+  description: string;
+  workType?: string;
+  salary?: string;
+  date?: string;
+  eventDateTime?: string;
+  eventRegion?: string;
+  eventCategory?: string;
+  grantBudgetRange?: string;
+  grantSector?: string;
+  deadline?: string;
+  eligibility?: string;
+  benefits?: string;
+  applicationUrl?: string;
+  applicationLink?: string;
+  applicantsCount: number;
+  moderationStatus: string;
+  vetted: boolean;
+  vettedAt?: string;
   createdAt: string;
   updatedAt: string;
-  company?: { id: string; name: string };
 };
+
+export type AnalyticsSummary = {
+  seekers: { total: number; active: number };
+  hirers: { total: number; verified: number };
+  applications: { total: number };
+  reports: { total: number; open: number };
+  opportunitiesByType: { type: string; count: number }[];
+};
+
+export type UploadResult = { url: string; publicId: string; folder: string };
 
 export type PaginatedResponse<T> = {
   data: T[];
@@ -263,13 +352,12 @@ async function refreshAdminSession(): Promise<AuthResponse> {
 }
 
 async function requestPayload<P>(path: string, init: RequestInit = {}, retried = false): Promise<P> {
+  const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...defaultFetchOpts,
     ...init,
-    headers: {
-      ...defaultFetchOpts.headers,
-      ...init.headers,
-    },
+    // A FormData body sets its own multipart Content-Type, boundary included.
+    headers: isForm ? { ...init.headers } : { ...defaultFetchOpts.headers, ...init.headers },
   });
 
   const payload = await response.json().catch(() => null);
@@ -557,6 +645,97 @@ export const updateVerificationDocument = async <T = VerificationDoc>(id: string
 
 export const deleteVerificationDocument = async (id: string) => {
   return request<{ data: { id: string } }>(`/admin/verification/documents/${id}`, { method: "DELETE" });
+};
+
+// Reports
+export const getReports = async (params?: { page?: number; limit?: number; q?: string; status?: string; targetType?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.q) query.set("q", params.q);
+  if (params?.status) query.set("status", params.status);
+  if (params?.targetType) query.set("targetType", params.targetType);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<ReportRecord>(`/admin/reports${queryString}`);
+};
+
+export const getReportById = async (id: string) => {
+  return request<ReportRecord>(`/admin/reports/${id}`);
+};
+
+export const updateReport = async (id: string, data: { status: string }) => {
+  return request<ReportRecord>(`/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+// Event and grant edits
+export const updateEvent = async (id: string, data: Partial<Pick<EventRecord, "title" | "location" | "dateTime" | "capacity" | "status">>) => {
+  return request<EventRecord>(`/admin/events/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+export const updateGrant = async (id: string, data: Partial<Pick<GrantRecord, "title" | "sector" | "fundingPool" | "status">>) => {
+  return request<GrantRecord>(`/admin/grants/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+// Grant applications
+export const getGrantApplications = async (grantId: string, params?: { page?: number; limit?: number; status?: string }) => {
+  const query = new URLSearchParams({ grantId });
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.status) query.set("status", params.status);
+  const queryString = `?${query.toString()}`;
+  return requestPage<GrantApplicationRecord>(`/admin/grant-applications${queryString}`);
+};
+
+export const updateGrantApplication = async (id: string, data: { status: string }) => {
+  return request<GrantApplicationRecord>(`/admin/grant-applications/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+// Articles
+export const createArticle = async (data: ArticleInput) => {
+  return request<ArticleRecord>(`/admin/articles`, { method: "POST", body: JSON.stringify(data) });
+};
+
+export const updateArticle = async (id: string, data: Partial<ArticleInput>) => {
+  return request<ArticleRecord>(`/admin/articles/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+};
+
+/** Upload a banner image; store the returned `url` on the article. */
+export const uploadArticleBanner = async (file: File) => {
+  const body = new FormData();
+  body.append("file", file);
+  return request<UploadResult>(`/admin/upload?purpose=article-banner`, { method: "POST", body });
+};
+
+// Community moderation
+export const deleteCommunityPost = async (id: string) => {
+  return request<undefined>(`/admin/community/posts/${id}`, { method: "DELETE" });
+};
+
+// Staff
+export const inviteStaff = async (data: { email: string; role: string }) => {
+  return request<StaffMember>(`/admin/staff/invite`, { method: "POST", body: JSON.stringify(data) });
+};
+
+// Analytics
+export const getAnalytics = async () => {
+  return request<AnalyticsSummary>(`/admin/analytics`);
+};
+
+// Opportunity moderation
+/** One page of postings, newest first; `meta` carries the real totals, so a caller can read every page. */
+export const getOpportunityPage = async (params: { page: number; limit: number }) => {
+  const queryString = `?${new URLSearchParams({ page: String(params.page), limit: String(params.limit) }).toString()}`;
+  return requestPage<OpportunityRecord>(`/admin/opportunities${queryString}`);
+};
+
+export const getOpportunityById = async (id: string) => {
+  return request<OpportunityRecord>(`/admin/opportunities/${id}`);
+};
+
+/** Approving vets and publishes a posting; rejecting only sets the status (2026-10-04 decision). */
+export const moderateOpportunity = async (id: string, decision: "approve" | "reject") => {
+  const body = decision === "approve" ? { vetted: true, moderationStatus: "published" } : { moderationStatus: "rejected" };
+  return request<OpportunityRecord>(`/admin/opportunities/${id}`, { method: "PATCH", body: JSON.stringify(body) });
 };
 
 // There is deliberately no admin self-service signup. Public registration

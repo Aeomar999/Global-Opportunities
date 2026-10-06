@@ -7,8 +7,9 @@
  * (see form/action-bar-store.ts); it follows the bar while scrolling and resizing.
  *
  * - <ToastProvider> wraps the dashboard shell once.
- * - useToast() returns { success(message), info(message) }. Messages are one sentence in past tense
- *   with no capitalised status words mid-sentence: "Enoch Mensah was suspended."
+ * - useToast() returns { success(message), info(message), error(message) }. Messages are one sentence in past
+ *   tense with no capitalised status words mid-sentence: "Enoch Mensah was suspended." An error toast carries the
+ *   server's message when an action fails, and the page keeps the record as it was.
  * - The stack is a polite live region (role="status", aria-live="polite"), so screen readers hear the
  *   message without focus moving. It sits at the bottom, so it never covers the page header or its
  *   actions. Newer toasts stack UPWARD above older ones. At most 3 are shown.
@@ -16,14 +17,15 @@
  *   focus is inside it, and continues with the time that was left.
  * - Each toast has a close button with an aria-label.
  *
- * Success toasts use the success tone (green) with a check icon and text; colour is never the only signal.
+ * Success toasts use the success tone (green) with a check icon, error toasts the danger tone with an alert icon;
+ * colour is never the only signal.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, Info, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useActionBar } from "./form/action-bar-store";
 
-type ToastTone = "success" | "info";
+type ToastTone = "success" | "info" | "error";
 
 interface ToastItem {
   id: number;
@@ -34,9 +36,16 @@ interface ToastItem {
 interface ToastApi {
   success: (message: string) => void;
   info: (message: string) => void;
+  error: (message: string) => void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
+
+const TONE_ICONS: Record<ToastTone, { icon: LucideIcon; className: string }> = {
+  success: { icon: CheckCircle2, className: "text-success" },
+  info: { icon: Info, className: "text-purple-700" },
+  error: { icon: AlertCircle, className: "text-danger" },
+};
 
 const AUTO_DISMISS_MS = 5000;
 const MAX_TOASTS = 3;
@@ -91,6 +100,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     () => ({
       success: (message) => push("success", message),
       info: (message) => push("info", message),
+      error: (message) => push("error", message),
     }),
     [push],
   );
@@ -130,7 +140,7 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: num
     };
   }, [paused, onDismiss, toast.id]);
 
-  const Icon = toast.tone === "success" ? CheckCircle2 : Info;
+  const { icon: Icon, className: iconClassName } = TONE_ICONS[toast.tone];
   return (
     <div
       data-testid="toast"
@@ -144,7 +154,7 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: num
         size={20}
         strokeWidth={1.75}
         aria-hidden="true"
-        className={cn("mt-0.5 shrink-0", toast.tone === "success" ? "text-success" : "text-purple-700")}
+        className={cn("mt-0.5 shrink-0", iconClassName)}
       />
       <p className="body-sm min-w-0 flex-1 font-semibold text-ink">{toast.message}</p>
       <button

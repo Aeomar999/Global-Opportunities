@@ -56,6 +56,43 @@ describe('API Endpoints', () => {
     expect(response.body.data[0].wordpressSync).toBeUndefined();
   });
 
+  it('SEC-048: seeker excludes pending/rejected, owner sees their own pending, admin sees all', async () => {
+    const owner = await User.create({ name: 'Hirer Owner', email: 'owner_sec48@example.com', role: 'hirer' });
+    const seeker = await User.create({ name: 'Seeker User', email: 'seeker_sec48@example.com', role: 'seeker' });
+    const admin = await User.create({ name: 'Admin User', email: 'admin_sec48@example.com', role: 'admin' });
+
+    await Opportunity.create({
+      title: 'Owner Pending listing', type: 'competition', company: 'Owner Co', location: 'Accra', description: 'Pending.', createdBy: owner._id, moderationStatus: 'pending', vetted: false,
+    });
+    await Opportunity.create({
+      title: 'Public Approved listing', type: 'job', company: 'Public Co', location: 'Accra', description: 'Approved.', vetted: true, moderationStatus: 'approved',
+    });
+    await Opportunity.create({
+      title: 'Rejected listing', type: 'job', company: 'Rejected Co', location: 'Accra', description: 'Rejected.', vetted: false, moderationStatus: 'rejected',
+    });
+
+    const seekerRes = await request(app).get('/api/opportunities').set('Authorization', `Bearer ${signToken(seeker)}`);
+    expect(seekerRes.statusCode).toBe(200);
+    const seekerTitles = seekerRes.body.data.map(o => o.title);
+    expect(seekerTitles).toContain('Public Approved listing');
+    expect(seekerTitles).not.toContain('Owner Pending listing');
+    expect(seekerTitles).not.toContain('Rejected listing');
+
+    const ownerRes = await request(app).get('/api/opportunities').set('Authorization', `Bearer ${signToken(owner)}`);
+    expect(ownerRes.statusCode).toBe(200);
+    const ownerTitles = ownerRes.body.data.map(o => o.title);
+    expect(ownerTitles).toContain('Public Approved listing');
+    expect(ownerTitles).toContain('Owner Pending listing');
+    expect(ownerTitles).not.toContain('Rejected listing');
+
+    const adminRes = await request(app).get('/api/opportunities').set('Authorization', `Bearer ${signToken(admin)}`);
+    expect(adminRes.statusCode).toBe(200);
+    const adminTitles = adminRes.body.data.map(o => o.title);
+    expect(adminTitles).toContain('Public Approved listing');
+    expect(adminTitles).toContain('Owner Pending listing');
+    expect(adminTitles).toContain('Rejected listing');
+  });
+
   it('prevents a hirer from editing another hirer’s opportunity', async () => {
     const owner = await User.create({ name: 'Owner', email: 'owner@example.com', role: 'hirer' });
     const otherHirer = await User.create({ name: 'Other', email: 'other@example.com', role: 'hirer' });

@@ -1,28 +1,81 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Clipboard, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Clipboard, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Bookmark, Clock, MapPin, Copy, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { EVENTS_DATA } from './index';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
+import { getEventById, EventItem } from '../../lib/api';
 
 export default function EventDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const event = EVENTS_DATA.find(e => e.id === id) ?? EVENTS_DATA[0];
+  const [event, setEvent] = useState<EventItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [bookmarked, setBookmarked] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const insets = useSafeAreaInsets();
 
+  useEffect(() => {
+    let isMounted = true;
+    if (!id) return;
+    getEventById(id)
+      .then((data) => {
+        if (!isMounted) return;
+        setEvent(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err.message || 'Failed to load event details');
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
   const copyAddressToClipboard = () => {
-    Clipboard.setString(event.venueAddress);
-    Alert.alert('Success', 'Address copied to clipboard!');
+    if (event?.venueAddress || event?.location) {
+      Clipboard.setString(event.venueAddress || event.location);
+      Alert.alert('Success', 'Address copied to clipboard!');
+    }
   };
 
   const handleContactOrganizer = () => {
-    Alert.alert('Contact Organizer', `Connecting to ${event.organizer}...`);
+    Alert.alert('Contact Organizer', `Connecting to ${event?.organizer || 'organizer'}...`);
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center' }} edges={['top', 'left', 'right']}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 12, color: Colors.textMuted, fontSize: 14 }} className="font-sans">Loading event details...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !event) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }} edges={['top', 'left', 'right']}>
+        <Text style={{ fontSize: 16, color: Colors.textHeading, fontWeight: '600', marginBottom: 8 }} className="font-sans">
+          {error || 'Event not found'}
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/events')}
+          style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: Colors.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: Colors.white, fontWeight: '600' }} className="font-sans">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const logoColor = event.logoColor || '#6671E4';
+  const theme = event.theme || event.title;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen }} edges={['top', 'left', 'right']}>

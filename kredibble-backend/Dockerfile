@@ -1,4 +1,4 @@
-FROM node:24-alpine
+FROM node:26-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -7,6 +7,13 @@ COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=node:node src ./src
+
+# The commit this image was built from, reported by /api/v1/health (SEC-112). CI passes
+# --build-arg RELEASE_SHA=<sha>. Render's own build leaves it empty, and the API then
+# falls back to RENDER_GIT_COMMIT.
+ARG RELEASE_SHA=""
+ENV RELEASE_SHA=${RELEASE_SHA}
+
 
 USER node
 EXPOSE 4000

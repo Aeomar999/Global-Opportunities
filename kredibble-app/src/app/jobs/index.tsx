@@ -8,54 +8,19 @@ import { useToast } from '../../components/ui/ToastProvider';
 
 // ─── Shared job data ──────────────────────────────────────────────────────────
 
-export const JOBS_DATA = [
-  {
-    id: '1',
-    title: 'Senior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'Wave mobile money',
-    logoColor: '#00BCD4',
-    initial: 'W',
-    description: 'In 2017, over half the population in Sub-Saharan Africa had no bank account. That\'s for good reason....',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-  {
-    id: '2',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'Pinterest',
-    logoColor: '#E60023',
-    initial: 'P',
-    description: 'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-  {
-    id: '3',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'OpenSea',
-    logoColor: '#2081E2',
-    initial: 'O',
-    description: 'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-  {
-    id: '4',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'Product Hunt',
-    logoColor: '#DA552F',
-    initial: 'P',
-    description: 'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-];
+// ─── Types & Components ─────────────────────────────────────────────────────────
 
-// ─── Components ───────────────────────────────────────────────────────────────
+export type Job = {
+  id: string;
+  title: string;
+  location: string;
+  company: string;
+  logoColor?: string;
+  initial?: string;
+  description: string;
+  applied?: string;
+  match?: string;
+};
 
 const AVATAR_COLORS = ['#F87171', '#60A5FA', '#34D399'];
 
@@ -75,8 +40,6 @@ const AvatarStack = () => (
     ))}
   </View>
 );
-
-type Job = (typeof JOBS_DATA)[number];
 
 export const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => {
   const { showToast } = useToast();
@@ -211,18 +174,17 @@ export default function JobsScreen() {
     fetchJobs();
   }, [params.query]);
 
-  // Merge live jobs with mock jobs so the screen isn't empty if the backend has no jobs
-  const displayJobs = liveJobs.length > 0 ? liveJobs.map(j => ({
+  const displayJobs: Job[] = liveJobs.map(j => ({
     id: j.id,
     title: j.title,
     location: j.location || 'Remote',
     company: j.company || 'Company',
     logoColor: j.logoColor || '#6671E4',
-    initial: j.initial || 'J',
+    initial: (j.company || 'J').charAt(0).toUpperCase(),
     description: j.description || '',
     applied: `${j.applicantsCount || 0} applied`,
     match: '92% Match',
-  })) : JOBS_DATA;
+  }));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F7F7F9' }} edges={['top', 'left', 'right']}>
@@ -276,13 +238,23 @@ export default function JobsScreen() {
         </View>
 
         {/* Job cards */}
-        {displayJobs.map(job => (
-          <JobCard
-            key={job.id}
-            job={job}
-            onPress={() => router.push({ pathname: '/jobs/[id]', params: { id: job.id } })}
-          />
-        ))}
+        {isLoading ? (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <Text style={{ color: '#8A8D9F', fontSize: 14 }} className="font-sans">Loading jobs...</Text>
+          </View>
+        ) : displayJobs.length > 0 ? (
+          displayJobs.map(job => (
+            <JobCard
+              key={job.id}
+              job={job}
+              onPress={() => router.push({ pathname: '/jobs/[id]', params: { id: job.id } })}
+            />
+          ))
+        ) : (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <Text style={{ color: '#8A8D9F', fontSize: 14 }} className="font-sans">No jobs available at the moment.</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

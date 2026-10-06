@@ -1,28 +1,79 @@
-import React, { useState } from 'react';
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Bookmark, Calendar, Coins, Globe, Briefcase, Award, MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { GRANTS_DATA } from './index';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
-
-const DESCRIPTION = `Luena WASH: Small Grants for Community WASH Projects in Sub-Saharan Africa and the Middle East & North Africa\nLuena Foundation invites small, locally led organizations across Sub-Saharan Africa and the Middle East & North Africa to apply for microgrants of USD $1,000–$1,500 through its WASH program.\nThis call is specifically for grassroots organizations with annual revenue under USD $50,000 working directly with children and their communities. We fund practical, community-led projects that improve access to clean water, safe sanitation, and basic hygiene. Priority is given to solutions that address immediate needs and can be implemented quickly, such as repairing or extending existing water systems, improving sanitation facilities, installing handwashing stations, or strengthening local WASH infrastructure.\nProjects must be:\nClearly defined and feasible within a $1,000–$1,500 budget\nFocused on tangible improvements to water, sanitation, or hygiene access\nDesigned for short-term implementation\nSupported by at least 25% community contribution (cash, materials, or in-kind)\nWe do not fund large-scale infrastructure, deep boreholes, regional water systems, or awareness-only activities without a clear physical or service outcome.\nLuena Foundation partners with locally led organizations across the Global South and directs 100% of public donations to projects in the field. We prioritize solutions that are practical, modest in scope, and grounded in local realities.\n📅 Call Opens: April 30, 2026\n⏰ Deadline: May 31, 2026\n🔗 Learn more and apply: https://luena.org/calls-for-proposals\nLink to original source: https://luena.org/calls-for-proposals`;
+import { getGrantById, Grant } from '../../lib/api';
 
 export default function GrantDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const grant = GRANTS_DATA.find(g => g.id === id) ?? GRANTS_DATA[0];
+  const [grant, setGrant] = useState<Grant | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [bookmarked, setBookmarked] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showAllDetails, setShowAllDetails] = useState(false);
 
+  useEffect(() => {
+    let isMounted = true;
+    if (!id) return;
+    getGrantById(id)
+      .then((data) => {
+        if (!isMounted) return;
+        setGrant(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err.message || 'Failed to load grant details');
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
   const handleApply = () => {
-    router.push({ pathname: '/grants/apply', params: { id: grant.id } });
+    if (grant) {
+      router.push({ pathname: '/grants/apply', params: { id: grant.id } });
+    }
   };
 
-  const shortLocation = grant.location.split(', ').slice(0, 3).join(', ');
-  const hasMoreLocation = grant.location.split(', ').length > 3;
+  if (loading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center' }} edges={['top', 'left', 'right']}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 12, color: Colors.textMuted, fontSize: 14 }} className="font-sans">Loading grant details...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !grant) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }} edges={['top', 'left', 'right']}>
+        <Text style={{ fontSize: 16, color: Colors.textHeading, fontWeight: '600', marginBottom: 8 }} className="font-sans">
+          {error || 'Grant not found'}
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/grants')}
+          style={{ marginTop: 16, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: Colors.primary, borderRadius: 8 }}
+        >
+          <Text style={{ color: Colors.white, fontWeight: '600' }} className="font-sans">Go Back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const shortLocation = grant.location ? grant.location.split(', ').slice(0, 3).join(', ') : 'Global';
+  const hasMoreLocation = grant.location ? grant.location.split(', ').length > 3 : false;
+  const orgName = grant.org || grant.funder || 'Organization';
+  const initial = (orgName || 'G').charAt(0).toUpperCase();
+  const logoColor = grant.logoColor || '#3D2A6B';
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen }} edges={['top', 'left', 'right']}>
@@ -89,7 +140,7 @@ export default function GrantDetailScreen() {
             numberOfLines={expanded ? undefined : 3}
             className="font-sans"
           >
-            {DESCRIPTION}
+            {grant.description || 'No description provided.'}
           </Text>
           <TouchableOpacity
             style={styles.readMoreButton}
@@ -178,7 +229,7 @@ export default function GrantDetailScreen() {
   );
 }
 
-const DetailInfoRow = ({ icon: Icon, label, value }: { icon: any; label: string; value: string }) => (
+const DetailInfoRow = ({ icon: Icon, label, value }: { icon: any; label: string; value?: string }) => (
   <View style={styles.detailInfoRow}>
     <Icon size={16} color={Colors.textMuted} style={{ marginRight: 10, marginTop: 1 }} />
     <View style={{ flex: 1 }}>

@@ -31,7 +31,7 @@ export const registerSchema = z.object({
     email: z.string().email('Invalid email format'),
     password: passwordSchema,
     role: z.enum(PUBLIC_ROLES, {
-      errorMap: () => ({ message: `Role must be one of: ${PUBLIC_ROLES.join(', ')}` }),
+      message: `Role must be one of: ${PUBLIC_ROLES.join(', ')}`,
     }),
     // Seeker optional fields
     profession: z.string().optional(),

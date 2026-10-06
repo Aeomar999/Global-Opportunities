@@ -7,7 +7,7 @@
  *   success  Active, Verified, Published, Approved, Upcoming, Open (opportunities, grants)
  *   warning  Pending, Flagged, Open (reports), In review
  *   danger   Rejected, Suspended, Removed, Cancelled
- *   neutral  Draft, Past, Closed, Resolved, Dismissed, Planned, Applicant, Unpublished
+ *   neutral  Draft, Past, Closed, Resolved, Dismissed, Not submitted, Planned, Applicant, Unpublished
  *   info     Running (a program), Onboarding (an ambassador): in progress, nothing wrong, nothing finished (purple)
  *
  * Desk statuses (programs, ambassadors, testimonials, listings):
@@ -74,6 +74,7 @@ const STATUS_MAP: Record<string, StatusMeta> = {
   closed: { tone: "neutral", label: "Closed" },
   resolved: { tone: "neutral", label: "Resolved" },
   dismissed: { tone: "neutral", label: "Dismissed" },
+  not_submitted: { tone: "neutral", label: "Not submitted" },
 };
 
 const KIND_OVERRIDES: Record<StatusKind, Record<string, StatusMeta>> = {

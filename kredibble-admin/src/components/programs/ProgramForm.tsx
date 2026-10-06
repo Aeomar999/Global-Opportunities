@@ -25,6 +25,7 @@ import { LISTING_COUNTRIES } from "@/config/countries";
 import { PROGRAM_FORMATS, PROGRAM_STATUSES, PROGRAM_TYPES, type Program, type ProgramFormat, type ProgramStatus, type ProgramType } from "@/lib/mock-entities";
 import { createProgram, programPartnerOptions, updateProgram, type ProgramFields } from "@/lib/services/programs";
 import { Card } from "@/components/ui/Card";
+import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 import { ChipsInput } from "@/components/ui/form/ChipsInput";
 import { Field } from "@/components/ui/form/Field";
 import { FormSection } from "@/components/ui/form/FormSection";
@@ -175,6 +176,8 @@ export function ProgramForm({ program }: { program?: Program }) {
         <p className="page-subtitle mt-1 mb-6">
           {program ? "Change this program." : "Add something the desk runs: a training, a bootcamp, a webinar and so on."}
         </p>
+
+        <NotConnectedNotice className="mb-4" />
 
         <div className="space-y-4">
           <Card>

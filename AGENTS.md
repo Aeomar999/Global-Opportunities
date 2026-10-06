@@ -27,21 +27,21 @@ Audited and confirmed functional. Every task in `task.md` must leave these intac
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Auth flow | ✅ Works | Register / login / me, bcrypt cost 12, role-based access |
+| Auth flow | ✅ Works | Register / login / me, bcrypt cost 12, role-based access, tokenVersion revocation |
 | Validation | ✅ Works | Zod schemas on all auth routes, shared `validate` middleware |
-| Rate limiting | ✅ Works | Auth 20 req/15 min; global API 100 req/15 min |
+| Rate limiting | ✅ Works | Auth 20 req/15 min; global API 100 req/15 min; Redis store supported |
 | Security headers | ✅ Works | Helmet.js enabled |
-| CORS | ⚠️ Partial | Dynamic allowlist works, but tenant wildcards over-broad (SEC-022) |
-| Database | ✅ Works | Mongoose models with indexes, virtuals, proper refs |
-| Real-time | ⚠️ Partial | Socket.io rooms function, but transport is unauthenticated (SEC-004) |
-| File upload | ⚠️ Partial | Multer memory → Cloudinary, 5 MB cap, auth required; MIME unvalidated (SEC-013) |
-| API design | ✅ Works | RESTful `collectionRoutes` factory, nested relational routes |
-| Health check | ✅ Works | `/api/health` with DB connection status |
-| Admin auth | ⚠️ Partial | Role check on login works, but `signupAdmin` bypass exists (SEC-005) |
-| Mobile token storage | ✅ Works | `expo-secure-store` is correct for mobile; keep it |
+| CORS | ✅ Works | Strict allowlist with no wildcard tenant domains (SEC-022) |
+| Database | ✅ Works | Mongoose 9 models with indexes, virtuals, proper refs, and transactions |
+| Real-time | ✅ Works | Handshake JWT auth, tokenVersion check, room pinning, active eviction (SEC-004, SEC-098) |
+| File upload | ✅ Works | Multer memory → Cloudinary, 5 MB cap, MIME & magic bytes validated, rate limited (SEC-013) |
+| API design | ✅ Works | RESTful `collectionRoutes` factory, nested relational routes, /api/v1 versioned |
+| Health check | ✅ Works | `/api/health` and `/api/v1/health` with DB connection status |
+| Admin auth | ✅ Works | Separate ADMIN_JWT_SECRET, httpOnly session & refresh cookies, no signup bypass (SEC-005, SEC-040) |
+| Mobile token storage | ✅ Works | `expo-secure-store` used for access and refresh tokens; automatic 401 refresh recovery |
 
 **Rules for agents working in this repo:**
-- Never replace `expo-secure-store` with `AsyncStorage` in the mobile app — it is already the correct primitive. (Only the *admin web* app has the localStorage problem, SEC-010.)
+- Never replace `expo-secure-store` with `AsyncStorage` in the mobile app — it is already the correct primitive.
 - Never lower the bcrypt cost below 12.
 - Never remove the `validate` middleware from a route to "fix" a failing request — fix the schema or the client.
 - Never widen CORS, rate limits, or upload caps to make something work.
@@ -50,21 +50,21 @@ Audited and confirmed functional. Every task in `task.md` must leave these intac
 
 ## API Auth Baseline
 
-Current authorization state per endpoint. `❌` = currently unguarded (tracked in `task.md`). This table is the contract the SEC-002 route-manifest test must eventually enforce.
+Verified authorization state per endpoint enforced by live route manifest testing:
 
 | Endpoint | Auth | Roles | Notes |
 |----------|------|-------|-------|
-| `POST /api/auth/register` | ❌ | — | Allows `admin` role (SEC-001) |
-| `POST /api/auth/login` | ❌ | — | Rate limited — correct, login is public |
-| `GET /api/auth/me` | ✅ | all | Returns profile |
-| `GET /api/health` | ❌ | — | Public by design |
-| `GET /api/dashboard/summary` | ❌ | — | Leaks platform counts (SEC-003) |
-| `CRUD /api/users` | ❌ | — | Full anonymous access (SEC-002) |
-| `CRUD /api/seekers` | ❌ | — | Anonymous (SEC-002) |
-| `CRUD /api/hirers` | ❌ | — | Anonymous (SEC-002) |
-| `CRUD /api/opportunities` | ❌ | — | Anonymous (SEC-002) |
-| `POST /api/upload` | ✅ | all | Cloudinary — auth is correctly present |
-| `WS /socket.io` | ❌ | — | No auth, `cors: "*"` (SEC-004) |
+| `POST /api/v1/auth/register` | Rate limited | Public | Rejects `admin` role at schema and model layers (SEC-001) |
+| `POST /api/v1/auth/login` | Rate limited | Public | Lockout persistence (SEC-025, SEC-050), timing-safe (SEC-051) |
+| `GET /api/v1/auth/me` | ✅ Bearer | all | Returns caller profile with PII protection |
+| `GET /api/v1/health` | Public | — | Public liveness & database status check |
+| `GET /api/v1/dashboard/summary` | ✅ Admin | admin | Platform totals & pending moderation queues (SEC-003, SEC-046) |
+| `CRUD /api/v1/users` | ✅ Admin | admin | Admin-only access; non-admin requests receive 403 (SEC-054) |
+| `CRUD /api/v1/seekers` | ✅ Bearer | seeker, hirer, admin | Scoped by role policy and ownerField ownership (SEC-002) |
+| `CRUD /api/v1/hirers` | ✅ Bearer | hirer, admin | Scoped by role policy and ownerField ownership (SEC-002) |
+| `CRUD /api/v1/opportunities` | ✅ / Scoped | all / hirer / admin | Reads scoped to approved listings; writes owner/admin scoped (SEC-002, SEC-048) |
+| `POST /api/v1/upload` | ✅ Bearer / Admin | all | Cloudinary with magic byte & MIME validation, server-derived folder (SEC-013) |
+| `WS /socket.io` | ✅ Handshake | all | Handshake JWT verified with tokenVersion; room pinned; evictions on logout (SEC-004, SEC-098) |
 
 ---
 
@@ -72,20 +72,11 @@ Current authorization state per endpoint. `❌` = currently unguarded (tracked i
 
 | Surface | Location | Status |
 |---------|----------|--------|
-| Vercel config | `kredibble-backend/vercel.json` (tracked); `.vercel/` (root) | Present — `.vercel/` **is** correctly gitignored (`git check-ignore` confirms) |
-| Docker Compose | `docker-compose.yml` (root) | Present — use for local MongoDB |
-| Render | allowed in CORS | Present — wildcard `*.onrender.com` is over-broad (SEC-022) |
-| Env files | `kredibble-backend/.env`, `.env.production` | Verified **ignored** and untracked — nothing to rotate |
-| Env file leak | `kredibble-app/.env` | **Tracked and committed** (SEC-020) — value is non-secret, but the file should not be tracked |
-
-**Verified during the audit (do not re-litigate):**
-- `.vercel/`, `kredibble-backend/.env`, and `kredibble-backend/.env.production` are all correctly gitignored and untracked. There is no committed credential to rotate.
-- `kredibble-app/.env` is the one tracked env file. `EXPO_PUBLIC_*` values are inlined into the client bundle by design and are **not** secrets — never put a real credential behind that prefix.
-- The test-credential seed script is gitignored and its accounts are `@test.com` fixtures.
-
-**Deploy-target consequences:**
-- If the backend runs on a serverless/ephemeral platform, the in-memory rate-limit counters in SEC-024 are per-instance and will not hold. Move to a shared store before relying on them.
-- The `ADMIN_JWT_SECRET` required below does not exist yet. Until SEC-006 and SEC-040 land, admin and user tokens share one signing key.
+| Docker config | `Dockerfile`, `docker-compose.yml`, `render.yaml` | Present — containerised backend with Redis & MongoDB |
+| Render config | `render.yaml` | Production API deployment with health check and declared secrets |
+| Env files | `kredibble-backend/.env`, `kredibble-app/.env.example` | Gitignored and untracked — secrets configured via deployment variables |
+| Admin proxy | `kredibble-admin/next.config.ts` | Same-origin rewrite `/api` proxying to `API_PROXY_TARGET` for SameSite=Strict cookies |
+| Token secrets | `JWT_SECRET`, `ADMIN_JWT_SECRET` | Distinct secrets required at boot in production (SEC-006, SEC-040) |
 
 ---
 
@@ -127,6 +118,7 @@ Run these skills in sequence for each phase. Each skill produces artifacts that 
 
 - **No direct commits to `main`** — all work on feature branches: `security/phase-{n}-{skill}`
 - **No secrets in code** — use `.env.local` (gitignored) for local; CI injects production secrets
+- **Text files are UTF-8** — never write repo files with Windows PowerShell 5.1: `>`, `Out-File` and `Set-Content` produce UTF-16 or ANSI (SEC-110). Use the editor tools, Git Bash or Node. `npm run check:encoding` at the repo root must report 0 failing files; CI enforces it.
 - **No `console.log` in production code** — use structured logger (Pino/Winston)
 - **No `any` types** — strict TypeScript across all apps
 - **No unguarded routes** — every route must declare `auth: 'public' | 'user' | 'admin'`
@@ -168,7 +160,7 @@ The workflows in `.github/workflows/` are the source of truth; this is a summary
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| `ci.yml` | PR to `main`, push to `main` | **Backend:** `lint`, `test` (Jest + mongodb-memory-server). **Backend image:** Docker build. **Admin:** `lint`, `typecheck`, `next build`. **Admin E2E:** Playwright against the real API (`npm run e2e:server`, in-memory Mongo with a seeded admin) and the admin dev server. **App:** `lint`, `typecheck`, `test`, Metro bundle export. |
+| `ci.yml` | PR to `main`, push to `main` | **Backend:** `lint`, `test` (Jest + mongodb-memory-server). **Backend image:** Docker build. **Admin:** `lint`, `typecheck`, `next build`. **Admin E2E:** Playwright against the real API (`npm run e2e:server`, in-memory Mongo with a seeded admin) and the admin dev server. **App:** `lint`, `typecheck`, `test`, Metro bundle export. **Hygiene:** text files are UTF-8, actionlint (with shellcheck on `run:` blocks), shellcheck on `*.sh`, gitleaks on the working tree. |
 | `cd-backend.yml` | push to `main` touching `kredibble-backend/` | Re-verifies, pushes `ghcr.io/aeomar999/global-opportunities/kredibble-backend:{latest,sha}`, calls `RENDER_DEPLOY_HOOK_URL` if set. |
 | `cd-admin.yml` | push to `main` touching `kredibble-admin/` | Re-verifies, then `vercel pull/build/deploy --prebuilt --prod`. Skips with a notice until `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` are set. |
 | `cd-app.yml` | push to `main` touching `kredibble-app/` | Re-verifies, then `eas update --channel production` with `EXPO_PUBLIC_API_URL` from `eas.json`. Skips without `EXPO_TOKEN`. |

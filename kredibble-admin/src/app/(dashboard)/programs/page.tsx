@@ -12,6 +12,7 @@
  *   follow the Type and Country filters.
  * - "New program" (primary) needs edit access on programs: Training Officer, Desk Lead, Super Admin. Country Lead can open
  *   the page and read it (view) and sees no such button.
+ * Programs have no backend yet: outside mock mode a notice says the page shows sample data (SEC-077).
  * Data: services/programs.ts (shared mock store, live). Loading, empty and error states come from useListData; the dev
  * ?state=loading|empty|error switch works here.
  */
@@ -29,6 +30,7 @@ import type { Column } from "@/components/list/types";
 import { PROGRAM_STATUS_LABELS, PROGRAM_TYPE_META } from "@/components/programs/program-meta";
 import { ProgramSummary } from "@/components/programs/ProgramSummary";
 import { Select, type SelectOption } from "@/components/ui/form/Select";
+import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 
 const ALL = "all";
 type StatusFilter = "all" | ProgramStatus;
@@ -93,6 +95,7 @@ export default function ProgramsPage() {
       action={can("programs", "edit") ? { label: "New program", href: "/programs/new", icon: Plus } : undefined}
       toolbar={
         <div className="space-y-4">
+          <NotConnectedNotice />
           <ProgramSummary programs={rows} />
           <TableToolbar filters={{ options, value: status, onChange: setStatus, label: "Filter by status" }}>
             <Select options={typeOptions} value={type} onChange={setType} ariaLabel="Filter by type" sheetTitle="Type" className="w-fit" />

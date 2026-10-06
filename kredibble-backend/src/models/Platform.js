@@ -113,6 +113,7 @@ grantSchema.index({ title: 'text', sector: 'text' });
 
 const grantApplicationSchema = new mongoose.Schema({
   grantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Grant', required: true, index: true },
+  applicantUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
   applicantName: { type: String, required: true },
   requestedAmount: { type: Number, required: true },
   status: { type: String, default: 'pending' },
@@ -140,7 +141,7 @@ const verificationDocSchema = new mongoose.Schema({
   label: String,
   fileName: String,
   status: { type: String, default: 'pending' },
-});
+}, { timestamps: true });
 
 export const Opportunity = mongoose.model('Opportunity', opportunitySchema);
 export const Applicant = mongoose.model('Applicant', applicantSchema);

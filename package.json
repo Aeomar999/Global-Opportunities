@@ -6,6 +6,9 @@
     "test": "npm test --prefix kredibble-backend && npm test --prefix kredibble-app",
     "lint": "npm run lint --prefix kredibble-backend && npm run lint --prefix kredibble-admin && npm run lint --prefix kredibble-app",
     "typecheck": "npm run typecheck --prefix kredibble-admin && npm run typecheck --prefix kredibble-app",
-    "build:admin": "npm run build --prefix kredibble-admin"
+    "build:admin": "npm run build --prefix kredibble-admin",
+    "check:encoding": "node scripts/check-encoding.mjs",
+    "test:scripts": "node --test scripts/check-encoding.test.mjs",
+    "test:deploy": "node --test deploy/bin/god-deploy-gate.test.mjs"
   }
 }

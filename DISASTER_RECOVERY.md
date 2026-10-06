@@ -1,0 +1,67 @@
+# Disaster Recovery Playbook
+# Global-Opportunities (GOD)
+
+This playbook outlines the steps required by the IT department to recover the application infrastructure from a total failure (e.g., Hostinger VPS loss, MongoDB Atlas cluster termination, or catastrophic data corruption).
+
+## RTO and RPO
+- **Recovery Time Objective (RTO):** 4 Hours
+- **Recovery Point Objective (RPO):** 24 Hours (based on daily MongoDB Atlas snapshots)
+
+## 1. Database Recovery (MongoDB Atlas)
+
+If the database is corrupted or lost:
+1. Log into the MongoDB Atlas console (credentials managed by IT).
+2. Navigate to the `kredibble` cluster.
+3. Go to the **Backups** tab.
+4. Select the latest clean snapshot before the failure occurred.
+5. Choose **Restore** -> **Restore to a New Cluster** or **Restore to this Cluster**.
+6. Wait for the restore process to complete.
+7. Update the `DATABASE_URL` secret in GitHub Environments if a new cluster was spun up.
+
+Alternatively, to restore from a manual tarball dump created by `db-dump.sh`:
+```bash
+cd /opt/kredibble-backend/scripts
+./db-restore.sh "mongodb+srv://user:pass@cluster.mongodb.net/kredibble" /path/to/dump_YYYYMMDD.tar.gz
+```
+
+## 2. Infrastructure Recovery (Hostinger VPS)
+
+If the VPS is lost or irrecoverable:
+1. Provision a new Ubuntu VPS on Hostinger.
+2. Install Docker and Docker Compose on the VPS:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install docker.io docker-compose
+   ```
+3. Generate a new SSH Keypair on the VPS, or copy an authorized IT key, and add the public key to `~/.ssh/authorized_keys`.
+4. Update the GitHub Repository Secrets `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY` with the new server details.
+5. Create the required directory structure:
+   ```bash
+   sudo mkdir -p /opt/kredibble-main
+   sudo chown -R $USER:$USER /opt/kredibble-main
+   ```
+6. Trigger a deployment from GitHub Actions (CD Backend workflow, select `main` branch).
+7. The GitHub Action will SSH in, pull the latest image, transfer `docker-compose.prod.yml`, and spin up the containers.
+
+## 3. Frontend / Admin Recovery (Vercel)
+
+Vercel hosts the Next.js admin dashboard.
+If the Vercel project is deleted:
+1. Recreate the project in Vercel.
+2. Set the `NEXT_PUBLIC_API_URL` and `API_PROXY_TARGET` environment variables.
+3. Re-link the GitHub repository to the new Vercel project, or update `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` in GitHub Secrets.
+4. Push a dummy commit or trigger a manual deploy in the Vercel dashboard.
+
+## 4. Mobile App Recovery (EAS)
+
+If the Expo/EAS configuration is lost:
+1. Re-initialize EAS using `eas init`.
+2. Ensure the `eas.json` profiles for `development`, `staging`, and `production` are intact.
+3. Update `EXPO_TOKEN` in GitHub Secrets if it was rotated.
+4. Trigger the CD App workflow on GitHub to publish a fresh OTA update.
+
+## 5. DNS / Cloudflare
+
+If the VPS IP changes, update the A records in Cloudflare:
+- `api.globalopportunitydesk.com` -> [NEW_VPS_IP]
+- `staging.api.globalopportunitydesk.com` -> [NEW_VPS_IP] (if hosted together)

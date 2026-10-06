@@ -2,7 +2,7 @@ name: CD Admin
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging, dev]
     paths:
       - 'kredibble-admin/**'
       - '.nvmrc'
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: cd-admin
+  group: cd-admin-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -34,12 +34,20 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - name: Verify production build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NEXT_PUBLIC_API_URL: /api
+          API_PROXY_TARGET: https://kredibble-api.onrender.com/api
 
   deploy:
-    name: Deploy to Vercel (production)
+    name: Deploy to Vercel
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment: 
+      name: ${{ github.ref == 'refs/heads/main' && 'Production' || github.ref == 'refs/heads/staging' && 'Staging' || 'Development' }}
     defaults:
       run:
         working-directory: kredibble-admin
@@ -48,6 +56,8 @@ jobs:
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       NEXT_TELEMETRY_DISABLED: 1
+      # Set Vercel deployment environment based on branch
+      VERCEL_ENV: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
     steps:
       - name: Check Vercel credentials
         id: creds
@@ -70,15 +80,21 @@ jobs:
       - if: steps.creds.outputs.ready == 'true'
         run: npm install --global vercel@59
         working-directory: .
-      # Pulls the project settings and the production env vars (NEXT_PUBLIC_API_URL,
-      # API_PROXY_TARGET) that the build inlines.
       - if: steps.creds.outputs.ready == 'true'
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-      - if: steps.creds.outputs.ready == 'true'
+        run: vercel pull --yes --environment=${{ env.VERCEL_ENV }} --token="$VERCEL_TOKEN"
+      - if: steps.creds.outputs.ready == 'true' && env.VERCEL_ENV == 'production'
         run: vercel build --prod --token="$VERCEL_TOKEN"
-      - if: steps.creds.outputs.ready == 'true'
-        id: deploy
+      - if: steps.creds.outputs.ready == 'true' && env.VERCEL_ENV == 'preview'
+        run: vercel build --token="$VERCEL_TOKEN"
+      - if: steps.creds.outputs.ready == 'true' && env.VERCEL_ENV == 'production'
+        id: deploy-prod
         run: |
           url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed $url"
+      - if: steps.creds.outputs.ready == 'true' && env.VERCEL_ENV == 'preview'
+        id: deploy-preview
+        run: |
+          url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed $url"

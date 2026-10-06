@@ -1,4 +1,4 @@
-﻿import jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { ApiError } from '../utils/http.js';
@@ -16,7 +16,7 @@ export const signToken = (user) => {
 export const signAdminToken = (user) => {
   const userId = user.id || user._id;
   return jwt.sign(
-    { sub: userId, role: user.role, email: user.email, aud: 'kredibble-admin' },
+    { sub: userId, role: user.role, email: user.email, aud: 'kredibble-admin', tv: user.tokenVersion || 0 },
     env.adminJwtSecret,
     { expiresIn: '15m' }
   );
@@ -86,9 +86,42 @@ export const requireAuth = async (req, res, next) => {
     
     req.auth = payload;
     next();
-  } catch {
-    next(new ApiError(401, 'Authentication token is invalid or expired'));
+  } catch (err) {
+    const isExpired = err.name === 'TokenExpiredError';
+    const apiError = new ApiError(401, 'Authentication token is invalid or expired');
+    if (isExpired) {
+      apiError.code = 'TOKEN_EXPIRED';
+    }
+    next(apiError);
   }
+};
+
+/**
+ * SEC-062 / Q9: Progressive email verification middleware.
+ * Gates high-trust actions (applications, listings, verifications) behind email confirmation.
+ */
+export const requireEmailVerified = async (req, res, next) => {
+  // In tests, only enforce when explicitly enabled
+  if (env.isTest && process.env.REQUIRE_EMAIL_VERIFICATION !== 'true') {
+    return next();
+  }
+  // Admins always bypass verification checks
+  if (req.auth?.role === 'admin') {
+    return next();
+  }
+
+  const user = await User.findById(req.auth?.sub).select('emailVerified role').lean();
+  if (!user || user.role === 'deleted') {
+    return next(new ApiError(401, 'Account no longer active'));
+  }
+
+  if (!user.emailVerified) {
+    const error = new ApiError(403, 'Email verification is required to perform this action');
+    error.code = 'EMAIL_VERIFICATION_REQUIRED';
+    return next(error);
+  }
+
+  next();
 };
 
 export const requireAdminAuth = async (req, res, next) => {
@@ -111,11 +144,19 @@ export const requireAdminAuth = async (req, res, next) => {
     if (!user || user.role === 'deleted') {
       return next(new ApiError(401, 'Account no longer active'));
     }
+    if (payload.tv !== undefined && payload.tv !== user.tokenVersion) {
+      return next(new ApiError(401, 'Token revoked due to security event'));
+    }
     
     req.auth = payload;
     next();
-  } catch {
-    next(new ApiError(401, 'Admin token is invalid or expired'));
+  } catch (err) {
+    const isExpired = err.name === 'TokenExpiredError';
+    const apiError = new ApiError(401, 'Admin token is invalid or expired');
+    if (isExpired) {
+      apiError.code = 'TOKEN_EXPIRED';
+    }
+    next(apiError);
   }
 };
 

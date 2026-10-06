@@ -2,7 +2,7 @@ name: CD App
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging, dev]
     paths:
       - 'kredibble-app/**'
       - '.nvmrc'
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: cd-app
+  group: cd-app-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -18,15 +18,18 @@ permissions:
 
 jobs:
   eas-update:
-    name: Publish EAS Update (production channel)
+    name: Publish EAS Update
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    environment: 
+      name: ${{ github.ref == 'refs/heads/main' && 'Production' || github.ref == 'refs/heads/staging' && 'Staging' || 'Development' }}
     defaults:
       run:
         working-directory: kredibble-app
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       EXPO_NO_TELEMETRY: 1
+      EAS_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/staging' && 'staging' || 'development' }}
     steps:
       - name: Check Expo token
         id: creds
@@ -54,12 +57,11 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
           packager: npm
-      # `eas update` does not read the build-profile env in eas.json, so the API URL
-      # is taken from it here. Without it the bundle falls back to a localhost URL.
       - if: steps.creds.outputs.ready == 'true'
         name: Publish update
         run: |
-          EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build.production.env.EXPO_PUBLIC_API_URL")
+          # Read env from eas.json based on channel profile
+          EXPO_PUBLIC_API_URL=$(node -p "require('./eas.json').build['${{ env.EAS_CHANNEL }}'].env.EXPO_PUBLIC_API_URL")
           export EXPO_PUBLIC_API_URL
           echo "EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
-          eas update --channel production --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive
+          eas update --channel ${{ env.EAS_CHANNEL }} --message "$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" --non-interactive

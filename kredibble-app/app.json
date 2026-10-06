@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "kredibble-app",
+    "name": "Kredibble",
     "slug": "kredibble-app",
     "version": "1.0.0",
     "runtimeVersion": {
@@ -14,10 +14,14 @@
     "scheme": "kredibbleapp",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.kredibble.app",
+      "supportsTablet": true,
+      "buildNumber": "1",
       "icon": "./assets/expo.icon"
     },
     "android": {
       "package": "com.kredibble.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

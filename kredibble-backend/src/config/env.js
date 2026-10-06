@@ -12,6 +12,44 @@ const parseOrigins = (value) =>
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 
+/** Deployments this API can be. Staging and production both run with NODE_ENV=production. */
+const APP_ENVIRONMENTS = ['development', 'test', 'staging', 'production'];
+
+const defaultAppEnv = () => {
+  if (isProduction) return 'production';
+  return nodeEnv === 'test' ? 'test' : 'development';
+};
+
+/**
+ * Which deployment this process is (SEC-112). NODE_ENV only says whether production
+ * code paths run, so it can't tell staging from production; APP_ENV can. When unset
+ * it follows NODE_ENV, so the Render service (NODE_ENV=production) stays production.
+ * @returns {'development' | 'test' | 'staging' | 'production'}
+ */
+const resolveAppEnv = () => {
+  const appEnv = process.env.APP_ENV || defaultAppEnv();
+  if (!APP_ENVIRONMENTS.includes(appEnv)) {
+    throw new Error(`CRITICAL ERROR: APP_ENV must be one of ${APP_ENVIRONMENTS.join(', ')} (got "${appEnv}").`);
+  }
+  if ((appEnv === 'staging' || appEnv === 'production') && !isProduction) {
+    throw new Error(`CRITICAL ERROR: APP_ENV=${appEnv} requires NODE_ENV=production. A deployed API must not run development code paths.`);
+  }
+  return appEnv;
+};
+
+/**
+ * The commit this process was built from: RELEASE_SHA from the CI Docker build,
+ * else Render's RENDER_GIT_COMMIT, else "unknown".
+ * @returns {string}
+ */
+const resolveRelease = () => process.env.RELEASE_SHA || process.env.RENDER_GIT_COMMIT || 'unknown';
+
+/**
+ * The admin Playwright server (scripts/e2e-server.js) sets E2E_SERVER=1 so a whole
+ * suite from one IP isn't throttled. It is never honoured in production.
+ */
+export const e2eModeEnabled = (vars) => vars.NODE_ENV !== 'production' && vars.E2E_SERVER === '1';
+
 const assertStrongEnough = (name, value) => {
   if (value.length < 32) {
     throw new Error(`CRITICAL SECURITY ERROR: ${name} must be at least 32 characters (got ${value.length}). Generate one with: openssl rand -base64 48`);
@@ -43,8 +81,11 @@ const resolveSecret = (name) => {
 
 const env = {
   nodeEnv,
+  appEnv: resolveAppEnv(),
+  release: resolveRelease(),
   isDevelopment: !isProduction,
   isTest: nodeEnv === 'test',
+  isE2E: e2eModeEnabled({ NODE_ENV: nodeEnv, E2E_SERVER: process.env.E2E_SERVER }),
   port: Number(process.env.PORT || 4000),
   corsOrigins: parseOrigins(process.env.CORS_ORIGIN),
   databaseUrl: process.env.DATABASE_URL || process.env.MONGODB_URI || process.env.MONGO_URI,
@@ -59,17 +100,20 @@ const env = {
     return this._adminJwtSecret ??= resolveSecret('ADMIN_JWT_SECRET');
   },
   // AI Provider config
+  aiEnabled: process.env.AI_ENABLED === 'true' || Boolean(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY),
   aiProvider: process.env.AI_PROVIDER || 'openai',
   openaiApiKey: process.env.OPENAI_API_KEY,
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
   // WordPress integration
+  wordpressSyncEnabled: process.env.WORDPRESS_SYNC_ENABLED === 'true' || Boolean(process.env.WORDPRESS_SYNC_BASE_URL),
   insightGhanaWordpressUrl: process.env.INSIGHT_GHANA_WORDPRESS_URL,
   africanJournalWordpressUrl: process.env.AFRICAN_JOURNAL_WORDPRESS_URL,
   // Email service
+  emailEnabled: process.env.EMAIL_ENABLED === 'true' || Boolean(process.env.RESEND_API_KEY),
   resendApiKey: process.env.RESEND_API_KEY,
-  resendFromEmail: process.env.RESEND_FROM_EMAIL,
+  resendFromEmail: process.env.RESEND_FROM_EMAIL || 'verify@kredibble.com',
   emailVerificationCodeTtlMinutes: Number(process.env.EMAIL_VERIFICATION_CODE_TTL_MINUTES || 10),
   outboundRequestTimeoutMs: Number(process.env.OUTBOUND_REQUEST_TIMEOUT_MS || 10000),
   aiSystemPrompt: process.env.AI_SYSTEM_PROMPT || 'You are the Global Opportunities assistant. Give accurate, helpful opportunity guidance.',
@@ -96,14 +140,22 @@ if (isProduction) {
   if (!Number.isFinite(env.outboundRequestTimeoutMs) || env.outboundRequestTimeoutMs < 1000) {
     throw new Error('CRITICAL ERROR: OUTBOUND_REQUEST_TIMEOUT_MS must be at least 1000.');
   }
-  const providerKey = env.aiProvider === 'anthropic' ? env.anthropicApiKey : env.openaiApiKey;
-  if (!providerKey || providerKey.includes('placeholder')) {
-    throw new Error(`CRITICAL ERROR: the configured ${env.aiProvider} API key is missing.`);
+  if (env.aiEnabled) {
+    const providerKey = env.aiProvider === 'anthropic' ? env.anthropicApiKey : env.openaiApiKey;
+    if (!providerKey || providerKey.includes('placeholder')) {
+      throw new Error(`CRITICAL ERROR: the configured ${env.aiProvider} API key is missing.`);
+    }
   }
-  if (!env.resendApiKey || env.resendApiKey.includes('placeholder') || !env.resendFromEmail) {
-    throw new Error('CRITICAL ERROR: Resend must be configured in production.');
+  if (env.emailEnabled) {
+    if (!env.resendApiKey || env.resendApiKey.includes('placeholder') || !env.resendFromEmail) {
+      throw new Error('CRITICAL ERROR: Resend must be configured in production when email is enabled.');
+    }
   }
-  if (Boolean(env.wordpressSyncBaseUrl) !== Boolean(env.wordpressApiKey)) {
+  if (env.wordpressSyncEnabled) {
+    if (!env.wordpressSyncBaseUrl || !env.wordpressApiKey) {
+      throw new Error('CRITICAL ERROR: WORDPRESS_SYNC_BASE_URL and WORDPRESS_API_KEY must be configured together when WordPress sync is enabled.');
+    }
+  } else if (Boolean(env.wordpressSyncBaseUrl) !== Boolean(env.wordpressApiKey)) {
     throw new Error('CRITICAL ERROR: WORDPRESS_SYNC_BASE_URL and WORDPRESS_API_KEY must be configured together.');
   }
 }
