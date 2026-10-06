@@ -3,10 +3,16 @@ import { BRAND, BRAND_ADMIN_TITLE, BRAND_EMAIL_DOMAIN } from '../src/config/bran
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import path from 'path';
 import { isDevRoleSwitcherEnabled, parseDevRoles } from '../src/config/dev-roles';
-import { roleCan } from '../src/config/permissions';
+import { SCREENS, editableRoleGrants, roleCan } from '../src/config/permissions';
+import { KPIS, KPI_KEYS, kpisOwnedBy } from '../src/config/kpis';
 import { ROLE_IDS } from '../src/config/roles';
-import { joinList } from '../src/lib/format';
-import { emptyCollections } from '../src/lib/mock-entities';
+import { formatMonth, joinList } from '../src/lib/format';
+import { attainment, currentMonth, daysInMonth, isPastMonth, kpiMonthStatus, kpiStatus, kpiTarget, kpiValue, monthProgress, monthSeries, monthsBefore, newInMonth, shouldRecordReport } from '../src/lib/kpi';
+import { staffOwningKpi } from '../src/lib/services/staff';
+import { AMBASSADOR_STATUSES, AMBASSADOR_TIERS, LISTING_TYPES, PARTNER_STAGES, PARTNER_STAGE_LABELS, isPartnerClosed, partnerClosedAt, PROGRAM_STATUSES, PROGRAM_TYPES, RECORD_SOURCES, SOCIAL_PLATFORMS, TESTIMONIAL_STATUSES } from '../src/lib/mock-entities';
+import { DEFAULT_TARGETS, DEFAULT_THRESHOLDS, buildSeed } from '../src/lib/mock-seed';
+import { getKpiThresholds } from '../src/lib/mock-store';
+import { getStatusMeta } from '../src/lib/status-map';
 import { PERMISSIONS, describeRole, rolePermissionsStore } from '../src/lib/role-permissions';
 import { getAdminCredentials } from './credentials';
 import { MOCK_COUNTS } from '../src/lib/services/mock-counts';
@@ -1227,9 +1233,9 @@ test.describe('Forms: staff invite', () => {
     const width = await page.getByLabel('Full name').evaluate((el) => el.closest('.max-w-160')!.getBoundingClientRect().width);
     expect(width).toBeLessThanOrEqual(640);
 
-    await page.getByRole('combobox', { name: 'Role' }).click();
+    await page.getByRole('combobox', { name: 'Role', exact: true }).click();
     const options = page.getByRole('option');
-    await expect(options).toHaveCount(3);
+    await expect(options).toHaveCount(12); // every role
     for (const role of ['Super Admin', 'Moderator', 'Support']) {
       const option = page.getByRole('option', { name: new RegExp(`^${role}`) });
       await expect(option).toBeVisible();
@@ -1239,7 +1245,7 @@ test.describe('Forms: staff invite', () => {
 
   test('the Role select works from the keyboard', async ({ page }) => {
     await page.goto(`${BASE_URL}/staff/invite`, { timeout: 30_000 });
-    const role = page.getByRole('combobox', { name: 'Role' });
+    const role = page.getByRole('combobox', { name: 'Role', exact: true });
     await expect(role).toContainText('Support'); // default
     await role.focus();
     await page.keyboard.press('ArrowDown'); // opens
@@ -1433,7 +1439,7 @@ test.describe('Team', () => {
 
     // The invite form's role descriptions are derived from the saved permissions.
     await page.goto(`${BASE_URL}/staff/invite`);
-    await page.getByRole('combobox', { name: 'Role' }).click();
+    await page.getByRole('combobox', { name: 'Role', exact: true }).click();
     // (a full reload resets the in-memory store, so the derived text shows the defaults here)
     await expect(page.getByRole('option', { name: /^Moderator/ })).toContainText('Can review verifications');
   });
@@ -1445,13 +1451,13 @@ test.describe('Team', () => {
     await page.getByRole('button', { name: 'Save changes' }).click();
     await page.getByRole('tab', { name: 'Members' }).click();
     await page.getByRole('link', { name: 'Invite Staff' }).click(); // client-side: the store survives
-    await page.getByRole('combobox', { name: 'Role' }).click();
+    await page.getByRole('combobox', { name: 'Role', exact: true }).click();
     await expect(page.getByRole('option', { name: /^Support/ })).toContainText('suspend accounts and send notifications');
   });
 
   test('unsaved permission edits survive a switch of tab, and leaving asks first', async ({ page }) => {
     await page.goto(`${BASE_URL}/team?tab=roles`, { timeout: 30_000 });
-    await page.getByRole('region', { name: 'Moderator permissions' }).getByRole('switch', { name: 'Manage staff & permissions' }).click();
+    await page.getByRole('region', { name: 'Moderator permissions' }).getByRole('switch', { name: 'Manage staff accounts' }).click();
     await page.getByRole('tab', { name: 'Members' }).click();
     await page.getByRole('tab', { name: 'Roles & permissions' }).click();
     await expect(page.getByText('1 change')).toBeVisible();
@@ -1676,11 +1682,11 @@ test.describe('joinList and role descriptions', () => {
     };
     try {
       only(['suspend']);
-      expect(describeRole('Support')).toBe('Can suspend accounts.');
+      expect(describeRole('support')).toBe('Can suspend accounts.');
       only(['suspend', 'broadcast']);
-      expect(describeRole('Support')).toBe('Can suspend accounts and send notifications.');
+      expect(describeRole('support')).toBe('Can suspend accounts and send notifications.');
       only(['verifications', 'moderate', 'suspend']);
-      expect(describeRole('Support')).toBe('Can review verifications, moderate opportunities and community, and suspend accounts.');
+      expect(describeRole('support')).toBe('Can review verifications, moderate opportunities and community, and suspend accounts.');
     } finally {
       rolePermissionsStore.save(original);
     }
@@ -2074,7 +2080,7 @@ test.describe('Phone (434px): list cards', () => {
           .map((td) => td.getAttribute('data-label'));
         const outside = cells.filter((td) => td.getBoundingClientRect().right > vw + 1).map((td) => td.getAttribute('data-label'));
         const wide = [...document.querySelectorAll('main *')]
-          .filter((el) => !el.closest('thead,.sr-only') && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().right > vw + 1)
+          .filter((el) => !el.closest('thead,.sr-only,[data-edge-fade]') && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().right > vw + 1)
           .map((el) => el.tagName);
         const row = document.querySelector('[data-testid="table-row"]')!;
         const badge = row.querySelector('[data-testid="status-badge"]');
@@ -2289,7 +2295,7 @@ for (const width of [434, 390]) {
         return Math.round(box.y + box.height);
       }).toBe(900);
       // the form content is short, and nothing hides behind the bar
-      const lastField = (await page.getByRole('combobox', { name: 'Role' }).boundingBox())!;
+      const lastField = (await page.getByTestId('invite-role-chips').boundingBox())!;
       expect(lastField.y + lastField.height).toBeLessThanOrEqual((await bar.boundingBox())!.y);
     });
 
@@ -2367,7 +2373,7 @@ test.describe('One focus treatment on text fields', () => {
         await expectSingleFocus(page.getByLabel('Title'));
         await expectSingleFocus(page.getByRole('textbox', { name: 'Message' }));
         await page.goto(`${BASE_URL}/staff/invite`);
-        await expectSingleFocus(page.getByRole('combobox', { name: 'Role' }));
+        await expectSingleFocus(page.getByRole('combobox', { name: 'Role', exact: true }));
         await page.goto(`${BASE_URL}/reference-data`);
         await expectSingleFocus(page.getByRole('searchbox', { name: 'Search universities' }));
         await expectSingleFocus(page.getByRole('textbox', { name: 'Add a new university' }));
@@ -2438,8 +2444,9 @@ test.describe('Month selector', () => {
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     await expect(list).toHaveCount(0);
+    // the label follows the URL, which changes a moment after the choice
+    await expect(trigger).not.toHaveText(first);
     const second = (await trigger.innerText()).trim();
-    expect(second).not.toBe(first);
     await expect(trigger).toBeFocused();
     expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe('hidden');
 
@@ -2506,7 +2513,7 @@ test.describe('Month selector', () => {
     await trigger.click();
     await page.getByRole('dialog', { name: 'Select month' }).getByRole('option').nth(2).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    expect((await trigger.innerText()).trim()).not.toBe(before);
+    await expect(trigger).not.toHaveText(before);
   });
 
   test('the dropdown flips upward when there is no room below', async ({ page }) => {
@@ -2545,17 +2552,17 @@ const slugOf = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '-'
 const EXPECTED_NAV: Record<string, string[]> = {
   super_admin: NAV_ORDER,
   desk_lead: NAV_ORDER,
-  moderator: ['Overview', 'Scorecard', 'Opportunities Queue', 'Seekers', 'Hirers', 'Channels', 'Verification Queue', 'Reports Queue', 'Settings'],
+  moderator: ['Overview', 'Scorecard', 'Seekers', 'Hirers', 'Channels', 'Verification Queue', 'Reports Queue', 'Opportunities Queue', 'Settings'],
   support: ['Overview', 'Scorecard', 'Seekers', 'Hirers', 'Settings'],
-  partnerships_officer: ['Overview', 'Scorecard', 'Partners', 'Network', 'Leaderboard', 'Settings'],
+  partnerships_officer: ['Overview', 'Monthly report', 'Scorecard', 'Partners', 'Network', 'Leaderboard', 'Settings'],
   opportunities_officer: ['Overview', 'Scorecard', 'Opportunities Queue', 'Events', 'Grants', 'Career Resources', 'Settings'],
   training_officer: ['Overview', 'Scorecard', 'Events', 'Programs', 'Network', 'Settings'],
   database_officer: ['Overview', 'Scorecard', 'Network', 'Database', 'Settings'],
   communications_officer: ['Overview', 'Monthly report', 'Scorecard', 'Career Resources', 'Social', 'Testimonials', 'Notifications', 'Settings'],
   social_media_manager: ['Overview', 'Scorecard', 'Social', 'Settings'],
-  country_lead: ['Overview', 'Scorecard', 'Programs', 'Partners', 'Network', 'Leaderboard', 'Database', 'Settings'],
+  country_lead: ['Overview', 'Scorecard', 'Partners', 'Network', 'Leaderboard', 'Programs', 'Database', 'Settings'],
   admin_support: ['Overview', 'Scorecard', 'Team', 'Settings'],
-  'moderator,communications_officer': ['Overview', 'Monthly report', 'Scorecard', 'Opportunities Queue', 'Seekers', 'Hirers', 'Channels', 'Verification Queue', 'Reports Queue', 'Career Resources', 'Social', 'Testimonials', 'Notifications', 'Settings'],
+  'moderator,communications_officer': ['Overview', 'Monthly report', 'Scorecard', 'Seekers', 'Hirers', 'Channels', 'Verification Queue', 'Reports Queue', 'Career Resources', 'Social', 'Testimonials', 'Notifications', 'Settings', 'Opportunities Queue'],
 };
 
 const asRoles = async (context: import('@playwright/test').BrowserContext, roles: string) =>
@@ -2595,6 +2602,8 @@ test.describe('Roles: gated navigation (dev role cookie, mock mode)', () => {
   test('the command palette and the breadcrumb menu list only visible pages', async ({ page, context }) => {
     await asRoles(context, 'support');
     await page.goto(`${BASE_URL}/seekers`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500); // hydration
     await page.keyboard.press('Control+k');
     const palette = page.getByRole('dialog');
     await expect(palette.getByRole('option', { name: /Seekers/ })).toBeVisible();
@@ -2613,6 +2622,8 @@ test.describe('Roles: gated navigation (dev role cookie, mock mode)', () => {
       await expect(state).toBeVisible();
       await expect(state).toContainText("You don't have access to this page");
       await expect(state).toContainText('looked after by');
+      await expect(state).toContainText('Ask a Desk Lead or Super Admin if you need access.');
+      await expect(state).not.toContainText('Ask your desk lead');
       await expect(state.getByRole('link', { name: 'Go to Overview' })).toHaveAttribute('href', '/');
       await expect(page.getByTestId('table-row')).toHaveCount(0); // the page itself did not render
     }
@@ -2638,6 +2649,7 @@ test.describe('Roles: gated navigation (dev role cookie, mock mode)', () => {
     await page.goto(`${BASE_URL}/scorecard?tab=team`, { timeout: 30_000 });
     await expect(page.getByRole('tab')).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'My scorecard' })).toBeVisible(); // asking for Team falls back to mine
+    await expect(page.getByText('Targets and results for you.', { exact: true })).toBeVisible();
     await asRoles(context, 'desk_lead');
     await page.goto(`${BASE_URL}/scorecard`);
     await expect(page.getByRole('tab', { name: 'My scorecard' })).toBeVisible();
@@ -2708,7 +2720,7 @@ test.describe('Permissions: the rules themselves (no browser)', () => {
 test.describe('New placeholder routes', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
   const STUBS: [string, string][] = [
-    ['/programs', 'Programs'], ['/partners', 'Partners'], ['/network', 'Network'], ['/leaderboard', 'Leaderboard'], ['/database', 'Database'],
+    ['/partners', 'Partners'], ['/network', 'Network'], ['/leaderboard', 'Leaderboard'], ['/database', 'Database'],
     ['/social', 'Social'], ['/testimonials', 'Testimonials'], ['/settings', 'Settings'], ['/monthly-report', 'Monthly report'], ['/scorecard', 'Scorecard'],
   ];
   for (const [path, title] of STUBS) {
@@ -2716,26 +2728,20 @@ test.describe('New placeholder routes', () => {
       const problems = trackProblems(page);
       await page.goto(`${BASE_URL}${path}`, { timeout: 30_000 });
       await expect(page.getByTestId('page-title')).toHaveText(title);
-      await expect(page.getByText('This screen is built in a later step')).toBeVisible();
+      // the Scorecard of a Super Admin owns no metrics, so it shows that empty state instead
+      await expect(page.getByText(path === '/scorecard' ? 'No metrics are assigned to your role' : 'This screen is built in a later step')).toBeVisible();
       await expect(page.locator('header.sticky nav[aria-label="Breadcrumb"]')).toContainText(title);
       expect(problems).toEqual([]);
     });
   }
 
-  test('entity accents: Programs is orange, Partners and Network are purple', async ({ page }) => {
+  test('entity accents: Partners and Network are purple (Programs is orange: see the Programs tests)', async ({ page }) => {
     const tone = async (path: string) => {
       await page.goto(`${BASE_URL}${path}`, { timeout: 30_000 });
       return page.locator('main header .bg-orange-50, main header .bg-purple-50').first().evaluate((el) => (el.className.includes('bg-orange-50') ? 'orange' : 'purple'));
     };
-    expect(await tone('/programs')).toBe('orange');
     expect(await tone('/partners')).toBe('purple');
     expect(await tone('/network')).toBe('purple');
-  });
-
-  test('the new entity collections exist and are empty', () => {
-    const collections = emptyCollections();
-    expect(Object.keys(collections).sort()).toEqual(['ambassadors', 'databaseRecords', 'listings', 'partners', 'programs', 'socialPosts', 'targets', 'testimonials']);
-    for (const rows of Object.values(collections)) expect(rows).toEqual([]);
   });
 });
 
@@ -2775,5 +2781,1943 @@ test.describe('Directory pages show real data (E2E_REAL_DATA=1)', () => {
   test('verification page lists the pending company', async ({ page }) => {
     await page.goto(`${BASE_URL}/verification`, { timeout: 30_000 });
     await expect(page.getByText('E2E Holdings')).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Seed data, KPI configuration and shared helpers (pure functions: no page needed)
+// ---------------------------------------------------------------------------
+// A fixed "today" (the 15th, mid-month) so every number below is the same on every day the suite runs.
+const FIXED_TODAY = new Date(Date.UTC(2026, 5, 15));
+const seeded = buildSeed(FIXED_TODAY);
+const seed = seeded.collections;
+const FIXED_MONTHS = Array.from({ length: 6 }, (_, i) => monthsBefore('2026-06', 5 - i)); // oldest -> current
+const kpiData = { ...seed };
+
+test.describe('KPI status', () => {
+  const T = DEFAULT_THRESHOLDS;
+  test('the stored thresholds are 0.95 and 0.7', () => {
+    expect(T).toEqual({ green: 0.95, amber: 0.7 });
+    expect(getKpiThresholds()).toEqual({ green: 0.95, amber: 0.7 });
+  });
+
+  test('boundaries on a full month: exactly at the edge counts as the better colour', () => {
+    // target 20, a whole month (30 of 30 days)
+    expect(kpiStatus(19, 20, 30, 30, T)).toBe('green'); // exactly 0.95
+    expect(kpiStatus(18, 20, 30, 30, T)).toBe('amber'); // 0.90
+    expect(kpiStatus(14, 20, 30, 30, T)).toBe('amber'); // exactly 0.70
+    expect(kpiStatus(13, 20, 30, 30, T)).toBe('red'); // 0.65
+    // just either side of each edge, with a bigger target
+    expect(kpiStatus(95, 100, 30, 30, T)).toBe('green');
+    expect(kpiStatus(94, 100, 30, 30, T)).toBe('amber');
+    expect(kpiStatus(70, 100, 30, 30, T)).toBe('amber');
+    expect(kpiStatus(69, 100, 30, 30, T)).toBe('red');
+    expect(kpiStatus(120, 100, 30, 30, T)).toBe('green'); // over target
+    expect(kpiStatus(0, 100, 30, 30, T)).toBe('red');
+  });
+
+  test('pro-rating: day 1 of the month needs only a small share of the target', () => {
+    // target 30 over 30 days: day 1 asks for 1, day 2 for 2
+    expect(kpiStatus(1, 30, 1, 30, T)).toBe('green');
+    expect(kpiStatus(0, 30, 1, 30, T)).toBe('red');
+    expect(kpiStatus(2, 30, 2, 30, T)).toBe('green');
+    expect(kpiStatus(1, 30, 2, 30, T)).toBe('red'); // 1 of 2 = 0.5
+    // halfway (15 of 30) the share is half the target
+    expect(kpiStatus(10, 20, 15, 30, T)).toBe('green'); // 10 of 10
+    expect(kpiStatus(9, 20, 15, 30, T)).toBe('amber'); // 0.9
+    expect(kpiStatus(7, 20, 15, 30, T)).toBe('amber'); // exactly 0.7
+    expect(kpiStatus(6, 20, 15, 30, T)).toBe('red'); // 0.6
+  });
+
+  test('pro-rating: on the last day the full target applies, and a past month is judged on the full target', () => {
+    expect(kpiStatus(29, 30, 30, 30, T)).toBe('green');
+    expect(kpiStatus(28, 30, 30, 30, T)).toBe('amber');
+    expect(kpiStatus(10, 20, 31, 31, T)).toBe('red'); // a past month passes dayOfMonth = daysInMonth
+    // the same value is healthy earlier in the current month and weak at the end of it
+    expect(kpiStatus(10, 20, 15, 30, T)).toBe('green');
+    expect(kpiStatus(10, 20, 30, 30, T)).toBe('red');
+  });
+
+  test('a KPI without a target is green; thresholds are read from the argument, not hard-coded', () => {
+    expect(kpiStatus(0, 0, 10, 30, T)).toBe('green');
+    expect(kpiStatus(8, 10, 30, 30, { green: 0.8, amber: 0.5 })).toBe('green');
+    expect(kpiStatus(8, 10, 30, 30, { green: 0.9, amber: 0.5 })).toBe('amber');
+    expect(kpiStatus(4, 10, 30, 30, { green: 0.9, amber: 0.5 })).toBe('red');
+  });
+
+  test('attainment is value over target (not capped), null with no target', () => {
+    expect(attainment(50, 100)).toBe(0.5);
+    expect(attainment(120, 100)).toBe(1.2);
+    expect(attainment(5, 0)).toBeNull();
+  });
+
+  test('month helpers', () => {
+    expect(currentMonth(FIXED_TODAY)).toBe('2026-06');
+    expect(monthsBefore('2026-03', 4)).toBe('2025-11');
+    expect(daysInMonth('2026-02')).toBe(28);
+    expect(daysInMonth('2028-02')).toBe(29);
+    expect(isPastMonth('2026-05', FIXED_TODAY)).toBe(true);
+    expect(isPastMonth('2026-06', FIXED_TODAY)).toBe(false);
+    expect(monthProgress('2026-06', FIXED_TODAY)).toEqual({ dayOfMonth: 15, daysInMonth: 30 });
+    expect(monthProgress('2026-05', FIXED_TODAY)).toEqual({ dayOfMonth: 31, daysInMonth: 31 });
+    expect(formatMonth('2026-10')).toBe('October 2026');
+    expect(formatMonth('nonsense')).toBe('nonsense');
+  });
+});
+
+test.describe('KPI configuration', () => {
+  test('ten KPIs, each with a label, unit, note, link screen and owners', () => {
+    expect(KPI_KEYS).toHaveLength(10);
+    for (const key of KPI_KEYS) {
+      const kpi = KPIS[key];
+      expect(kpi.key).toBe(key);
+      expect(kpi.label.length).toBeGreaterThan(0);
+      expect(kpi.unit.length).toBeGreaterThan(0);
+      expect(kpi.note.length).toBeGreaterThan(0);
+      expect(SCREENS).toContain(kpi.screen);
+      expect(kpi.owners.length).toBeGreaterThan(0);
+    }
+    expect(KPIS.programs_organised.note).toBe('Delivered programs this month');
+  });
+
+  test('role ownership follows the brief; the desk lead owns all ten; admin support owns none', () => {
+    const owned = (role: string) => KPI_KEYS.filter((key) => (KPIS[key].owners as string[]).includes(role));
+    expect(owned('opportunities_officer')).toEqual(['opportunities_published']);
+    expect(owned('training_officer')).toEqual(['programs_organised']);
+    expect(owned('partnerships_officer')).toEqual(['partners_onboarded']);
+    expect(owned('database_officer')).toEqual(['beneficiaries_verified']);
+    expect(owned('social_media_manager')).toEqual(['social_reach', 'social_engagement', 'posts_published']);
+    expect(owned('communications_officer')).toEqual(['website_views', 'monthly_reports']);
+    expect(owned('country_lead')).toEqual(['active_ambassadors']);
+    expect(owned('desk_lead')).toEqual([...KPI_KEYS]);
+    expect(owned('admin_support')).toEqual([]);
+    expect(kpisOwnedBy(['admin_support'])).toEqual([]);
+    expect(kpisOwnedBy(['training_officer', 'country_lead']).map((kpi) => kpi.key)).toEqual(['programs_organised', 'active_ambassadors']);
+  });
+
+  test('every KPI has a stored default target, the thresholds are stored, and no component hard-codes them', () => {
+    expect(Object.keys(DEFAULT_TARGETS).sort()).toEqual([...KPI_KEYS].sort());
+    for (const key of KPI_KEYS) expect(kpiTarget(key, kpiData)).toBe(DEFAULT_TARGETS[key]);
+    expect(seed.targets).toHaveLength(10);
+    expect(seed.targets.every((target) => target.target > 0)).toBe(true);
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
+    const ui = [...walk(path.join(__dirname, '..', 'src', 'components')), ...walk(path.join(__dirname, '..', 'src', 'app'))].filter((file) => /\.tsx$/.test(file));
+    const offenders = ui.filter((file) => /\b0\.95\b|\b0\.7\b/.test(readFileSync(file, 'utf8')));
+    expect(offenders.map((file) => path.relative(path.join(__dirname, '..'), file))).toEqual([]);
+  });
+});
+
+test.describe('Seed data', () => {
+  const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
+  const unique = (values: string[]) => new Set(values).size === values.length;
+
+  test('the volumes are fully populated, and the seed is deterministic', () => {
+    expect(seed.listings).toHaveLength(14);
+    expect(seed.programs).toHaveLength(12);
+    expect(seed.partners).toHaveLength(18);
+    expect(seed.ambassadors).toHaveLength(40);
+    expect(seed.databaseRecords).toHaveLength(120);
+    expect(seed.socialPosts).toHaveLength(60);
+    expect(seed.testimonials).toHaveLength(9);
+    expect(seed.staff).toHaveLength(13);
+    expect(seed.websiteMonths).toHaveLength(6);
+    expect(seed.targets).toHaveLength(10);
+    expect(seed.amplificationLogs.length).toBeGreaterThan(40);
+    expect(JSON.stringify(buildSeed(FIXED_TODAY))).toBe(JSON.stringify(seeded)); // same input, same data
+  });
+
+  test('every kind and status is represented', () => {
+    expect(new Set(seed.listings.map((l) => l.type))).toEqual(new Set(LISTING_TYPES));
+    expect(new Set(seed.listings.map((l) => l.status))).toEqual(new Set(['draft', 'published']));
+    expect(seed.listings.some((l) => l.vetted) && seed.listings.some((l) => !l.vetted)).toBe(true);
+    expect(new Set(seed.programs.map((p) => p.type))).toEqual(new Set(PROGRAM_TYPES));
+    expect(new Set(seed.programs.map((p) => p.status))).toEqual(new Set(PROGRAM_STATUSES));
+    expect(seed.programs.some((p) => p.partnerId) && seed.programs.some((p) => !p.partnerId)).toBe(true);
+    expect(new Set(seed.partners.map((p) => p.stage))).toEqual(new Set(PARTNER_STAGES));
+    expect(new Set(seed.ambassadors.map((a) => a.tier))).toEqual(new Set(AMBASSADOR_TIERS));
+    expect(new Set(seed.ambassadors.map((a) => a.status))).toEqual(new Set(AMBASSADOR_STATUSES));
+    expect(new Set(seed.databaseRecords.map((r) => r.source))).toEqual(new Set(RECORD_SOURCES));
+    expect(seed.databaseRecords.some((r) => r.verified) && seed.databaseRecords.some((r) => !r.verified)).toBe(true);
+    expect(new Set(seed.socialPosts.map((p) => p.platform))).toEqual(new Set(SOCIAL_PLATFORMS));
+    expect(new Set(seed.testimonials.map((t) => t.status))).toEqual(new Set(TESTIMONIAL_STATUSES));
+    for (const campus of ['KNUST', 'University of Ghana', 'Ashesi University', 'UCC']) expect(seed.ambassadors.map((a) => a.campus)).toContain(campus);
+    // six stage histories: every partner past "prospect" went through the earlier stages in order
+    for (const partner of seed.partners) {
+      expect(partner.stage).toBe(partner.stageHistory[partner.stageHistory.length - 1].stage);
+      const positions = partner.stageHistory.map((entry) => PARTNER_STAGES.indexOf(entry.stage));
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
+      expect(partner.stageHistory.map((entry) => entry.at)).toEqual([...partner.stageHistory.map((entry) => entry.at)].sort());
+    }
+  });
+
+  test('ids and referral codes are unique, and codes look like GOD-7K2M4Q', () => {
+    for (const rows of [seed.listings, seed.programs, seed.partners, seed.ambassadors, seed.databaseRecords, seed.socialPosts, seed.testimonials, seed.staff, seed.amplificationLogs]) {
+      expect(unique(ids(rows))).toBe(true);
+    }
+    const codes = seed.ambassadors.map((a) => a.referralCode);
+    expect(unique(codes)).toBe(true);
+    for (const code of codes) expect(code).toMatch(/^GOD-[2-9A-HJ-NP-Z]{6}$/);
+    expect(unique(seed.ambassadors.map((a) => a.name))).toBe(true);
+    expect(unique(seed.databaseRecords.map((r) => r.name))).toBe(true);
+  });
+
+  test('every foreign key resolves', () => {
+    const has = (rows: { id: string }[]) => new Set(ids(rows));
+    const partners = has(seed.partners);
+    const ambassadors = has(seed.ambassadors);
+    const listings = has(seed.listings);
+    const staff = has(seed.staff);
+    for (const program of seed.programs) if (program.partnerId) expect(partners.has(program.partnerId)).toBe(true);
+    for (const record of seed.databaseRecords) {
+      if (record.ambassadorId) expect(ambassadors.has(record.ambassadorId)).toBe(true);
+      if (record.listingId) expect(listings.has(record.listingId)).toBe(true);
+    }
+    for (const log of seed.amplificationLogs) {
+      expect(ambassadors.has(log.ambassadorId)).toBe(true);
+      expect(listings.has(log.listingId)).toBe(true);
+    }
+    for (const post of seed.socialPosts) expect(staff.has(post.authorId)).toBe(true);
+    for (const metrics of seed.listingMetrics) expect(listings.has(metrics.listingId)).toBe(true);
+    // some records are linked to ambassadors and some to listings
+    expect(seed.databaseRecords.filter((r) => r.ambassadorId).length).toBeGreaterThan(10);
+    expect(seed.databaseRecords.filter((r) => r.listingId).length).toBeGreaterThan(10);
+  });
+
+  test('rules of the domain hold: published listings are vetted, verified records have a date, nobody is dormant before they joined', () => {
+    for (const listing of seed.listings) {
+      if (listing.status === 'published') {
+        expect(listing.vetted).toBe(true);
+        expect(listing.publishedAt).toBeDefined();
+      } else expect(listing.publishedAt).toBeUndefined();
+    }
+    for (const record of seed.databaseRecords) {
+      expect(!!record.verifiedAt).toBe(record.verified);
+      if (record.verifiedAt) expect(record.createdAt <= record.verifiedAt).toBe(true);
+    }
+    for (const ambassador of seed.ambassadors) {
+      if (ambassador.status === 'dormant') expect(ambassador.dormantSince && ambassador.dormantSince >= ambassador.joinedAt).toBeTruthy();
+      else expect(ambassador.dormantSince).toBeUndefined();
+    }
+    for (const log of seed.amplificationLogs) {
+      const ambassador = seed.ambassadors.find((a) => a.id === log.ambassadorId)!;
+      expect(ambassador.status).not.toBe('applicant');
+    }
+  });
+
+  test('staff: thirteen people, two hold two roles, exactly one is the signed-in dev user, one metric per published listing', () => {
+    expect(seed.staff.filter((s) => s.roles.length === 2)).toHaveLength(2);
+    expect(seed.staff.every((s) => s.roles.length >= 1 && s.roles.length <= 2)).toBe(true);
+    expect(seed.staff.filter((s) => s.isCurrentUser)).toHaveLength(1);
+    for (const role of ROLE_IDS) expect(seed.staff.some((s) => s.roles.includes(role))).toBe(true);
+    expect(seed.listingMetrics).toHaveLength(seed.listings.filter((l) => l.status === 'published').length);
+    for (const m of seed.listingMetrics) {
+      expect(m.views.website).toBeGreaterThan(0);
+      expect(m.views.app).toBeGreaterThan(0);
+      expect(m.applications.website).toBeLessThan(m.views.website);
+      expect(m.applications.app).toBeLessThan(m.views.app);
+    }
+  });
+
+  test('website audience: six consecutive months, a channel table that adds up to the views', () => {
+    expect(seed.websiteMonths.map((row) => row.month)).toEqual(FIXED_MONTHS);
+    for (const row of seed.websiteMonths) {
+      expect(row.channels.reduce((sum, c) => sum + c.views, 0)).toBe(row.views);
+      expect(row.dailyFirstVisits).toBeGreaterThan(0);
+      expect(row.dailyVisitors).toBeGreaterThan(row.dailyFirstVisits);
+    }
+  });
+
+  test('dates are relative to today: nothing is dated in the future except what is planned', () => {
+    const today = '2026-06-15';
+    for (const listing of seed.listings) if (listing.publishedAt) expect(listing.publishedAt <= today).toBe(true);
+    for (const record of seed.databaseRecords) expect((record.verifiedAt ?? record.createdAt) <= today).toBe(true);
+    for (const post of seed.socialPosts) if (post.status === 'published') expect(post.postedAt <= today).toBe(true);
+    for (const post of seed.socialPosts) if (post.status !== 'published') expect(post.postedAt > today).toBe(true);
+    for (const ambassador of seed.ambassadors) expect(ambassador.joinedAt <= today).toBe(true);
+    // a different "today" moves every date with it
+    const later = buildSeed(new Date(Date.UTC(2027, 0, 20))).collections;
+    expect(later.websiteMonths[5].month).toBe('2027-01');
+  });
+});
+
+test.describe('KPI values come from the data (coherence)', () => {
+  const byMonth = <T,>(rows: T[], dateOf: (row: T) => string | undefined, keep: (row: T) => boolean = () => true) => {
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const date = dateOf(row);
+      if (date && keep(row)) counts.set(date.slice(0, 7), (counts.get(date.slice(0, 7)) ?? 0) + 1);
+    }
+    return counts;
+  };
+  const sumByMonth = <T,>(rows: T[], dateOf: (row: T) => string, amount: (row: T) => number, keep: (row: T) => boolean) => {
+    const sums = new Map<string, number>();
+    for (const row of rows) if (keep(row)) sums.set(dateOf(row).slice(0, 7), (sums.get(dateOf(row).slice(0, 7)) ?? 0) + amount(row));
+    return sums;
+  };
+
+  test('kpiValue equals counts computed directly from the seed, for every KPI and every month', () => {
+    const expected: Record<string, Map<string, number>> = {
+      opportunities_published: byMonth(seed.listings, (l) => l.publishedAt, (l) => l.status === 'published' && l.vetted),
+      programs_organised: byMonth(seed.programs, (p) => p.deliveredAt, (p) => p.status === 'delivered'),
+      partners_onboarded: new Map(),
+      beneficiaries_verified: byMonth(seed.databaseRecords, (r) => r.verifiedAt, (r) => r.verified),
+      social_reach: sumByMonth(seed.socialPosts, (p) => p.postedAt, (p) => p.reach, (p) => p.status === 'published'),
+      social_engagement: sumByMonth(seed.socialPosts, (p) => p.postedAt, (p) => p.engagement, (p) => p.status === 'published'),
+      posts_published: byMonth(seed.socialPosts, (p) => p.postedAt, (p) => p.status === 'published'),
+      website_views: new Map(seed.websiteMonths.map((row) => [row.month, row.views])),
+      monthly_reports: byMonth(seed.monthlyReports, (r) => r.generatedAt),
+    };
+    // partners: a partner counts in a month when it moved to onboard or renew in it
+    for (const partner of seed.partners) {
+      const months = new Set(partner.stageHistory.filter((e) => e.stage === 'onboard' || e.stage === 'renew').map((e) => e.at.slice(0, 7)));
+      for (const month of months) expected.partners_onboarded.set(month, (expected.partners_onboarded.get(month) ?? 0) + 1);
+    }
+    for (const key of KPI_KEYS) {
+      for (const month of FIXED_MONTHS) {
+        if (key === 'active_ambassadors') continue; // checked on its own below
+        expect(kpiValue(key, month, kpiData), `${key} ${month}`).toBe(expected[key].get(month) ?? 0);
+      }
+    }
+  });
+
+  test('active ambassadors is a running total: joined by month end, minus those gone dormant by then', () => {
+    for (const month of FIXED_MONTHS) {
+      const end = `${month}-${String(daysInMonth(month)).padStart(2, '0')}`;
+      let active = 0;
+      for (const a of seed.ambassadors) {
+        const everActive = a.status === 'active' || a.status === 'dormant';
+        if (everActive && a.joinedAt <= end && !(a.dormantSince !== undefined && a.dormantSince <= end)) active++;
+      }
+      expect(kpiValue('active_ambassadors', month, kpiData)).toBe(active);
+    }
+    // today: the current month ends the running total at the number of ambassadors that are active now
+    expect(kpiValue('active_ambassadors', '2026-06', kpiData)).toBe(seed.ambassadors.filter((a) => a.status === 'active').length);
+  });
+
+  test('the same totals come out of every path: list, KPI and report', () => {
+    const series = (key: (typeof KPI_KEYS)[number]) => monthSeries(key, 6, FIXED_TODAY, kpiData);
+    // listings: published in the window = published listings dated in the six months
+    expect(series('opportunities_published').reduce((s, p) => s + p.value, 0)).toBe(seed.listings.filter((l) => l.status === 'published').length);
+    // programs: delivered in the window = delivered programs
+    expect(series('programs_organised').reduce((s, p) => s + p.value, 0)).toBe(seed.programs.filter((p) => p.status === 'delivered').length);
+    // social: the posts KPI is the published posts, and reach and engagement add up
+    expect(series('posts_published').reduce((s, p) => s + p.value, 0)).toBe(seed.socialPosts.filter((p) => p.status === 'published').length);
+    expect(series('social_reach').reduce((s, p) => s + p.value, 0)).toBe(seed.socialPosts.reduce((s, p) => s + p.reach, 0));
+    expect(series('social_engagement').reduce((s, p) => s + p.value, 0)).toBe(seed.socialPosts.reduce((s, p) => s + p.engagement, 0));
+    // database: verified in the window = verified records
+    expect(series('beneficiaries_verified').reduce((s, p) => s + p.value, 0)).toBe(seed.databaseRecords.filter((r) => r.verified).length);
+    // website: views over the window = the channel table summed
+    expect(series('website_views').reduce((s, p) => s + p.value, 0)).toBe(seed.websiteMonths.flatMap((m) => m.channels).reduce((s, c) => s + c.views, 0));
+    // reports: one a month except the missed one
+    expect(series('monthly_reports').map((p) => p.value)).toEqual([1, 1, 0, 1, 1, 0]); // none in the weak month, and none generated yet this month
+    // the series is six months, oldest first, ending now
+    expect(series('posts_published').map((p) => p.month)).toEqual(FIXED_MONTHS);
+  });
+
+  test('five of six months look healthy and one is a bit weak', () => {
+    const greenCount = (month: string) => KPI_KEYS.filter((key) => kpiMonthStatus(key, month, FIXED_TODAY, kpiData) === 'green').length;
+    const counts = FIXED_MONTHS.map(greenCount);
+    // healthy = six or more of the ten KPIs green (the current month is 6 green, 2 amber, 2 red); weak = at most two
+    const healthy = counts.filter((n) => n >= 6);
+    const weak = counts.filter((n) => n <= 2);
+    expect(healthy).toHaveLength(5);
+    expect(weak).toHaveLength(1);
+    expect(counts[2]).toBeLessThanOrEqual(2); // three months ago, counting back from the current month (index 5)
+    // the weak month still has real numbers (nothing is empty)
+    expect(kpiValue('posts_published', FIXED_MONTHS[2], kpiData)).toBeGreaterThan(0);
+    expect(kpiValue('website_views', FIXED_MONTHS[2], kpiData)).toBeGreaterThan(0);
+  });
+});
+
+test.describe('Status map: desk statuses and the info tone', () => {
+  const tone = (status: string) => getStatusMeta(status).tone;
+  test('programs', () => {
+    expect(tone('planned')).toBe('neutral');
+    expect(tone('running')).toBe('info');
+    expect(tone('delivered')).toBe('success');
+    expect(tone('cancelled')).toBe('danger');
+  });
+  test('ambassadors', () => {
+    expect(tone('applicant')).toBe('neutral');
+    expect(tone('onboarding')).toBe('info');
+    expect(tone('active')).toBe('success');
+    expect(tone('dormant')).toBe('warning');
+  });
+  test('database records, testimonials, listings and vetting', () => {
+    expect(tone('verified')).toBe('success');
+    expect(tone('pending')).toBe('warning');
+    expect(tone('approved')).toBe('success');
+    expect(tone('unpublished')).toBe('neutral');
+    expect(tone('rejected')).toBe('danger');
+    expect(tone('draft')).toBe('neutral');
+    expect(tone('published')).toBe('success');
+    expect(tone('unvetted')).toBe('warning');
+    expect(tone('vetted')).toBe('success');
+  });
+  test('the labels are readable', () => {
+    expect(getStatusMeta('onboarding').label).toBe('Onboarding');
+    expect(getStatusMeta('unvetted').label).toBe('Unvetted');
+  });
+});
+
+test.describe('Status badges in the design review page', () => {
+  test('the info tone is purple-50 with purple-700 text, and has a dot plus text', async ({ page }) => {
+    await page.goto(`${BASE_URL}/_design`, { timeout: 30_000 });
+    const running = page.getByTestId('status-badge').filter({ hasText: 'Running' }).first();
+    await expect(running).toBeVisible();
+    await expect(running).toHaveClass(/bg-purple-50/);
+    await expect(running).toHaveClass(/text-purple-700/);
+    await expect(running.locator('span[aria-hidden="true"]')).toHaveClass(/bg-purple-600/); // the dot
+    for (const label of ['Planned', 'Delivered', 'Applicant', 'Onboarding', 'Dormant', 'Unpublished', 'Unvetted', 'Vetted']) {
+      await expect(page.getByTestId('status-badge').filter({ hasText: label }).first()).toBeVisible();
+    }
+  });
+});
+
+test.describe('useMonth: the month lives in the URL', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('default is the current month; choosing a past month sets ?month= and survives a reload', async ({ page }) => {
+    await page.goto(`${BASE_URL}/analytics`, { timeout: 30_000 });
+    const trigger = page.getByRole('combobox', { name: 'Month' });
+    const current = (await trigger.innerText()).trim();
+    expect(current).toMatch(/^[A-Z][a-z]+ \d{4}$/);
+    expect(new URL(page.url()).searchParams.get('month')).toBeNull();
+
+    await trigger.click();
+    await page.getByRole('option').nth(2).click();
+    await expect(trigger).not.toHaveText(current);
+    const chosen = (await trigger.innerText()).trim();
+    const param = new URL(page.url()).searchParams.get('month');
+    expect(param).toMatch(/^\d{4}-\d{2}$/);
+    await expect(page.getByRole('status').filter({ hasText: 'do not change by month' })).toContainText(chosen);
+
+    await page.reload();
+    await expect(page.getByRole('combobox', { name: 'Month' })).toHaveText(chosen);
+
+    // choosing the current month again removes the parameter
+    await page.getByRole('combobox', { name: 'Month' }).click();
+    await page.getByRole('option').first().click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('month')).toBeNull();
+    await expect(page.getByRole('status').filter({ hasText: 'do not change by month' })).toHaveCount(0);
+  });
+
+  test('a bad or out-of-range month falls back to the current month, and other parameters are kept', async ({ page }) => {
+    await page.goto(`${BASE_URL}/analytics`, { timeout: 30_000 });
+    const current = (await page.getByRole('combobox', { name: 'Month' }).innerText()).trim();
+    for (const bad of ['2026-13', 'abc', '1999-01', '2999-01']) {
+      await page.goto(`${BASE_URL}/analytics?month=${bad}`);
+      await expect(page.getByRole('combobox', { name: 'Month' })).toHaveText(current);
+    }
+    await page.goto(`${BASE_URL}/analytics?foo=bar`);
+    await page.getByRole('combobox', { name: 'Month' }).click();
+    await page.getByRole('option').nth(1).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('foo')).toBe('bar');
+  });
+
+  test('the Overview uses the same month state', async ({ page }) => {
+    await page.goto(`${BASE_URL}/`, { timeout: 30_000 });
+    await page.getByRole('combobox', { name: 'Month' }).click();
+    await page.getByRole('option').nth(3).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('month')).toMatch(/^\d{4}-\d{2}$/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Data foundations, second pass: partner stages, one staff collection, month-to-date, status variety,
+// monthly reports and "new in a month"
+// ---------------------------------------------------------------------------
+test.describe('Partner stages', () => {
+  test('the stage keys are exactly prospect, outreach, proposal, mou, onboard, renew, with these labels', () => {
+    expect([...PARTNER_STAGES]).toEqual(['prospect', 'outreach', 'proposal', 'mou', 'onboard', 'renew']);
+    expect(PARTNER_STAGE_LABELS).toEqual({ prospect: 'Prospect', outreach: 'Outreach', proposal: 'Proposal', mou: 'MOU', onboard: 'Onboard', renew: 'Renew' });
+    for (const old of ['contacted', 'negotiating', 'active']) expect((PARTNER_STAGES as readonly string[]).includes(old)).toBe(false);
+  });
+
+  test('the 18 partners spread over the stages and follow a path with no gaps; the last entry is the current stage', () => {
+    const count = (stage: string) => seed.partners.filter((p) => p.stage === stage).length;
+    expect(PARTNER_STAGES.map(count)).toEqual([4, 4, 3, 2, 3, 2]);
+    for (const partner of seed.partners) {
+      const positions = partner.stageHistory.map((entry) => PARTNER_STAGES.indexOf(entry.stage));
+      expect(positions[0]).toBe(0); // every partner started as a prospect
+      positions.forEach((position, i) => expect(position).toBe(i)); // prospect, outreach, proposal, mou, onboard, renew: one step at a time
+      expect(partner.stage).toBe(partner.stageHistory[partner.stageHistory.length - 1].stage);
+      expect(partner.stageHistory.map((e) => e.at)).toEqual([...partner.stageHistory.map((e) => e.at)].sort());
+    }
+  });
+
+  test('closed is derived from the stage (onboard or renew) and never stored on its own', () => {
+    for (const partner of seed.partners) {
+      expect('closed' in partner).toBe(false);
+      expect(isPartnerClosed(partner)).toBe(partner.stage === 'onboard' || partner.stage === 'renew');
+    }
+    expect(seed.partners.filter(isPartnerClosed)).toHaveLength(5);
+    // a copy moved to another stage changes "closed" with it: nothing else needs updating
+    const moved = { ...seed.partners[14], stage: 'renew' as const };
+    expect(isPartnerClosed(seed.partners[14])).toBe(false);
+    expect(isPartnerClosed(moved)).toBe(true);
+    // the day it was closed is the first onboard / renew entry of its history, and open partners have none
+    for (const partner of seed.partners) {
+      const first = partner.stageHistory.find((e) => e.stage === 'onboard' || e.stage === 'renew');
+      expect(partnerClosedAt(partner)).toBe(first?.at);
+      expect(partnerClosedAt(partner) === undefined).toBe(!isPartnerClosed(partner));
+    }
+  });
+
+  test('stage tones: prospect neutral, outreach / proposal / mou in progress, onboard / renew closed (success)', () => {
+    expect(getStatusMeta('prospect').tone).toBe('neutral');
+    for (const stage of ['outreach', 'proposal', 'mou']) expect(getStatusMeta(stage).tone).toBe('info');
+    for (const stage of ['onboard', 'renew']) expect(getStatusMeta(stage).tone).toBe('success');
+    expect(getStatusMeta('mou').label).toBe('MOU');
+  });
+});
+
+test.describe('One staff collection', () => {
+  const names = seed.staff.map((person) => person.name);
+
+  test('the three original accounts keep their ids, and the ten desk staff join them', () => {
+    expect(seed.staff).toHaveLength(13);
+    const byId = (id: string) => seed.staff.find((person) => person.id === id)!;
+    expect([byId('staff-1').name, byId('staff-1').roles]).toEqual(['Nana Adjei', ['super_admin']]);
+    expect([byId('staff-2').name, byId('staff-2').roles]).toEqual(['Efua Mensimah', ['moderator']]);
+    expect([byId('staff-3').name, byId('staff-3').roles]).toEqual(['Yaw Antwi', ['support']]);
+    expect(new Set(seed.staff.map((p) => p.id)).size).toBe(13);
+    expect(new Set(names).size).toBe(13);
+    expect(seed.staff.filter((p) => p.roles.length === 2)).toHaveLength(2);
+    expect(seed.staff.every((p) => p.status === 'active')).toBe(true);
+  });
+
+  test('scorecard owners come from the same collection', () => {
+    for (const key of KPI_KEYS) {
+      const owners = staffOwningKpi(key, seed.staff);
+      expect(owners.length, key).toBeGreaterThan(0); // the desk lead at least
+      for (const person of owners) expect(seed.staff).toContain(person);
+    }
+    expect(staffOwningKpi('programs_organised', seed.staff).map((p) => p.name)).toEqual(expect.arrayContaining(['Kwabena Tetteh', 'Esi Mensah-Owusu']));
+  });
+
+  test('Team page: the member count equals the collection, with a pill for every role', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${BASE_URL}/team`, { timeout: 30_000 });
+    const rows = page.getByTestId('table-row');
+    await expect(rows.first()).toBeVisible();
+    await expect(rows).toHaveCount(13); // = the collection (the browser store starts from the same seed)
+    await expect(page.getByText(/Showing 1.13 of 13/)).toBeVisible();
+    // a person with two roles shows both pills
+    const adaeze = rows.filter({ hasText: 'Adaeze Okonkwo' });
+    await expect(adaeze).toContainText('Opportunities Officer');
+    await expect(adaeze).toContainText('Moderator');
+    await expect(rows.filter({ hasText: 'Nana Adjei' })).toContainText('Super Admin');
+    // the original ids still work
+    for (const id of ['staff-1', 'staff-2', 'staff-3']) {
+      await page.goto(`${BASE_URL}/staff/${id}`);
+      await expect(page.getByTestId('page-title')).toBeVisible();
+      await expect(page.getByTestId('no-access')).toHaveCount(0);
+    }
+  });
+
+  test('every person a scorecard or an assigned-owner choice would list exists on the Team page', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${BASE_URL}/team`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    const onPage = await page.getByTestId('table-row').locator('a').allInnerTexts();
+    for (const key of KPI_KEYS) for (const person of staffOwningKpi(key, seed.staff)) expect(onPage.map((t) => t.trim())).toContain(person.name);
+  });
+
+  test('inviting adds to the same collection: the new person is on the Team page, with their own member page', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${BASE_URL}/staff/invite`, { timeout: 30_000 });
+    await page.getByLabel('Full name').fill('Added Person');
+    await page.getByLabel('Email').fill('added.person@example.org');
+    await page.getByRole('combobox', { name: 'Role', exact: true }).click();
+    await page.getByRole('option', { name: /^Partnerships Officer/ }).click();
+    await page.getByRole('button', { name: 'Send invite' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/team`, { timeout: 10_000 });
+    await expect(page.getByTestId('table-row')).toHaveCount(14);
+    const row = page.getByTestId('table-row').filter({ hasText: 'Added Person' });
+    await expect(row).toContainText('Partnerships Officer');
+    await row.getByRole('link', { name: 'Added Person' }).click();
+    await expect(page.getByTestId('page-title')).toHaveText('Added Person');
+    // change the roles on the member page (up to two); the Team list follows
+    await page.getByRole('checkbox', { name: /Database Officer/ }).check();
+    await expect(page.getByRole('checkbox', { name: /^Moderator/ })).toBeDisabled(); // two held: the rest are locked
+  });
+});
+
+test.describe('Current month is month-to-date', () => {
+  const early = buildSeed(new Date(Date.UTC(2026, 5, 3))).collections;
+  const late = buildSeed(new Date(Date.UTC(2026, 5, 28))).collections;
+  const cur = '2026-06';
+  const viewsOf = (c: typeof seed, month: string) => c.websiteMonths.find((m) => m.month === month)!.views;
+
+  test('website views, social reach and engagement grow through the month, and are a fraction of a full month early on', () => {
+    const fullViews = 15200;
+    expect(viewsOf(early, cur)).toBeLessThan(fullViews * 0.2); // day 3 of 30
+    expect(viewsOf(seed, cur)).toBeGreaterThan(fullViews * 0.4); // day 15
+    expect(viewsOf(seed, cur)).toBeLessThan(fullViews * 0.6);
+    expect(viewsOf(late, cur)).toBeGreaterThan(fullViews * 0.85); // day 28
+    expect(viewsOf(early, cur)).toBeLessThan(viewsOf(seed, cur));
+    expect(viewsOf(seed, cur)).toBeLessThan(viewsOf(late, cur));
+    for (const key of ['social_reach', 'social_engagement'] as const) {
+      const a = kpiValue(key, cur, { ...early });
+      const b = kpiValue(key, cur, { ...seed });
+      const c = kpiValue(key, cur, { ...late });
+      expect(a, key).toBeLessThan(b);
+      expect(b, key).toBeLessThan(c);
+      // roughly the share of the month gone (day 15 of 30), not a full month
+      expect(b, key).toBeLessThan(kpiValue(key, '2026-05', { ...seed }) * 0.7);
+    }
+  });
+
+  test('it is fair against the pro-rated target: month-to-date over (target x share) is close to 1 or above for views', () => {
+    for (const [data, day] of [[early, 3], [seed, 15], [late, 28]] as const) {
+      const ratio = viewsOf(data, cur) / (DEFAULT_TARGETS.website_views * (day / 30));
+      expect(ratio).toBeGreaterThan(1); // views are healthy at every point of the month
+      expect(ratio).toBeLessThan(1.6);
+    }
+  });
+
+  test('past months stay complete and do not change with the day', () => {
+    for (const month of FIXED_MONTHS.slice(0, 5)) {
+      expect(viewsOf(early, month)).toBe(viewsOf(late, month));
+      expect(kpiValue('social_reach', month, { ...early })).toBe(kpiValue('social_reach', month, { ...late }));
+    }
+    expect(FIXED_MONTHS.slice(0, 5).map((m) => viewsOf(seed, m))).toEqual([13200, 13800, 10200, 14100, 14900]);
+  });
+
+  test('daily visits are month-to-date too, and the channel table and the series agree with the values', () => {
+    for (const data of [early, seed, late]) {
+      const row = data.websiteMonths.find((m) => m.month === cur)!;
+      const days = data === early ? 3 : data === seed ? 15 : 28;
+      expect(row.channels.reduce((sum, c) => sum + c.views, 0)).toBe(row.views);
+      expect(Math.abs(row.dailyVisitors * days - row.views / 1.35)).toBeLessThan(days); // per-day average over the days that have passed
+      expect(monthSeries('website_views', 6, new Date(Date.UTC(2026, 5, days)), { ...data }).at(-1)!.value).toBe(row.views);
+      const posts = data.socialPosts.filter((p) => p.status === 'published' && p.postedAt.startsWith(cur));
+      expect(posts.reduce((sum, p) => sum + p.reach, 0)).toBe(kpiValue('social_reach', cur, { ...data }));
+      expect(posts.reduce((sum, p) => sum + p.engagement, 0)).toBe(kpiValue('social_engagement', cur, { ...data }));
+      expect(data.socialPosts).toHaveLength(60);
+    }
+  });
+});
+
+test.describe('KPI status variety', () => {
+  const statusesFor = (today: Date) => {
+    const data = { ...buildSeed(today).collections };
+    const cur = currentMonth(today);
+    return Object.fromEntries(KPI_KEYS.map((key) => [key, kpiMonthStatus(key, cur, today, data)])) as Record<(typeof KPI_KEYS)[number], string>;
+  };
+
+  test('the current month is six green, two amber and two red, early, middle and late in the month', () => {
+    for (const day of [2, 9, 15, 22, 28]) {
+      const statuses = statusesFor(new Date(Date.UTC(2026, 5, day)));
+      const count = (colour: string) => Object.values(statuses).filter((s) => s === colour).length;
+      expect([count('green'), count('amber'), count('red')], `day ${day}`).toEqual([6, 2, 2]);
+      expect(Object.entries(statuses).filter(([, s]) => s === 'amber').map(([k]) => k).sort(), `day ${day}`).toEqual(['social_engagement', 'social_reach']);
+      expect(Object.entries(statuses).filter(([, s]) => s === 'red').map(([k]) => k).sort(), `day ${day}`).toEqual(['monthly_reports', 'partners_onboarded']);
+    }
+  });
+
+  test('the past months stay five healthy and one weak, and the status of every KPI is printed', () => {
+    const today = FIXED_TODAY;
+    const greens = FIXED_MONTHS.map((month) => KPI_KEYS.filter((key) => kpiMonthStatus(key, month, today, kpiData) === 'green').length);
+    expect(greens).toEqual([9, 10, 0, 10, 10, 6]);
+    const weak = FIXED_MONTHS[2];
+    for (const key of KPI_KEYS) expect(kpiMonthStatus(key, weak, today, kpiData), `${key} in the weak month`).not.toBe('green');
+    const table = KPI_KEYS.map(
+      (key) =>
+        `${key.padEnd(24)} ${String(kpiValue(key, currentMonth(today), kpiData)).padStart(6)} ${kpiMonthStatus(key, currentMonth(today), today, kpiData).padEnd(6)} | ${String(kpiValue(key, weak, kpiData)).padStart(6)} ${kpiMonthStatus(key, weak, today, kpiData)}`,
+    );
+    console.log(`KPI status (day 15): current month | weak month (${weak})\n${table.join('\n')}`);
+  });
+});
+
+test.describe('Monthly reports', () => {
+  test('each report has reportMonth (the month it covers) and generatedAt, and the KPI counts by generatedAt', () => {
+    expect(seed.monthlyReports.length).toBe(4);
+    for (const report of seed.monthlyReports) {
+      expect(report.reportMonth).toMatch(/^\d{4}-\d{2}$/);
+      expect(report.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(monthsBefore(report.generatedAt.slice(0, 7), 1)).toBe(report.reportMonth); // generated the month after the one it covers
+      expect('month' in report || 'publishedAt' in report).toBe(false);
+    }
+    // the KPI is by the month of generatedAt: May's report (generated in June) counts for June, not May
+    const june = kpiValue('monthly_reports', '2026-06', kpiData);
+    const may = kpiValue('monthly_reports', '2026-05', kpiData);
+    expect(june).toBe(0); // nothing generated yet this month (Download PDF will add it)
+    expect(may).toBe(1);
+    const extra = [...seed.monthlyReports, { id: 'r-new', reportMonth: '2026-05', generatedAt: '2026-06-10' }];
+    expect(kpiValue('monthly_reports', '2026-06', { ...kpiData, monthlyReports: extra })).toBe(1);
+    expect(kpiValue('monthly_reports', '2026-05', { ...kpiData, monthlyReports: extra })).toBe(1); // unchanged
+  });
+
+  test('Download PDF records a report at most once per reportMonth in each calendar month of generation', () => {
+    const now = new Date(Date.UTC(2026, 5, 15));
+    expect(shouldRecordReport(seed.monthlyReports, '2026-05', now)).toBe(true); // first time this month
+    const afterFirst = [...seed.monthlyReports, { id: 'r1', reportMonth: '2026-05', generatedAt: '2026-06-15' }];
+    expect(shouldRecordReport(afterFirst, '2026-05', now)).toBe(false); // the same report again, same month: nothing added
+    expect(shouldRecordReport(afterFirst, '2026-04', now)).toBe(true); // another reportMonth is a new record
+    expect(shouldRecordReport(afterFirst, '2026-05', new Date(Date.UTC(2026, 6, 2)))).toBe(true); // generated again next month: counts again
+  });
+});
+
+test.describe('Report metric dates and newInMonth', () => {
+  test('the seed carries the dates the partner report needs', () => {
+    for (const ambassador of seed.ambassadors) expect(ambassador.joinedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    for (const partner of seed.partners.filter(isPartnerClosed)) expect(partnerClosedAt(partner)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    for (const program of seed.programs.filter((p) => p.status === 'delivered')) expect(program.deliveredAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    for (const program of seed.programs.filter((p) => p.status !== 'delivered')) expect(program.deliveredAt).toBeUndefined();
+    for (const listing of seed.listings.filter((l) => l.status === 'published')) expect(listing.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    for (const record of seed.databaseRecords.filter((r) => r.verified)) expect(record.verifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  test('newInMonth equals direct counts from the seed, for every entity and month', () => {
+    const direct = (dates: (string | undefined)[], month: string) => dates.filter((d) => d?.startsWith(month)).length;
+    for (const month of FIXED_MONTHS) {
+      expect(newInMonth('ambassadors', month, seed), month).toBe(direct(seed.ambassadors.filter((a) => a.status !== 'applicant').map((a) => a.joinedAt), month));
+      expect(newInMonth('partners', month, seed), month).toBe(direct(seed.partners.map((p) => p.stageHistory.find((e) => e.stage === 'onboard' || e.stage === 'renew')?.at), month));
+      expect(newInMonth('programs', month, seed), month).toBe(direct(seed.programs.filter((p) => p.status === 'delivered').map((p) => p.deliveredAt), month));
+      expect(newInMonth('listings', month, seed), month).toBe(direct(seed.listings.filter((l) => l.status === 'published').map((l) => l.publishedAt), month));
+      expect(newInMonth('records', month, seed), month).toBe(direct(seed.databaseRecords.filter((r) => r.verified).map((r) => r.verifiedAt), month));
+    }
+  });
+
+  test('totals agree: new programs, listings and records match their KPIs; new partners are the closed ones', () => {
+    for (const month of FIXED_MONTHS) {
+      expect(newInMonth('programs', month, seed)).toBe(kpiValue('programs_organised', month, kpiData));
+      expect(newInMonth('listings', month, seed)).toBe(kpiValue('opportunities_published', month, kpiData));
+      expect(newInMonth('records', month, seed)).toBe(kpiValue('beneficiaries_verified', month, kpiData));
+    }
+    const closedInWindow = FIXED_MONTHS.reduce((sum, month) => sum + newInMonth('partners', month, seed), 0);
+    expect(closedInWindow).toBe(seed.partners.filter(isPartnerClosed).length); // every closed partner closed inside the six months
+    expect(FIXED_MONTHS.reduce((sum, month) => sum + newInMonth('programs', month, seed), 0)).toBe(seed.programs.filter((p) => p.status === 'delivered').length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Roles fix pass: new permission keys, toggles, nav, invite, tagline, account menu, scorecard copy
+// ---------------------------------------------------------------------------
+// Hand-written. The value is the level each of the 12 roles has on the screen (null = no access).
+const NONE_EXCEPT = (grants: Record<string, 'edit' | 'view'>): Record<string, 'edit' | 'view' | null> => {
+  const all: Record<string, 'edit' | 'view' | null> = {};
+  for (const role of ROLE_IDS) all[role] = grants[role] ?? null;
+  return all;
+};
+const NEW_KEY_ACCESS: Record<string, Record<string, 'edit' | 'view' | null>> = {
+  roles_permissions: NONE_EXCEPT({ super_admin: 'edit', desk_lead: 'view' }),
+  settings_admin: NONE_EXCEPT({ super_admin: 'edit', desk_lead: 'edit' }),
+  listings_curate: NONE_EXCEPT({ super_admin: 'edit', desk_lead: 'edit', opportunities_officer: 'edit' }),
+};
+
+test.describe('Roles fix pass: new permission keys (no browser)', () => {
+  for (const [screen, byRole] of Object.entries(NEW_KEY_ACCESS)) {
+    test(`${screen}: the access of each of the 12 roles`, () => {
+      expect(Object.keys(byRole)).toHaveLength(12);
+      for (const [role, level] of Object.entries(byRole)) {
+        const r = [role] as never;
+        expect(roleCan(r, screen as never, 'view'), `${role} view ${screen}`).toBe(level !== null);
+        expect(roleCan(r, screen as never, 'edit'), `${role} edit ${screen}`).toBe(level === 'edit');
+      }
+    });
+  }
+
+  test('Partnerships Officer can view the Monthly report but not edit it', () => {
+    expect(roleCan(['partnerships_officer'], 'monthly_report', 'view')).toBe(true);
+    expect(roleCan(['partnerships_officer'], 'monthly_report', 'edit')).toBe(false);
+    expect(roleCan(['desk_lead'], 'team', 'edit')).toBe(true);
+  });
+
+  test('toggle-to-screen mapping for Moderator and Support (hand-written)', () => {
+    const allOff = { verifications: false, moderate: false, suspend: false, content: false, broadcast: false, staff: false };
+    const grants = (on: Partial<typeof allOff>) => editableRoleGrants('moderator', { ...allOff, ...on });
+    expect(grants({})).toEqual({ overview: 'view', my_scorecard: 'edit', settings: 'edit', seekers: 'view', hirers: 'view' });
+    expect(grants({ verifications: true }).verification).toBe('edit');
+    const moderate = grants({ moderate: true });
+    expect([moderate.opportunities_queue, moderate.channels, moderate.reports_queue]).toEqual(['edit', 'edit', 'edit']);
+    const suspend = grants({ suspend: true });
+    expect([suspend.seekers, suspend.hirers]).toEqual(['edit', 'edit']);
+    const content = grants({ content: true });
+    expect([content.reference_data, content.career_resources]).toEqual(['edit', 'edit']);
+    expect(grants({ broadcast: true }).notifications).toBe('edit');
+    expect(grants({ staff: true }).team).toBe('edit');
+    // "Manage staff accounts" never reaches the roles matrix, and no toggle grants settings_admin or listings_curate
+    const everyToggle = grants({ verifications: true, moderate: true, suspend: true, content: true, broadcast: true, staff: true });
+    expect(everyToggle.roles_permissions).toBeUndefined();
+    expect(everyToggle.settings_admin).toBeUndefined();
+    expect(everyToggle.listings_curate).toBeUndefined();
+    expect(editableRoleGrants('support', { ...allOff, staff: true }).settings_admin).toBeUndefined();
+  });
+});
+
+test.describe('Roles fix pass: Team > Roles & permissions access and the toggles', () => {
+  test.skip(process.env.E2E_PROD === '1', 'the dev role switcher only exists in development with mock data');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('Desk Lead sees the tab read-only: disabled switches, no action bar; the matrix lists the other ten roles', async ({ page, context }) => {
+    await asRoles(context, 'desk_lead');
+    await page.goto(`${BASE_URL}/team?tab=roles`, { timeout: 30_000 });
+    await expect(page.getByRole('tab', { name: 'Roles & permissions' })).toHaveAttribute('aria-selected', 'true');
+    const moderator = page.getByRole('region', { name: 'Moderator permissions' });
+    await expect(moderator.getByRole('switch')).toHaveCount(6);
+    for (const toggle of await moderator.getByRole('switch').all()) await expect(toggle).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+    const table = page.getByRole('table', { name: /other roles can do/ });
+    await expect(table.getByRole('columnheader')).toHaveCount(11); // Screen + ten roles
+    const headers = (await table.getByRole('columnheader').allInnerTexts()).map((text) => text.trim());
+    const column = headers.indexOf('Partnerships Officer');
+    expect(column).toBeGreaterThan(0);
+    const cell = async (screen: string) =>
+      (await table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: screen, exact: true }) }).getByRole('cell').nth(column - 1).innerText()).trim();
+    expect(await cell('Partners')).toBe('Edit');
+    expect(await cell('Monthly report')).toBe('View');
+    expect(await cell('Seekers')).toBe('—');
+  });
+
+  test('Admin Support has Members but no Roles & permissions tab; ?tab=roles falls back to Members', async ({ page, context }) => {
+    await asRoles(context, 'admin_support');
+    await page.goto(`${BASE_URL}/team?tab=roles`, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Team');
+    await expect(page.getByRole('tab', { name: 'Roles & permissions' })).toHaveCount(0);
+    await expect(page.locator('main tbody tr').first()).toBeVisible();
+    await page.getByRole('button', { name: /Account menu/ }).click();
+    await expect(page.getByRole('menuitem', { name: 'Team', exact: true })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Roles & Permissions' })).toHaveCount(0);
+  });
+
+  test('turning "Moderate opportunities & community" off for Moderator removes Reports Queue and Channels (and Opportunities Queue) from the nav', async ({ page, context }) => {
+    await asRoles(context, 'super_admin');
+    await page.goto(`${BASE_URL}/team?tab=roles`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    const nav = page.locator('aside nav');
+    await page.getByRole('region', { name: 'Moderator permissions' }).getByRole('switch', { name: 'Moderate opportunities & community' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Role permissions were saved.')).toBeVisible();
+    // switch to Moderator with the account menu (client side, so the saved matrix survives)
+    await page.getByRole('button', { name: /Account menu/ }).click();
+    const menu = page.getByRole('menu', { name: 'Account' });
+    await menu.getByRole('menuitemcheckbox', { name: 'Super Admin', exact: true }).click(); // off
+    await menu.getByRole('menuitemcheckbox', { name: 'Moderator', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('viewing-as')).toContainText('Viewing as Moderator');
+    await expect(nav.getByTestId('nav-item-reports-queue')).toHaveCount(0);
+    await expect(nav.getByTestId('nav-item-channels')).toHaveCount(0);
+    await expect(nav.getByTestId('nav-item-opportunities-queue')).toHaveCount(0);
+    // the toggles that stayed on still work: Verification Queue (verifications) is there
+    await expect(nav.getByTestId('nav-item-verification-queue')).toHaveCount(1);
+  });
+
+  test('turning "Manage reference data & content" and "Manage staff accounts" on adds Reference data and Team, never the Roles tab', async ({ page, context }) => {
+    await asRoles(context, 'super_admin');
+    await page.goto(`${BASE_URL}/team?tab=roles`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    const moderator = page.getByRole('region', { name: 'Moderator permissions' });
+    await expect(moderator.getByRole('switch', { name: 'Manage staff accounts' })).toHaveAttribute('aria-checked', 'false');
+    await moderator.getByRole('switch', { name: 'Manage staff accounts' }).click();
+    await moderator.getByRole('switch', { name: 'Manage reference data & content' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByRole('button', { name: /Account menu/ }).click();
+    const menu = page.getByRole('menu', { name: 'Account' });
+    await menu.getByRole('menuitemcheckbox', { name: 'Super Admin', exact: true }).click();
+    await menu.getByRole('menuitemcheckbox', { name: 'Moderator', exact: true }).click();
+    await page.keyboard.press('Escape');
+    const nav = page.locator('aside nav');
+    await expect(page.getByTestId('viewing-as')).toContainText('Viewing as Moderator');
+    await nav.getByTestId('nav-group-content').click(); // content -> Career Resources and Reference data
+    await expect(nav.getByTestId('nav-item-reference-data')).toHaveCount(1);
+    await page.getByTestId('nav-item-team').click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Team');
+    await expect(page.getByRole('tab', { name: 'Roles & permissions' })).toHaveCount(0);
+  });
+});
+
+test.describe('Roles fix pass: sidebar open state, direct rows, tagline, account menu', () => {
+  test.skip(process.env.E2E_PROD === '1', 'the dev role switcher only exists in development with mock data');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  const openGroups = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => [...document.querySelectorAll('aside nav [data-testid^="nav-group-"][aria-expanded="true"]')].map((el) => el.getAttribute('data-testid')));
+
+  const CASES: [string, string, string[]][] = [
+    ['moderator', '/scorecard', ['nav-group-dashboard']],
+    ['partnerships_officer', '/partners', ['nav-group-partners-network']],
+    ['database_officer', '/scorecard', ['nav-group-dashboard']],
+    ['country_lead', '/partners', ['nav-group-partners-network']],
+  ];
+  for (const [role, route, expected] of CASES) {
+    test(`${role} on ${route}: exactly one group is open`, async ({ page, context }) => {
+      await asRoles(context, role);
+      await page.goto(`${BASE_URL}${route}`, { timeout: 30_000 });
+      await expect(page.getByTestId('page-title')).toBeVisible();
+      expect(await openGroups(page)).toEqual(expected);
+      await expect(page.getByTestId('no-access')).toHaveCount(0);
+    });
+  }
+
+  test('switching role forgets the groups opened by hand under the previous role', async ({ page, context }) => {
+    await asRoles(context, 'super_admin');
+    await page.goto(`${BASE_URL}/scorecard`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await page.getByTestId('nav-group-opportunities').click(); // now Dashboard (active) and Opportunities are open
+    expect(await openGroups(page)).toEqual(['nav-group-dashboard', 'nav-group-opportunities']);
+    await page.getByRole('button', { name: /Account menu/ }).click();
+    const menu = page.getByRole('menu', { name: 'Account' });
+    await menu.getByRole('menuitemcheckbox', { name: 'Super Admin', exact: true }).click();
+    await menu.getByRole('menuitemcheckbox', { name: 'Moderator', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('viewing-as')).toContainText('Viewing as Moderator');
+    expect(await openGroups(page)).toEqual(['nav-group-dashboard']);
+  });
+
+  test('a group with one visible page is a direct row at the end: Partnerships Officer (Settings) and Database Officer (Network, Database, Settings)', async ({ page, context }) => {
+    await asRoles(context, 'partnerships_officer');
+    await page.goto(`${BASE_URL}/`, { timeout: 30_000 });
+    const nav = page.locator('aside nav');
+    await expect(nav.getByTestId('nav-group-comms-admin')).toHaveCount(0);
+    await expect(nav.getByTestId('nav-item-settings')).toBeVisible(); // visible without opening anything
+    expect(await nav.locator('a[data-testid^="nav-item-"]').last().getAttribute('data-testid')).toBe('nav-item-settings');
+
+    await asRoles(context, 'database_officer');
+    await page.goto(`${BASE_URL}/database`);
+    await expect(page.getByTestId('page-title')).toBeVisible();
+    expect(await nav.locator('[data-testid^="nav-group-"]').evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')))).toEqual(['nav-group-dashboard']);
+    await expect(nav.getByTestId('nav-item-database')).toHaveAttribute('aria-current', 'page');
+    expect(await nav.locator('a[data-testid^="nav-item-"]').evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')))).toEqual(['nav-item-network', 'nav-item-database', 'nav-item-settings']);
+    expect(await openGroups(page)).toEqual([]); // the active page is a direct row, so no group opens
+  });
+
+  test('the tagline is one line in the expanded desktop sidebar and the collapse button is visible', async ({ page }) => {
+    await page.goto(`${BASE_URL}/`, { timeout: 30_000 });
+    const tagline = page.getByTestId('brand-tagline');
+    await expect(tagline).toHaveText('Global Opportunity Desk');
+    const m = await tagline.evaluate((el) => ({ h: el.getBoundingClientRect().height, sw: el.scrollWidth, cw: el.clientWidth, ws: getComputedStyle(el).whiteSpace, fs: getComputedStyle(el).fontSize }));
+    expect(m.fs).toBe('11px');
+    expect(m.ws).toBe('nowrap');
+    expect(m.h).toBeLessThanOrEqual(17);
+    expect(m.sw).toBeLessThanOrEqual(m.cw);
+    const toggle = page.getByTestId('sidebar-toggle');
+    await expect(toggle).toBeVisible();
+    const t = (await toggle.boundingBox())!;
+    const a = (await page.locator('aside').boundingBox())!;
+    expect(t.x + t.width).toBeLessThanOrEqual(a.x + a.width);
+    const textBox = (await tagline.boundingBox())!;
+    expect(textBox.x + m.sw).toBeLessThanOrEqual(t.x + 1); // the text does not run under the button
+  });
+
+  test('in the phone drawer the tagline may wrap and is never cut off', async ({ page }) => {
+    await page.setViewportSize({ width: 434, height: 900 });
+    await page.goto(`${BASE_URL}/`, { timeout: 30_000 });
+    await page.getByRole('button', { name: 'Open navigation' }).click();
+    const tagline = page.getByTestId('brand-tagline');
+    await expect(tagline).toBeVisible();
+    const m = await tagline.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth, ws: getComputedStyle(el).whiteSpace, ow: getComputedStyle(el).overflowWrap }));
+    expect(m.ws).toBe('normal');
+    expect(m.ow).toBe('break-word');
+    expect(m.sw).toBeLessThanOrEqual(m.cw);
+  });
+
+  test('below 640px the "Viewing as" pill is hidden and the account menu names the roles as text', async ({ page, context }) => {
+    await asRoles(context, 'support,moderator');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE_URL}/`, { timeout: 30_000 });
+    await expect(page.getByTestId('viewing-as')).toBeHidden();
+    await page.getByRole('button', { name: /Account menu/ }).click();
+    await expect(page.getByTestId('account-roles')).toContainText('Your roles');
+    await expect(page.getByTestId('account-roles')).toContainText('Support + Moderator');
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(page.getByTestId('viewing-as')).toBeVisible();
+  });
+
+  test('the account menu names a single role too', async ({ page, context }) => {
+    await asRoles(context, 'training_officer');
+    await page.goto(`${BASE_URL}/`, { timeout: 30_000 });
+    await page.getByRole('button', { name: /Account menu/ }).click();
+    await expect(page.getByTestId('account-roles')).toContainText('Your role');
+    await expect(page.getByTestId('account-roles')).toContainText('Training and Capacity Development Officer');
+  });
+});
+
+test.describe('Roles fix pass: Scorecard copy and the empty state', () => {
+  test.skip(process.env.E2E_PROD === '1', 'the dev role switcher only exists in development with mock data');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  const SUBTITLE_YOU = 'Targets and results for you.';
+  const SUBTITLE_TEAM = 'Targets and results for you and the team.';
+
+  for (const role of ['desk_lead', 'super_admin']) {
+    test(`${role}: subtitle mentions the team and the Team tab exists`, async ({ page, context }) => {
+      await asRoles(context, role);
+      await page.goto(`${BASE_URL}/scorecard`, { timeout: 30_000 });
+      await expect(page.getByText(SUBTITLE_TEAM, { exact: true })).toBeVisible();
+      await expect(page.getByRole('tab', { name: 'Team' })).toBeVisible();
+    });
+  }
+  for (const role of ['moderator', 'partnerships_officer', 'admin_support']) {
+    test(`${role}: subtitle is only about you`, async ({ page, context }) => {
+      await asRoles(context, role);
+      await page.goto(`${BASE_URL}/scorecard`, { timeout: 30_000 });
+      await expect(page.getByText(SUBTITLE_YOU, { exact: true })).toBeVisible();
+      await expect(page.getByRole('tab')).toHaveCount(0);
+    });
+  }
+
+  for (const role of ['moderator', 'support', 'admin_support', 'super_admin']) {
+    test(`${role}: no owned metrics -> an empty state, never a 0 score`, async ({ page, context }) => {
+      expect(kpisOwnedBy([role as never])).toHaveLength(0);
+      await asRoles(context, role);
+      await page.goto(`${BASE_URL}/scorecard`, { timeout: 30_000 });
+      const card = page.getByRole('region', { name: 'My scorecard' });
+      await expect(card).toContainText('No metrics are assigned to your role');
+      await expect(card).toContainText('A Desk Lead can assign them.');
+      await expect(card).not.toContainText(/\b0\b/);
+    });
+  }
+
+  test('a role that owns metrics does not get the empty state', async ({ page, context }) => {
+    await asRoles(context, 'partnerships_officer');
+    await page.goto(`${BASE_URL}/scorecard`, { timeout: 30_000 });
+    await expect(page.getByText('No metrics are assigned to your role')).toHaveCount(0);
+  });
+});
+
+test.describe('Roles fix pass: invite with two roles', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('Role and Second role selects, chips, and the new person holds both roles', async ({ page }) => {
+    await page.goto(`${BASE_URL}/staff/invite`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    const chips = page.getByTestId('invite-role-chips');
+    await expect(chips.getByRole('listitem')).toHaveText(['Support']);
+
+    await page.getByRole('combobox', { name: 'Role', exact: true }).click();
+    await expect(page.getByRole('option')).toHaveCount(12);
+    await page.getByRole('option', { name: /^Moderator/ }).click();
+
+    await page.getByRole('combobox', { name: /Second role/ }).click();
+    await expect(page.getByRole('option')).toHaveCount(12); // "No second role" + the 11 others
+    await expect(page.getByRole('option', { name: /^Moderator/ })).toHaveCount(0); // not the same role twice
+    await page.getByRole('option', { name: /^Communications Officer/ }).click();
+    await expect(chips.getByRole('listitem')).toHaveText(['Moderator', 'Communications Officer']);
+
+    await page.getByLabel('Full name').fill('Two Roles Person');
+    await page.getByLabel('Email').fill('two.roles@kredibble.com');
+    await page.getByRole('button', { name: 'Send invite' }).click();
+    await expect(page).toHaveURL(`${BASE_URL}/team`, { timeout: 10_000 });
+    await expect(page.getByText('Two Roles Person was invited as Moderator and Communications Officer.')).toBeVisible();
+    const row = page.locator('main tbody tr').filter({ hasText: 'Two Roles Person' });
+    await expect(row).toContainText('Moderator');
+    await expect(row).toContainText('Communications Officer');
+  });
+
+  test('the second role can be removed with its x', async ({ page }) => {
+    await page.goto(`${BASE_URL}/staff/invite`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await page.getByRole('combobox', { name: /Second role/ }).click();
+    await page.getByRole('option', { name: /^Moderator/ }).click();
+    const chips = page.getByTestId('invite-role-chips');
+    await expect(chips.getByRole('listitem')).toHaveText(['Support', 'Moderator']);
+    await page.getByRole('button', { name: 'Remove Moderator' }).click();
+    await expect(chips.getByRole('listitem')).toHaveText(['Support']);
+  });
+});
+
+test.describe('Roles fix pass: every role in the dev switcher opens and works', () => {
+  test.skip(process.env.E2E_PROD === '1', 'the dev role switcher only exists in development with mock data');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const role of ROLE_IDS) {
+    test(`${role}: its first and last nav items open, with no console errors`, async ({ page, context }) => {
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      page.on('console', (message) => {
+        if (message.type() === 'error' && !message.text().startsWith('Failed to load resource')) errors.push(message.text());
+      });
+      await asRoles(context, role);
+      await page.goto(`${BASE_URL}/`, { timeout: 30_000 });
+      await expect(page.getByTestId('page-title')).toBeVisible();
+      const nav = page.locator('aside nav');
+      const closed = nav.locator('[data-testid^="nav-group-"][aria-expanded="false"]');
+      for (let i = 0; i < 10 && (await closed.count()) > 0; i++) await closed.first().click();
+      const hrefs = await nav.locator('a[data-testid^="nav-item-"]').evaluateAll((els) => els.map((el) => el.getAttribute('href')!));
+      expect(hrefs.length).toBeGreaterThan(2);
+      for (const href of [hrefs[0], hrefs[hrefs.length - 1]]) {
+        await page.goto(`${BASE_URL}${href}`, { timeout: 30_000 });
+        await expect(page.getByTestId('page-title')).toBeVisible();
+        await expect(page.getByTestId('no-access')).toHaveCount(0);
+      }
+      expect(errors).toEqual([]);
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Opportunities Queue: hirer-submitted and staff-curated listings in one place
+// ---------------------------------------------------------------------------
+// Hand-written from the seed and the hirer mock data: 6 hirer postings (3 jobs, 1 internship, 1 event, 1 grant; 2
+// approved, 3 pending, 1 rejected) and 14 curated listings (4 jobs, 2 each of internship, scholarship, fellowship,
+// grant, event; 11 published, 3 draft).
+const todayLocal = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
+test.describe('Opportunities Queue: one list for both sources', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  const tabCount = async (page: import('@playwright/test').Page, name: string) =>
+    (await page.getByRole('radiogroup', { name: 'Filter by type' }).getByRole('radio', { name: new RegExp(`^${name}`) }).innerText()).replace(/\D+/g, '');
+
+  test('columns, type tabs with counts, and the Other tab', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    const headers = (await page.locator('main table thead th').allTextContents()).map((text) => text.trim()).filter((text) => text && text !== 'Open');
+    expect(headers).toEqual(['Title', 'Company', 'Type', 'Source', 'Vetting', 'Posted', 'Status']);
+    expect(await tabCount(page, 'All')).toBe('20');
+    expect(await tabCount(page, 'Jobs')).toBe('7');
+    expect(await tabCount(page, 'Internships')).toBe('3');
+    expect(await tabCount(page, 'Events')).toBe('3');
+    expect(await tabCount(page, 'Grants')).toBe('3');
+    expect(await tabCount(page, 'Other')).toBe('4'); // 2 scholarships + 2 fellowships, all curated
+    await page.getByRole('radiogroup', { name: 'Filter by type' }).getByRole('radio', { name: /^Other/ }).click();
+    const rows = page.getByTestId('table-row');
+    await expect(rows).toHaveCount(4);
+    for (const row of await rows.all()) await expect(row).toContainText('Staff-curated');
+  });
+
+  test('Source filter: Hirer-submitted shows 6, Staff-curated shows 14; badges differ', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    const source = page.getByRole('radiogroup', { name: 'Filter by source' });
+    await source.getByRole('radio', { name: 'Hirer-submitted' }).click();
+    await expect(page.getByTestId('table-row')).toHaveCount(6);
+    expect(await tabCount(page, 'All')).toBe('6');
+    expect(await tabCount(page, 'Jobs')).toBe('3');
+    for (const row of await page.getByTestId('table-row').all()) {
+      await expect(row).toContainText('Hirer');
+      await expect(row).not.toContainText('Vetted'); // vetting is for curated rows only
+      await expect(row).not.toContainText('Unvetted');
+    }
+    await source.getByRole('radio', { name: 'Staff-curated' }).click();
+    expect(await tabCount(page, 'All')).toBe('14');
+    expect(await tabCount(page, 'Jobs')).toBe('4');
+    await expect(page.getByTestId('table-row')).toHaveCount(10); // first of two pages
+    const first = page.getByTestId('table-row').first();
+    await expect(first.getByText(/^(Vetted|Unvetted)$/)).toBeVisible();
+  });
+
+  test('Country filter: Ghana has 6 rows; the options are the countries that have a row', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    await page.getByRole('combobox', { name: 'Filter by country' }).click();
+    const options = (await page.getByRole('option').allInnerTexts()).map((text) => text.trim());
+    expect(options).toEqual(["All countries", "Côte d'Ivoire", 'Ghana', 'Kenya', 'Nigeria', 'Rwanda', 'Senegal', 'Sierra Leone', 'Uganda']);
+    await page.getByRole('option', { name: 'Ghana' }).click();
+    await expect(page.getByTestId('table-row')).toHaveCount(6); // 3 curated + 3 hirer
+    expect(await tabCount(page, 'All')).toBe('6');
+    await page.getByRole('combobox', { name: 'Filter by country' }).click();
+    await page.getByRole('option', { name: 'Senegal' }).click();
+    await expect(page.getByTestId('table-row')).toHaveCount(2);
+  });
+
+  test('Status filter: Draft shows the 3 drafts; Pending shows the 3 pending postings', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    await page.getByRole('combobox', { name: 'Filter by status' }).click();
+    await page.getByRole('option', { name: 'Draft' }).click();
+    await expect(page.getByTestId('table-row')).toHaveCount(3);
+    await page.getByRole('combobox', { name: 'Filter by status' }).click();
+    await page.getByRole('option', { name: 'Pending' }).click();
+    await expect(page.getByTestId('table-row')).toHaveCount(3);
+    await page.getByRole('combobox', { name: 'Filter by status' }).click();
+    await page.getByRole('option', { name: 'Rejected' }).click();
+    await expect(page.getByTestId('table-row')).toHaveCount(1);
+    // an impossible combination shows the no-results state
+    await page.getByRole('radiogroup', { name: 'Filter by source' }).getByRole('radio', { name: 'Staff-curated' }).click();
+    await expect(page.getByText('No opportunities match these filters')).toBeVisible();
+  });
+
+  test('?state=empty and ?state=error show their states', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities?state=empty`, { timeout: 30_000 });
+    await expect(page.getByText('No opportunities yet')).toBeVisible();
+    await page.goto(`${BASE_URL}/opportunities?state=error`);
+    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  });
+});
+
+test.describe('Opportunities: the listing form', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  const publishButton = (page: import('@playwright/test').Page) => page.getByRole('button', { name: 'Publish', exact: true });
+
+  const fillBasics = async (page: import('@playwright/test').Page, title: string, deadline = '2099-12-31') => {
+    await page.getByLabel('Title', { exact: true }).fill(title);
+    await page.getByLabel('Description', { exact: true }).fill('A listing made in a test.');
+    await page.getByLabel('Offering organisation').fill('Test Organisation');
+    await page.getByRole('combobox', { name: 'Opportunity type' }).click();
+    await page.getByRole('option', { name: 'Fellowship' }).click();
+    await page.getByRole('combobox', { name: 'Country' }).click();
+    await page.getByRole('option', { name: 'Ghana' }).click();
+    await page.getByLabel('Application deadline').fill(deadline);
+    await page.getByLabel('Official application link').fill('https://example.org/apply');
+  };
+
+  test('has the four sections, the vetting card and the right actions', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/new`, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('New listing');
+    for (const title of ['Basic details', 'Logistics', 'Media and attribution']) await expect(page.getByRole('heading', { name: title })).toBeVisible();
+    const vetting = page.getByTestId('vetting-checkpoint');
+    await expect(vetting).toBeVisible();
+    await expect(vetting).toContainText('Listings must be vetted before they can be published.');
+    await expect(vetting.getByRole('checkbox', { name: 'Vetted' })).not.toBeChecked();
+    await expect(page.getByRole('button', { name: 'Save draft' })).toBeEnabled();
+    await expect(publishButton(page)).toBeDisabled();
+    await expect(page.getByRole('switch', { name: 'Referral code on apply' })).toBeVisible();
+    // required fields carry no "Optional" tag; the optional ones do
+    await expect(page.getByText('Optional', { exact: true })).toHaveCount(7); // logo, cost, location, event date, duration, image, writer
+    // the vetting card is visually distinct: a 2px warning-tinted border
+    expect(await vetting.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('2px');
+  });
+
+  test('Publish is disabled until Vetted is checked, with the reason beside it and in a tooltip; then it is enabled', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/new`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await fillBasics(page, 'Vetting Gate Test');
+    await expect(publishButton(page)).toBeDisabled();
+    await expect(page.getByTestId('save-disabled-reason')).toHaveText('Check "Vetted" to publish.');
+    await publishButton(page).hover({ force: true });
+    await expect(page.getByRole('tooltip')).toContainText('Check "Vetted" to publish.');
+    await page.mouse.move(5, 5); // the tooltip floats above the bar and could sit over the checkbox
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
+
+    await page.getByTestId('vetting-checkpoint').getByRole('checkbox', { name: 'Vetted' }).check();
+    await expect(publishButton(page)).toBeEnabled();
+    await expect(page.getByTestId('save-disabled-reason')).toHaveCount(0);
+    // Vetted by defaults to the signed-in person; Vetted on is today, and editable
+    await expect(page.getByRole('combobox', { name: 'Vetted by' })).toContainText('Esi Mensah-Owusu');
+    await expect(page.getByLabel('Vetted on')).toHaveValue(todayLocal());
+    await page.getByLabel('Vetted on').fill('2026-01-05');
+    await expect(page.getByLabel('Vetted on')).toHaveValue('2026-01-05');
+    // unchecking clears them again and disables Publish
+    await page.getByTestId('vetting-checkpoint').getByRole('checkbox', { name: 'Vetted' }).uncheck();
+    await expect(publishButton(page)).toBeDisabled();
+    await expect(page.getByLabel('Vetted on')).toHaveValue('');
+  });
+
+  test('Save draft works unvetted: the listing appears in the list as Draft + Unvetted and the count goes up by one', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/new`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await fillBasics(page, 'Draft Saved Unvetted');
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    // the toast shows at once; on a cold dev server the detail page then takes a while to compile, so look for it first
+    await expect(page.getByText('Draft Saved Unvetted was saved as a draft.')).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/\/opportunities\/lst-new-/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Draft Saved Unvetted');
+    await expect(page.getByTestId('vetting-badge')).toContainText('Unvetted');
+    await expect(page.getByTestId('source-pill')).toContainText('Staff-curated');
+    await expect(page.getByRole('region', { name: 'Reach' })).toHaveCount(0); // not published
+
+    // back to the list (client side, so the store survives)
+    await page.locator('header.sticky').getByRole('link', { name: 'Opportunities Queue' }).click();
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    expect(await tabCount(page, 'All')).toBe('21');
+    expect(await tabCount(page, 'Other')).toBe('5'); // the new one is a fellowship
+    const row = page.getByTestId('table-row').filter({ hasText: 'Draft Saved Unvetted' });
+    await expect(row).toContainText('Staff-curated');
+    await expect(row).toContainText('Unvetted');
+    await expect(row).toContainText('Draft');
+  });
+
+  const tabCount = async (page: import('@playwright/test').Page, name: string) =>
+    (await page.getByRole('radiogroup', { name: 'Filter by type' }).getByRole('radio', { name: new RegExp(`^${name}`) }).innerText()).replace(/\D+/g, '');
+
+  test('Publish sets status published and the published date, and the list shows Published + Vetted', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/new`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await fillBasics(page, 'Published In Test');
+    await page.getByTestId('vetting-checkpoint').getByRole('checkbox', { name: 'Vetted' }).check();
+    await publishButton(page).click();
+    await expect(page.getByText('Published In Test was published.')).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/\/opportunities\/lst-new-/, { timeout: 30_000 });
+    await expect(page.getByRole('main').getByText('Published', { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId('vetting-badge')).toContainText('Vetted');
+    const details = page.getByRole('region', { name: 'Details' });
+    await expect(details).toContainText(new Date().getFullYear().toString()); // the published date is today
+    await expect(page.getByRole('region', { name: 'Reach' })).toBeVisible();
+    await page.locator('header.sticky').getByRole('link', { name: 'Opportunities Queue' }).click();
+    const row = page.getByTestId('table-row').filter({ hasText: 'Published In Test' });
+    await expect(row).toContainText('Vetted');
+    await expect(row).toContainText('Published');
+  });
+
+  test('validation: required fields, a bad link, and a past deadline only when publishing; the first invalid field takes focus', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/new`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    for (const message of ['Enter a title.', 'Enter a description.', 'Enter the offering organisation.', 'Choose the opportunity type.', 'Choose a country.', 'Choose the application deadline.', 'Enter the official application link.']) {
+      await expect(page.getByText(message)).toBeVisible();
+    }
+    await expect(page.getByLabel('Title', { exact: true })).toBeFocused();
+
+    await fillBasics(page, 'Validation Test', '2020-01-01');
+    await page.getByLabel('Official application link').fill('not a link');
+    await page.getByLabel('Official application link').blur();
+    await expect(page.getByText('Enter a full web address, starting with https://')).toBeVisible();
+    await page.getByLabel('Official application link').fill('https://example.org/ok');
+    // a past deadline is fine for a draft ... but not for publishing
+    await page.getByTestId('vetting-checkpoint').getByRole('checkbox', { name: 'Vetted' }).check();
+    await publishButton(page).click();
+    await expect(page.getByText('The deadline has passed. Choose today or a later date to publish.')).toBeVisible();
+    await expect(page.getByLabel('Application deadline')).toBeFocused();
+    await expect(page).toHaveURL(`${BASE_URL}/opportunities/new`);
+  });
+
+  test('leaving with unsaved changes asks first', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/new`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await page.getByLabel('Title', { exact: true }).fill('Unsaved');
+    await page.locator('header.sticky').getByRole('link', { name: 'Home' }).click();
+    await expect(page.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeVisible();
+  });
+
+  test('edit: a vetted draft can be published straight away; an unvetted one cannot; hirer postings and unknown ids are not found', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/lst-12/edit`, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Edit listing');
+    await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Startup Seed Grant');
+    await expect(page.getByTestId('vetting-checkpoint').getByRole('checkbox', { name: 'Vetted' })).toBeChecked();
+    await expect(publishButton(page)).toBeEnabled();
+
+    await page.goto(`${BASE_URL}/opportunities/lst-13/edit`);
+    await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Virtual Graduate Employability Summit');
+    await expect(publishButton(page)).toBeDisabled();
+
+    for (const path of ['/opportunities/opp-1/edit', '/opportunities/nope/edit', '/opportunities/lst-01/edit?state=notfound']) {
+      await page.goto(`${BASE_URL}${path}`);
+      await expect(page.getByText(/not found/i).first()).toBeVisible();
+    }
+  });
+
+  test('a published listing is edited with "Save changes" (no Save draft)', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/lst-01/edit`, { timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+  });
+});
+
+test.describe('Opportunities: curated detail, reach and unpublish', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('Reach: totals equal website plus app, for views and applications, and match the data', async ({ page }) => {
+    const metrics = buildSeed().collections.listingMetrics.find((entry) => entry.listingId === 'lst-01')!;
+    await page.goto(`${BASE_URL}/opportunities/lst-01`, { timeout: 30_000 });
+    const number = async (id: string) => Number((await page.getByTestId(id).innerText()).replace(/[^0-9]/g, ''));
+    for (const kind of ['views', 'applications'] as const) {
+      const website = await number(`reach-${kind}-website`);
+      const app = await number(`reach-${kind}-app`);
+      const total = await number(`reach-${kind}-total`);
+      expect(total).toBe(website + app);
+      expect(website).toBe(metrics[kind].website);
+      expect(app).toBe(metrics[kind].app);
+      // the numbers are text: the split line carries both shares
+      await expect(page.getByTestId(`reach-${kind}-split`)).toContainText(/Website \d+% · App \d+%/);
+    }
+  });
+
+  test('header shows Source and Vetting badges and an Edit button; a draft has no Reach and no Unpublish', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/lst-13`, { timeout: 30_000 });
+    await expect(page.getByTestId('source-pill')).toContainText('Staff-curated');
+    await expect(page.getByTestId('vetting-badge')).toContainText('Unvetted');
+    await expect(page.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/opportunities/lst-13/edit');
+    await expect(page.getByRole('region', { name: 'Reach' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Unpublish listing' })).toHaveCount(0);
+  });
+
+  test('Unpublish asks first, then returns the listing to Draft (still vetted)', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/lst-02`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await expect(page.getByRole('region', { name: 'Reach' })).toBeVisible();
+    await page.getByRole('button', { name: 'Unpublish listing' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Unpublish this listing?');
+    await dialog.getByRole('button', { name: 'Unpublish listing' }).click();
+    await expect(page.getByText('Operations Analyst was unpublished.')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Reach' })).toHaveCount(0);
+    await expect(page.getByTestId('vetting-badge')).toContainText('Vetted');
+    await expect(page.getByRole('button', { name: 'Unpublish listing' })).toHaveCount(0);
+  });
+
+  test('a hirer posting keeps its approve / reject page', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/opp-3`, { timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'Approve' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Reject opportunity' })).toBeEnabled();
+    await expect(page.getByTestId('source-pill')).toHaveCount(0);
+  });
+});
+
+test.describe('Opportunities: roles', () => {
+  test.skip(process.env.E2E_PROD === '1', 'the dev role switcher only exists in development with mock data');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const role of ['opportunities_officer', 'desk_lead', 'super_admin']) {
+    test(`${role} sees New listing and can open the form and the edit page`, async ({ page, context }) => {
+      await asRoles(context, role);
+      await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+      await expect(page.getByRole('link', { name: 'New listing' })).toHaveAttribute('href', '/opportunities/new');
+      await page.goto(`${BASE_URL}/opportunities/new`);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('New listing');
+      await page.goto(`${BASE_URL}/opportunities/lst-01`);
+      await expect(page.getByRole('link', { name: 'Edit' })).toBeVisible();
+    });
+  }
+
+  test('a moderator keeps approve / reject, but has no New listing button and cannot open the form or edit', async ({ page, context }) => {
+    await asRoles(context, 'moderator');
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Opportunities Queue');
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'New listing' })).toHaveCount(0);
+    await page.goto(`${BASE_URL}/opportunities/opp-3`);
+    await expect(page.getByRole('button', { name: 'Approve' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Reject opportunity' })).toBeEnabled();
+    for (const path of ['/opportunities/new', '/opportunities/lst-01/edit']) {
+      await page.goto(`${BASE_URL}${path}`);
+      await expect(page.getByTestId('no-access')).toBeVisible();
+    }
+    // a curated listing is readable, but Edit is disabled with the standard tooltip and there is no Unpublish
+    await page.goto(`${BASE_URL}/opportunities/lst-01`);
+    await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+    const edit = page.getByRole('button', { name: 'Edit' });
+    await expect(edit).toBeDisabled();
+    await edit.hover({ force: true });
+    await expect(page.getByRole('tooltip')).toContainText('Your role can view this page but not change it');
+    await expect(page.getByRole('button', { name: 'Unpublish listing' })).toHaveCount(0);
+  });
+});
+
+test.describe('Opportunities: phone (434px)', () => {
+  test.use({ viewport: { width: 434, height: 900 } });
+  const noOverflow = (page: import('@playwright/test').Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+
+  test('list rows are cards with the source and the vetting; nothing is wider than the screen', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    const card = page.getByTestId('table-row').first();
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Staff-curated');
+    await expect(card.locator('td[data-label="Source"]')).toContainText('Staff-curated');
+    await expect(card.locator('td[data-label="Vetting"]')).toContainText(/Vetted|Unvetted/);
+    expect(await noOverflow(page)).toBe(true);
+    for (const name of ['Filter by source']) await expect(page.getByRole('radiogroup', { name })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Filter by country' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'New listing' })).toBeVisible();
+    // the sheet opens for the country filter on a phone
+    await page.getByRole('combobox', { name: 'Filter by country' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+  });
+
+  test('the form fits: no sideways scroll, the vetting card and both action buttons are reachable, 40px+ hit areas', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/new`, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('New listing');
+    expect(await noOverflow(page)).toBe(true);
+    await expect(page.getByTestId('back-button')).toBeVisible();
+    const save = page.getByRole('button', { name: 'Save draft' });
+    const publish = page.getByRole('button', { name: 'Publish', exact: true });
+    await expect(save).toBeVisible();
+    await expect(publish).toBeVisible();
+    await expect(page.getByTestId('save-disabled-reason')).toBeVisible();
+    for (const button of [save, publish]) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+    const a = (await save.boundingBox())!;
+    const b = (await publish.boundingBox())!;
+    expect(a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1 || a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1).toBe(true); // they do not overlap
+    await page.getByTestId('vetting-checkpoint').scrollIntoViewIfNeeded();
+    await expect(page.getByTestId('vetting-checkpoint')).toBeVisible();
+    expect(await noOverflow(page)).toBe(true);
+  });
+
+  test('a curated detail page fits and keeps the Reach numbers in text', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities/lst-01`, { timeout: 30_000 });
+    await expect(page.getByTestId('reach-views-total')).toBeVisible();
+    expect(await noOverflow(page)).toBe(true);
+  });
+});
+
+test.describe('Phone overflow exemption is narrow (434px)', () => {
+  test.use({ viewport: { width: 434, height: 900 } });
+
+  // The same predicate as the "nothing is wider than the screen" check on the list pages: the only thing it skips is
+  // a header row, screen-reader-only text and a scroll container that carries an edge fade (data-edge-fade).
+  const wideElements = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => {
+      const vw = window.innerWidth;
+      return [...document.querySelectorAll('main *')]
+        .filter((el) => !el.closest('thead,.sr-only,[data-edge-fade]') && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().right > vw + 1)
+        .map((el) => el.tagName);
+    });
+
+  test('a plain element wider than the viewport is still caught', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    expect(await wideElements(page)).toEqual([]);
+    await page.evaluate(() => {
+      const wide = document.createElement('div');
+      wide.style.width = '700px';
+      wide.textContent = 'too wide';
+      document.querySelector('main')!.appendChild(wide);
+    });
+    expect(await wideElements(page)).toContain('DIV');
+  });
+
+  test('a wide element inside a scroller WITHOUT a fade is also caught; with a fade it is exempt', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    await page.evaluate(() => {
+      const scroller = document.createElement('div');
+      scroller.id = 'plain-scroller';
+      scroller.style.cssText = 'overflow-x:auto;width:200px';
+      scroller.innerHTML = '<div style="width:900px">wide</div>';
+      document.querySelector('main')!.appendChild(scroller);
+    });
+    expect(await wideElements(page)).toContain('DIV'); // the scroller has no fade: not exempt
+    await page.evaluate(() => document.getElementById('plain-scroller')!.setAttribute('data-edge-fade', 'true'));
+    expect(await wideElements(page)).toEqual([]);
+  });
+
+  test('every exempt scroller shows an edge fade on each side that has more content', async ({ page }) => {
+    for (const path of ['/opportunities', '/team', '/notifications']) {
+      await page.goto(`${BASE_URL}${path}`, { timeout: 30_000 });
+      await page.waitForTimeout(600);
+      const result = await page.evaluate(() =>
+        [...document.querySelectorAll('[data-edge-fade]')].map((el) => {
+          const wrapper = el.parentElement!;
+          const fadeStart = wrapper.querySelector('[data-testid$="fade-start"]') as HTMLElement | null;
+          const fadeEnd = wrapper.querySelector('[data-testid$="fade-end"]') as HTMLElement | null;
+          const shown = (fade: HTMLElement | null) => !!fade && getComputedStyle(fade).opacity === '1';
+          const moreBefore = el.scrollLeft > 1;
+          const moreAfter = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+          return {
+            hasFade: !!fadeStart && !!fadeEnd,
+            // a fade must show on every side that has more content beyond it
+            fadesMatch: (!moreBefore || shown(fadeStart)) && (!moreAfter || shown(fadeEnd)),
+          };
+        }),
+      );
+      expect(result.length).toBeGreaterThan(0);
+      for (const scroller of result) {
+        expect(scroller.hasFade).toBe(true);
+        expect(scroller.fadesMatch).toBe(true);
+      }
+    }
+  });
+});
+
+test.describe('Opportunities Queue: memory note', () => {
+  test('mock mode shows no note about curated listings being kept in memory', async ({ page }) => {
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    await expect(page.getByTestId('curated-memory-note')).toHaveCount(0);
+  });
+
+  test('real-API mode shows the muted note (E2E_REAL_DATA=1)', async ({ page }) => {
+    test.skip(process.env.E2E_REAL_DATA !== '1', 'set E2E_REAL_DATA=1 with the admin running in real-API mode against the seeded e2e backend');
+    await page.goto(`${BASE_URL}/opportunities`, { timeout: 30_000 });
+    await expect(page.getByTestId('curated-memory-note')).toHaveText('Curated listings are saved in memory until the backend supports them.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Programs: list, form, detail (GOD's own activities; a separate entity from Opportunities)
+// ---------------------------------------------------------------------------
+// Hand-written from the seed: 12 programs. Delivered 6, running 3, planned 2, cancelled 1, so Active (planned + running)
+// is 5 and Delivered is 6. Types: training 1, bootcamp 2, webinar 2, outreach 2, project 2, mentorship 1, event 2.
+// Countries: Ghana 3, Nigeria 2, Kenya 2, and one each in Uganda, Sierra Leone, Rwanda, Senegal and Côte d'Ivoire.
+test.describe('Programs: the data', () => {
+  test('the seven program types and four statuses, and the seed counts', () => {
+    expect([...PROGRAM_TYPES]).toEqual(['training', 'bootcamp', 'webinar', 'outreach', 'project', 'mentorship', 'event']);
+    expect([...PROGRAM_STATUSES]).toEqual(['planned', 'running', 'delivered', 'cancelled']);
+    const programs = buildSeed().collections.programs;
+    const count = (pick: (p: (typeof programs)[number]) => string) => {
+      const out: Record<string, number> = {};
+      for (const program of programs) out[pick(program)] = (out[pick(program)] ?? 0) + 1;
+      return out;
+    };
+    expect(count((p) => p.status)).toEqual({ delivered: 6, running: 3, planned: 2, cancelled: 1 });
+    expect(count((p) => p.type)).toEqual({ training: 1, bootcamp: 2, webinar: 2, outreach: 2, project: 2, mentorship: 1, event: 2 });
+    for (const program of programs) {
+      expect(program.target).toBeGreaterThanOrEqual(1);
+      expect(program.participants).toBeLessThanOrEqual(program.target);
+      expect(program.facilitators.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+test.describe('Programs: list', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  const statusCount = async (page: import('@playwright/test').Page, name: string) =>
+    (await page.getByRole('radiogroup', { name: 'Filter by status' }).getByRole('radio', { name: new RegExp(`^${name}`) }).innerText()).replace(/\D+/g, '');
+  const stat = async (page: import('@playwright/test').Page, id: 'active' | 'delivered') =>
+    (await page.getByTestId(`program-summary-${id}`).innerText()).replace(/\D+/g, '');
+
+  test('two SEPARATE stats, Active 5 and Delivered 6, equal to the counts from the list', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    await expect(page.getByTestId('program-summary-active')).toContainText('Active');
+    await expect(page.getByTestId('program-summary-delivered')).toContainText('Delivered');
+    expect(await stat(page, 'active')).toBe('5');
+    expect(await stat(page, 'delivered')).toBe('6');
+    // they equal what the list itself says: Active = planned + running, Delivered = delivered
+    expect(Number(await statusCount(page, 'Planned')) + Number(await statusCount(page, 'Running'))).toBe(5);
+    expect(await statusCount(page, 'Delivered')).toBe('6');
+    // two different tiles, not one combined figure
+    const a = (await page.getByTestId('program-summary-active').boundingBox())!;
+    const d = (await page.getByTestId('program-summary-delivered').boundingBox())!;
+    expect(a.x + a.width).toBeLessThanOrEqual(d.x + 1);
+  });
+
+  test('columns, orange tiles, "42 of 60" figures with a bar, and the first rows', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    const headers = (await page.locator('main table thead th').allTextContents()).map((text) => text.trim()).filter((text) => text && text !== 'Open');
+    expect(headers).toEqual(['Program', 'Status', 'Partner', 'Participants', 'Start date', 'Country']);
+    // soonest start first: the planned webinar in Senegal
+    await expect(page.getByTestId('table-row').first()).toContainText('Climate Careers Webinar');
+    await page.getByRole('radiogroup', { name: 'Filter by status' }).getByRole('radio', { name: /^Delivered/ }).click();
+    const row = page.getByTestId('table-row').filter({ hasText: 'CV and Interview Masterclass' });
+    await expect(row).toContainText('Training'); // the type under the name
+    await expect(row).toContainText('140 of 155');
+    await expect(row).toContainText('Delivered');
+    await expect(row).toContainText('Ghana');
+    await expect(row.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '90'); // 140 / 155
+    // the program tile is orange
+    expect(await row.locator('.bg-orange-50').count()).toBeGreaterThan(0);
+  });
+
+  test('status tabs with counts, and the Type and Country filters combine', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs`, { timeout: 30_000 });
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    expect(await statusCount(page, 'All')).toBe('12');
+    expect(await statusCount(page, 'Planned')).toBe('2');
+    expect(await statusCount(page, 'Running')).toBe('3');
+    expect(await statusCount(page, 'Delivered')).toBe('6');
+    expect(await statusCount(page, 'Cancelled')).toBe('1');
+
+    await page.getByRole('combobox', { name: 'Filter by type' }).click();
+    await page.getByRole('option', { name: 'Outreach' }).click();
+    expect(await statusCount(page, 'All')).toBe('2');
+    expect(await statusCount(page, 'Delivered')).toBe('1'); // Scholarship Application Clinic
+    expect(await statusCount(page, 'Running')).toBe('1'); // Study Abroad Info Campaign
+    await expect(page.getByTestId('table-row')).toHaveCount(2);
+
+    await page.getByRole('combobox', { name: 'Filter by type' }).click();
+    await page.getByRole('option', { name: 'All types' }).click();
+    await page.getByRole('combobox', { name: 'Filter by country' }).click();
+    await page.getByRole('option', { name: 'Ghana' }).click();
+    expect(await statusCount(page, 'All')).toBe('3');
+    expect(await statusCount(page, 'Delivered')).toBe('2');
+    await page.getByRole('radiogroup', { name: 'Filter by status' }).getByRole('radio', { name: /^Running/ }).click();
+    await expect(page.getByTestId('table-row')).toHaveCount(1);
+    await expect(page.getByTestId('table-row')).toContainText('Career Mentorship Circle');
+    // the summary counts ALL programs, so a filter does not move it
+    expect(await stat(page, 'active')).toBe('5');
+    expect(await stat(page, 'delivered')).toBe('6');
+    // an impossible combination
+    await page.getByRole('radiogroup', { name: 'Filter by status' }).getByRole('radio', { name: /^Cancelled/ }).click();
+    await expect(page.getByText('No programs match these filters')).toBeVisible();
+  });
+
+  test('?state=empty and ?state=error show their states; the summary shows "—" while unknown', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs?state=empty`, { timeout: 30_000 });
+    await expect(page.getByText('No programs yet')).toBeVisible();
+    await page.goto(`${BASE_URL}/programs?state=error`);
+    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await page.goto(`${BASE_URL}/programs?state=loading`);
+    await expect(page.getByTestId('program-summary-active')).toContainText('—');
+    await expect(page.getByTestId('program-summary-delivered')).toContainText('—');
+  });
+});
+
+test.describe('Programs: form', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  const ready = async (page: import('@playwright/test').Page, path: string) => {
+    await page.goto(`${BASE_URL}${path}`, { timeout: 30_000 });
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+  };
+
+  test('validation: end before start, count above the target while planned, target of at least 1', async ({ page }) => {
+    await ready(page, '/programs/new');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('New program');
+    await page.getByRole('button', { name: 'Create program' }).click();
+    for (const message of ['Enter a title.', 'Choose a country.', 'Choose the start date and time.', 'Choose the end date and time.', 'Enter a target of at least 1.']) {
+      await expect(page.getByText(message)).toBeVisible();
+    }
+    await expect(page.getByLabel('Title', { exact: true })).toBeFocused();
+
+    await page.getByLabel('Title', { exact: true }).fill('Form Test Program');
+    await page.getByLabel('Start date and time').fill('2030-05-10T10:00');
+    await page.getByLabel('End date and time').fill('2030-05-10T09:00');
+    await page.getByLabel('End date and time').blur();
+    await expect(page.getByText('The end must be after the start.')).toBeVisible();
+    await page.getByLabel('End date and time').fill('2030-05-10T10:00'); // equal is not "after" either
+    await page.getByLabel('End date and time').blur();
+    await expect(page.getByText('The end must be after the start.')).toBeVisible();
+    await page.getByLabel('End date and time').fill('2030-05-11T10:00');
+    await expect(page.getByText('The end must be after the start.')).toHaveCount(0);
+
+    await page.getByLabel('Participant target').fill('0');
+    await page.getByLabel('Participant target').blur();
+    await expect(page.getByText('Enter a target of at least 1.')).toBeVisible();
+    await page.getByLabel('Participant target').fill('20');
+    await page.getByLabel('Participants now').fill('25');
+    await page.getByLabel('Participants now').blur();
+    await expect(page.getByText('The count cannot be above the target while the program is planned.')).toBeVisible();
+    // ... but a running program may be over its target
+    await page.getByRole('combobox', { name: 'Status' }).click();
+    await page.getByRole('option', { name: 'Running' }).click();
+    await expect(page.getByText('The count cannot be above the target while the program is planned.')).toHaveCount(0);
+  });
+
+  test('a delivered program shows the monthly-target note; other statuses do not', async ({ page }) => {
+    await ready(page, '/programs/new');
+    await expect(page.getByTestId('delivered-note')).toHaveCount(0);
+    await page.getByRole('combobox', { name: 'Status' }).click();
+    await page.getByRole('option', { name: 'Delivered' }).click();
+    await expect(page.getByTestId('delivered-note')).toHaveText('Delivered programs count toward the monthly target');
+    await page.getByRole('combobox', { name: 'Status' }).click();
+    await page.getByRole('option', { name: 'Cancelled' }).click();
+    await expect(page.getByTestId('delivered-note')).toHaveCount(0);
+  });
+
+  test('facilitators: Enter and comma add, duplicates are skipped, Backspace and the x remove', async ({ page }) => {
+    await ready(page, '/programs/new');
+    const input = page.getByRole('textbox', { name: 'Facilitators' });
+    const chips = page.getByRole('list', { name: 'Added facilitators' }).getByRole('listitem');
+    await input.fill('Ama Boateng');
+    await input.press('Enter');
+    await input.fill('Kofi Mensah');
+    await input.press(',');
+    await input.fill('ama boateng'); // a duplicate, ignoring case
+    await input.press('Enter');
+    await expect(chips).toHaveText(['Ama Boateng', 'Kofi Mensah']);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('New program'); // Enter did not submit the form
+    await input.press('Backspace');
+    await expect(chips).toHaveText(['Ama Boateng']);
+    await input.fill('Efua Darko');
+    await input.blur(); // leaving the field adds what was typed
+    await expect(chips).toHaveText(['Ama Boateng', 'Efua Darko']);
+    await page.getByRole('button', { name: 'Remove Ama Boateng' }).click();
+    await expect(chips).toHaveText(['Efua Darko']);
+  });
+
+  test('creating a planned program adds it to the list and moves Active from 5 to 6', async ({ page }) => {
+    await ready(page, '/programs/new');
+    await page.getByLabel('Title', { exact: true }).fill('Created In Test');
+    await page.getByRole('combobox', { name: 'Country' }).click();
+    await page.getByRole('option', { name: 'Ghana' }).click();
+    await page.getByLabel('Start date and time').fill('2031-02-01T09:00');
+    await page.getByLabel('End date and time').fill('2031-02-01T12:00');
+    await page.getByLabel('Participant target').fill('30');
+    await page.getByRole('textbox', { name: 'Facilitators' }).fill('Test Facilitator');
+    await page.getByRole('textbox', { name: 'Facilitators' }).press('Enter');
+    await page.getByRole('button', { name: 'Create program' }).click();
+    await expect(page.getByText('Created In Test was created.')).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/\/programs\/prg-new-/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Created In Test');
+    await expect(page.getByTestId('participants-figure')).toHaveText('0 of 30');
+    await page.locator('header.sticky').getByRole('link', { name: 'Programs' }).click();
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    expect((await page.getByTestId('program-summary-active').innerText()).replace(/\D+/g, '')).toBe('6');
+    expect((await page.getByTestId('program-summary-delivered').innerText()).replace(/\D+/g, '')).toBe('6');
+    await expect(page.getByTestId('table-row').filter({ hasText: 'Created In Test' })).toContainText('0 of 30');
+  });
+
+  test('edit: the form is filled; saving a program as Delivered raises Delivered from 6 to 7 and lowers Active', async ({ page }) => {
+    await ready(page, '/programs/prg-10/edit'); // Entrepreneurship Pitch Day, planned
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Edit program');
+    await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Entrepreneurship Pitch Day');
+    await page.getByRole('combobox', { name: 'Status' }).click();
+    await page.getByRole('option', { name: 'Delivered' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Entrepreneurship Pitch Day was updated.')).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(`${BASE_URL}/programs/prg-10`, { timeout: 30_000 });
+    await page.locator('header.sticky').getByRole('link', { name: 'Programs' }).click();
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    expect((await page.getByTestId('program-summary-active').innerText()).replace(/\D+/g, '')).toBe('4');
+    expect((await page.getByTestId('program-summary-delivered').innerText()).replace(/\D+/g, '')).toBe('7');
+  });
+
+  test('unknown ids and hirer postings are not found; leaving with unsaved changes asks first', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs/nope/edit`, { timeout: 30_000 });
+    await expect(page.getByText(/not found/i).first()).toBeVisible();
+    await ready(page, '/programs/new');
+    await page.getByLabel('Title', { exact: true }).fill('Unsaved');
+    await page.locator('header.sticky').getByRole('link', { name: 'Home' }).click();
+    await expect(page.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeVisible();
+  });
+});
+
+test.describe('Programs: detail and cancel', () => {
+  test.skip(process.env.E2E_PROD === '1', 'the dev role switcher only exists in development with mock data');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('header, participants, facilitators, details and the partner link', async ({ page }) => {
+    const seed = buildSeed().collections;
+    const program = seed.programs.find((p) => p.id === 'prg-01')!;
+    const partner = seed.partners.find((p) => p.id === program.partnerId)!;
+    await page.goto(`${BASE_URL}/programs/prg-01`, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('CV and Interview Masterclass');
+    await expect(page.getByRole('region', { name: 'Summary' })).toContainText('Training');
+    await expect(page.getByRole('region', { name: 'Summary' })).toContainText('Delivered');
+    await expect(page.getByTestId('participants-figure')).toHaveText('140 of 155');
+    await expect(page.getByRole('progressbar', { name: 'Participants: 90%' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Facilitators' }).getByRole('listitem')).toHaveText(['Kwabena Tetteh']);
+    await expect(page.getByRole('region', { name: 'Details' })).toContainText('Delivered programs count toward the monthly target.');
+    await expect(page.getByTestId('partner-link')).toHaveText(partner.name);
+    await expect(page.getByTestId('partner-link')).toHaveAttribute('href', '/partners');
+    await expect(page.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/programs/prg-01/edit');
+    // a delivered program cannot be cancelled
+    await expect(page.getByRole('button', { name: 'Cancel program' })).toHaveCount(0);
+  });
+
+  test('Cancel asks first; confirming updates the list and the figures (Active 5 to 4, Delivered stays 6)', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs/prg-07`, { timeout: 30_000 }); // Career Mentorship Circle, running
+    await page.getByTestId('sidebar-toggle').waitFor();
+    await page.waitForTimeout(500);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Career Mentorship Circle');
+    await page.getByRole('button', { name: 'Cancel program' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Cancel this program?');
+    // backing out changes nothing
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Summary' })).toContainText('Running');
+
+    await page.getByRole('button', { name: 'Cancel program' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel program' }).click();
+    await expect(page.getByText('Career Mentorship Circle was cancelled.')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Summary' })).toContainText('Cancelled');
+    await expect(page.getByRole('button', { name: 'Cancel program' })).toHaveCount(0);
+
+    await page.locator('header.sticky').getByRole('link', { name: 'Programs' }).click();
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    expect((await page.getByTestId('program-summary-active').innerText()).replace(/\D+/g, '')).toBe('4');
+    expect((await page.getByTestId('program-summary-delivered').innerText()).replace(/\D+/g, '')).toBe('6');
+    const tabs = page.getByRole('radiogroup', { name: 'Filter by status' });
+    await expect(tabs.getByRole('radio', { name: /^Running/ })).toContainText('2');
+    await expect(tabs.getByRole('radio', { name: /^Cancelled/ })).toContainText('2');
+  });
+
+  test('?state=notfound and ?state=error work on the detail page', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs/prg-01?state=notfound`, { timeout: 30_000 });
+    await expect(page.getByText(/not found/i).first()).toBeVisible();
+    await page.goto(`${BASE_URL}/programs/prg-01?state=error`);
+    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  });
+
+  test('entity accent: the program tile on the detail page is orange', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs/prg-01`, { timeout: 30_000 });
+    await expect(page.getByRole('region', { name: 'Summary' }).locator('.bg-orange-50').first()).toBeVisible();
+  });
+});
+
+test.describe('Programs: roles', () => {
+  test.skip(process.env.E2E_PROD === '1', 'the dev role switcher only exists in development with mock data');
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const role of ['training_officer', 'desk_lead', 'super_admin']) {
+    test(`${role} edits: New program, Edit and Cancel are there`, async ({ page, context }) => {
+      await asRoles(context, role);
+      await page.goto(`${BASE_URL}/programs`, { timeout: 30_000 });
+      await expect(page.getByRole('link', { name: 'New program' })).toHaveAttribute('href', '/programs/new');
+      await page.goto(`${BASE_URL}/programs/new`);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('New program');
+      await page.goto(`${BASE_URL}/programs/prg-08`);
+      await expect(page.getByRole('link', { name: 'Edit' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Cancel program' })).toBeVisible();
+    });
+  }
+
+  test('country_lead can read but not change: no New program, Edit disabled with the tooltip, no Cancel, no form', async ({ page, context }) => {
+    await asRoles(context, 'country_lead');
+    await page.goto(`${BASE_URL}/programs`, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Programs');
+    await expect(page.getByTestId('table-row').first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'New program' })).toHaveCount(0);
+    await page.goto(`${BASE_URL}/programs/prg-08`);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Digital Skills Cohort 3');
+    await expect(page.getByRole('link', { name: 'Edit' })).toHaveCount(0);
+    const edit = page.getByRole('button', { name: 'Edit' });
+    await expect(edit).toBeDisabled();
+    await edit.hover({ force: true });
+    await expect(page.getByRole('tooltip')).toContainText('Your role can view this page but not change it');
+    await expect(page.getByRole('button', { name: 'Cancel program' })).toHaveCount(0);
+    // a country lead can see Partners, so the partner is a link
+    await expect(page.getByTestId('partner-link')).toBeVisible();
+    for (const path of ['/programs/new', '/programs/prg-08/edit']) {
+      await page.goto(`${BASE_URL}${path}`);
+      await expect(page.getByTestId('no-access')).toBeVisible();
+    }
+  });
+
+  test('a training officer cannot see Partners, so the partner is plain text; a moderator has no access at all', async ({ page, context }) => {
+    await asRoles(context, 'training_officer');
+    await page.goto(`${BASE_URL}/programs/prg-08`, { timeout: 30_000 });
+    await expect(page.getByRole('region', { name: 'Details' })).toContainText('Partner');
+    await expect(page.getByTestId('partner-link')).toHaveCount(0);
+    await asRoles(context, 'moderator');
+    await page.goto(`${BASE_URL}/programs`);
+    await expect(page.getByTestId('no-access')).toBeVisible();
+    await expect(page.getByTestId('no-access')).toContainText('Training');
+  });
+});
+
+test.describe('Programs: phone (434px)', () => {
+  test.use({ viewport: { width: 434, height: 900 } });
+  const noOverflow = (page: import('@playwright/test').Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+
+  test('list rows are cards: name and status on top, labelled values, the bar; both stats and filters fit', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs`, { timeout: 30_000 });
+    const card = page.getByTestId('table-row').first();
+    await expect(card).toBeVisible();
+    await expect(card.locator('td[data-label="Participants"]')).toContainText(/\d+ of \d+/);
+    await expect(card.locator('td[data-label="Country"]')).not.toBeEmpty();
+    await expect(card.getByTestId('status-badge')).toBeVisible();
+    await expect(page.getByTestId('program-summary-active')).toBeVisible();
+    await expect(page.getByTestId('program-summary-delivered')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'New program' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Filter by type' })).toBeVisible();
+    expect(await noOverflow(page)).toBe(true);
+    await page.getByRole('combobox', { name: 'Filter by country' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible(); // the bottom sheet
+  });
+
+  test('the form fits: one column, no sideways scroll, the buttons are 40px+ and do not overlap', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs/new`, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('New program');
+    await expect(page.getByTestId('back-button')).toBeVisible();
+    expect(await noOverflow(page)).toBe(true);
+    const create = page.getByRole('button', { name: 'Create program' });
+    const cancel = page.getByRole('button', { name: 'Cancel', exact: true });
+    await expect(create).toBeVisible();
+    expect((await create.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+    const a = (await create.boundingBox())!;
+    const b = (await cancel.boundingBox())!;
+    expect(a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1 || a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1).toBe(true);
+  });
+
+  test('the detail page fits and keeps the figures in text', async ({ page }) => {
+    await page.goto(`${BASE_URL}/programs/prg-01`, { timeout: 30_000 });
+    await expect(page.getByTestId('participants-figure')).toHaveText('140 of 155');
+    expect(await noOverflow(page)).toBe(true);
   });
 });

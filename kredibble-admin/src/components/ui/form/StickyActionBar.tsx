@@ -19,10 +19,14 @@
  * Props: dirty, saving, saveLabel ("Save changes"), onCancel,
  *        cancelLabel? ("Cancel"; "Reset" on the Roles tab), status? (text instead of "Unsaved changes",
  *        for example "2 changes"), maxWidth? (a CSS width such as "40rem": the buttons then sit under the
- *        right edge of a narrow, left-aligned form instead of the far right of the page)
+ *        right edge of a narrow, left-aligned form instead of the far right of the page),
+ *        extraActions? (buttons shown between Cancel and Save, e.g. "Save draft"),
+ *        saveDisabled? + saveDisabledReason? (Save is disabled; the reason is printed next to it AND shown as a
+ *        tooltip, so nobody has to guess why)
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { registerActionBar } from "./action-bar-store";
 
 interface StickyActionBarProps {
@@ -33,9 +37,12 @@ interface StickyActionBarProps {
   cancelLabel?: string;
   status?: string;
   maxWidth?: string;
+  extraActions?: ReactNode;
+  saveDisabled?: boolean;
+  saveDisabledReason?: string;
 }
 
-export function StickyActionBar({ dirty, saving, saveLabel, onCancel, cancelLabel = "Cancel", status = "Unsaved changes", maxWidth }: StickyActionBarProps) {
+export function StickyActionBar({ dirty, saving, saveLabel, onCancel, cancelLabel = "Cancel", status = "Unsaved changes", maxWidth, extraActions, saveDisabled = false, saveDisabledReason }: StickyActionBarProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,13 +69,27 @@ export function StickyActionBar({ dirty, saving, saveLabel, onCancel, cancelLabe
             </>
           )}
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-sm:flex-wrap">
+          {saveDisabled && saveDisabledReason && (
+            <p data-testid="save-disabled-reason" className="caption text-right max-sm:w-full max-sm:text-left">
+              {saveDisabledReason}
+            </p>
+          )}
           <Button variant="secondary" onClick={onCancel} disabled={saving} className="max-sm:h-11 max-sm:flex-1">
             {cancelLabel}
           </Button>
-          <Button type="submit" loading={saving} className="max-sm:h-11 max-sm:flex-1">
-            {saveLabel}
-          </Button>
+          {extraActions}
+          {saveDisabled && saveDisabledReason ? (
+            <Tooltip label={saveDisabledReason} placement="top" wrapperClassName="inline-flex max-sm:flex-1">
+              <Button type="submit" disabled className="max-sm:h-11 max-sm:flex-1">
+                {saveLabel}
+              </Button>
+            </Tooltip>
+          ) : (
+            <Button type="submit" loading={saving} disabled={saveDisabled} className="max-sm:h-11 max-sm:flex-1">
+              {saveLabel}
+            </Button>
+          )}
         </div>
       </div>
     </div>

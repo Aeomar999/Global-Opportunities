@@ -52,3 +52,12 @@ export function joinList(items: string[]): string {
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;
+
+/** "2026-10" -> "October 2026" (month names written out, like formatDate). Unparseable values come back as they are. */
+export function formatMonth(month: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match || Number(match[2]) < 1 || Number(match[2]) > 12) return month;
+  return `${MONTH_NAMES[Number(match[2]) - 1]} ${match[1]}`;
+}

@@ -4,16 +4,21 @@
  * Invite Staff (/staff/invite): add an admin or support account and choose their role.
  * Built on the shared form system (src/components/ui/form). Single column, 640px wide.
  *
- * Fields (same as before, same required rules): Full name (required), Email (required), Role
- * (Super Admin | Moderator | Support, default Support). Each role option shows one line on what the role can do,
- * derived from the current permissions on Team > Roles & permissions.
+ * Fields: Full name (required), Email (required), Role (any of the 12 roles, default Support) and an optional
+ * Second role (any other role; a person holds one or two). Each option shows one line on what the role can do,
+ * derived from the current permissions on Team > Roles & permissions. The chosen roles show as chips; the second can be
+ * removed with its x.
  *
  * Behaviour: errors show after a field is left and on submit; Send invite shows a spinner while saving,
  * then a toast and back to Team; leaving with unsaved changes asks first.
- * Data: the in-memory staff store (staffStore.invite), as before.
+ * Data: the ONE staff collection (services/staff.ts): the new person is added to it, so the Team page, their member page
+ * and the scorecards see them at once.
  */
 import { useRef, useState, type FormEvent } from "react";
-import { staffStore, type StaffRole } from "@/lib/mock-staff";
+import { X } from "lucide-react";
+import { MAX_STAFF_ROLES } from "@/config/staff-roles";
+import { ROLE_IDS, ROLES, type Role } from "@/config/roles";
+import { inviteStaff } from "@/lib/services/staff";
 import { describeRole } from "@/lib/role-permissions";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/form/Field";
@@ -29,19 +34,27 @@ const LIST_HREF = "/team";
 
 // The one-line descriptions are DERIVED from the current role permissions (src/lib/role-permissions.ts), so they
 // follow the Roles & permissions tab and cannot drift from it. Do not hard-code them here.
-const ROLES: StaffRole[] = ["Super Admin", "Moderator", "Support"];
-const roleOptions = (): SelectOption<StaffRole>[] => ROLES.map((role) => ({ value: role, label: role, description: describeRole(role) }));
+const roleOptions = (without?: Role): SelectOption<Role>[] =>
+  ROLE_IDS.filter((role) => role !== without).map((role) => ({ value: role, label: ROLES[role].label, description: describeRole(role) }));
+
+const NO_SECOND = "none";
+const secondOptions = (first: Role): SelectOption<Role | typeof NO_SECOND>[] => [
+  { value: NO_SECOND, label: "No second role", description: "This person holds one role." },
+  ...roleOptions(first),
+];
 
 export default function InviteStaffPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<StaffRole>("Support");
+  const [role, setRole] = useState<Role>("support");
+  const [second, setSecond] = useState<Role | typeof NO_SECOND>(NO_SECOND);
   const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const { show, touch, touchAll } = useTouched();
   const toast = useToast();
 
-  const dirty = name !== "" || email !== "" || role !== "Support";
+  const dirty = name !== "" || email !== "" || role !== "support" || second !== NO_SECOND;
+  const chosen: Role[] = second === NO_SECOND ? [role] : [role, second].slice(0, MAX_STAFF_ROLES) as Role[];
   const guard = useUnsavedGuard(dirty && !saving);
 
   // Same rules as before: name and email must have text once trimmed.
@@ -60,8 +73,8 @@ export default function InviteStaffPage() {
     setSaving(true);
     // TODO(backend): persist this change (send the invitation). The in-memory staff store stands in for now.
     await new Promise((resolve) => setTimeout(resolve, 700));
-    staffStore.invite(name.trim(), email.trim(), role);
-    toast.success(`${name.trim()} was invited as ${role}.`);
+    inviteStaff(name.trim(), email.trim(), chosen);
+    toast.success(`${name.trim()} was invited as ${chosen.map((held) => ROLES[held].label).join(" and ")}.`);
     guard.leaveNow(LIST_HREF);
   };
 
@@ -96,8 +109,30 @@ export default function InviteStaffPage() {
 
           <FormSection title="Access" description="What they can do in the admin.">
             <Field label="Role">
-              <Select options={roleOptions()} value={role} onChange={setRole} />
+              <Select
+                options={roleOptions()}
+                value={role}
+                onChange={(next) => {
+                  setRole(next);
+                  if (second === next) setSecond(NO_SECOND); // the second role cannot repeat the first
+                }}
+              />
             </Field>
+            <Field label="Second role" optional helper="A person can hold up to two roles.">
+              <Select options={secondOptions(role)} value={second} onChange={setSecond} />
+            </Field>
+            <ul aria-label="Chosen roles" data-testid="invite-role-chips" className="flex flex-wrap gap-2">
+              {chosen.map((held, index) => (
+                <li key={held} className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1 text-sm font-medium text-purple-700">
+                  {ROLES[held].label}
+                  {index === 1 && (
+                    <button type="button" aria-label={`Remove ${ROLES[held].label}`} onClick={() => setSecond(NO_SECOND)} className="rounded-full p-0.5 hover:bg-purple-100">
+                      <X size={12} strokeWidth={2.5} aria-hidden="true" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </FormSection>
         </Card>
       </div>

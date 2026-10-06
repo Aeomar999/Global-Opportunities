@@ -97,6 +97,7 @@ export function Tabs<T extends string>({ tabs, value, onChange, ariaLabel, idPre
         ref={listRef}
         role="tablist"
         aria-label={ariaLabel}
+        data-edge-fade="true"
         onScroll={measure}
         className={cn(
           // Horizontal scroll only on very narrow screens, with no scrollbar (arrow keys and touch still scroll).

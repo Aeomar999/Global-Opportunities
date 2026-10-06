@@ -11,12 +11,11 @@
  *                                              the bar the chart highlights in orange)
  * Each chart has a visually hidden text-alternative table and an empty state.
  *
- * The month selector in the header is UI only: the mock data has no per-month history, so choosing a month
- * changes the label and a note says so. The records are the mock lists WITH this session's changes laid over
+ * The month selector in the header keeps the month in the URL (useMonth). These charts do not change by month yet,
+ * so choosing a past month shows a note that says so. The records are the mock lists WITH this session's changes laid over
  * them (mock-store.ts), so approving a company or resolving a report changes these charts too.
  * There is no loading or error state: the data is in memory and cannot fail.
  */
-import { useState } from "react";
 import { BarChart3, Briefcase, Flag } from "lucide-react";
 import { pendingCompanies } from "@/lib/mock-data";
 import { overlayRows, useMockStoreVersion } from "@/lib/mock-store";
@@ -29,6 +28,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { HighlightBarChart } from "@/components/ui/HighlightBarChart";
 import { IconTile } from "@/components/ui/IconTile";
 import { MonthSelect } from "@/components/ui/MonthSelect";
+import { formatMonth } from "@/lib/format";
+import { useMonth } from "@/lib/use-month";
 import { SegmentedBar } from "@/components/ui/SegmentedBar";
 
 const TYPE_LABELS: Record<OpportunityType, string> = {
@@ -42,7 +43,7 @@ const VERIFICATION_ORDER = ["approved", "pending", "rejected"] as const;
 
 export default function InsightsPage() {
   useMockStoreVersion(); // re-render when a decision elsewhere changes the records
-  const [month, setMonth] = useState<string | null>(null);
+  const { month, isCurrent } = useMonth();
 
   const opportunities = overlayRows("opportunities", postedOpportunities);
   const companies = overlayRows("verification", pendingCompanies);
@@ -73,11 +74,11 @@ export default function InsightsPage() {
           <h1 data-testid="page-title" className="page-title">Insights</h1>
           <p className="page-subtitle mt-1">How postings, verification and reports break down across the platform.</p>
         </div>
-        <MonthSelect onChange={setMonth} />
+        <MonthSelect />
       </header>
-      {month && (
+      {!isCurrent && (
         <p className="caption" role="status">
-          {month}: the figures below are mock data and do not change by month yet.
+          {formatMonth(month)}: the figures below are mock data and do not change by month yet.
         </p>
       )}
 

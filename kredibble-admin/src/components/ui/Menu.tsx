@@ -24,6 +24,7 @@
  * - triggerAriaLabel: needed when the trigger has no visible text (icon-only)
  * - triggerClassName: styling for the trigger button
  * - align: "start" (default) or "end", which edge of the trigger the panel lines up with
+ * - header: plain content shown at the top of the panel, above the items (not focusable; e.g. who you are signed in as)
  * - defaultOpen: start open (used by the /_design review page)
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -55,6 +56,7 @@ interface MenuProps {
   triggerAriaLabel?: string;
   triggerClassName?: string;
   align?: "start" | "end";
+  header?: ReactNode;
   defaultOpen?: boolean;
 }
 
@@ -68,6 +70,7 @@ export function Menu({
   triggerAriaLabel,
   triggerClassName,
   align = "start",
+  header,
   defaultOpen = false,
 }: MenuProps) {
   const menuId = useId();
@@ -179,6 +182,7 @@ export function Menu({
             align === "end" ? "right-0" : "left-0",
           )}
         >
+          {header && <div role="presentation">{header}</div>}
           {items.map((item, index) => {
             const Icon = item.icon;
             const classes = cn(

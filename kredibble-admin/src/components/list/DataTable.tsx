@@ -279,7 +279,7 @@ function Cell<T>({ column, row, href, isBadgeColumn }: CellProps<T>) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={leading.imageSrc} alt="" className="size-9 shrink-0 rounded-inset object-cover" />
               ) : (
-                <IconTile icon={leading.icon} tone="accent" size="sm" />
+                <IconTile icon={leading.icon} tone={leading.tone ?? "accent"} size="sm" />
               ))}
             <div className="min-w-0">
               {/* Stretched link: its ::after covers the whole row (the <tr> is relative). When the title
@@ -325,7 +325,13 @@ function Cell<T>({ column, row, href, isBadgeColumn }: CellProps<T>) {
           )}
           data-label={label}
         >
-          <StatusBadge status={column.status(row)} kind={column.kind} icon={column.icon?.(row)} />
+          {column.status(row) ? (
+            <StatusBadge status={column.status(row) as string} kind={column.kind} icon={column.icon?.(row)} />
+          ) : (
+            <span className="table-text text-muted max-sm:text-ink" aria-label="Not applicable">
+              —
+            </span>
+          )}
         </td>
       );
     case "progress": {
@@ -358,7 +364,11 @@ function Cell<T>({ column, row, href, isBadgeColumn }: CellProps<T>) {
     case "pill":
       return (
         <td className={cn(base, labelled)} data-label={label}>
-          <TagPill>{column.label(row)}</TagPill>
+          <div className="flex flex-wrap gap-1.5 max-sm:justify-end">
+            {[column.label(row)].flat().map((text) => (
+              <TagPill key={text}>{text}</TagPill>
+            ))}
+          </div>
         </td>
       );
   }

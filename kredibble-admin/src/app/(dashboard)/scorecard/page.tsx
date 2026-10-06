@@ -5,9 +5,13 @@
  * Tabs: "My scorecard" for every role and "Team" for the roles that can view the team scorecard (desk lead and
  * super admin). The tab is kept in the URL (/scorecard?tab=team); a person without access to it stays on
  * "My scorecard".
+ * Subtitle: "...for you and the team." where the Team tab exists, "...for you." elsewhere.
+ * A role that owns no metrics (Moderator, Support, Admin Support, Super Admin) sees an empty state on My scorecard,
+ * never a 0 score.
  */
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Target, Hammer } from "lucide-react";
+import { Target, Hammer, ListChecks } from "lucide-react";
+import { kpisOwnedBy } from "@/config/kpis";
 import { RequireAccess } from "@/components/access/RequireAccess";
 import { useRoles } from "@/components/access/RoleProvider";
 import { Card } from "@/components/ui/Card";
@@ -21,7 +25,8 @@ const ID_PREFIX = "scorecard";
 export default function ScorecardPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const { can } = useRoles();
+  const { can, roles } = useRoles();
+  const hasOwnedMetrics = kpisOwnedBy(roles).length > 0;
   const canSeeTeam = can("team_scorecard", "view");
   const requested = useSearchParams().get("tab");
   const tab: ScorecardTab = canSeeTeam && requested === "team" ? "team" : "mine";
@@ -30,7 +35,7 @@ export default function ScorecardPage() {
   return (
     <RequireAccess screen="my_scorecard">
       <div className="space-y-4">
-        <PageHeader title="Scorecard" subtitle="Targets and results for you and, for the desk lead, the team." icon={Target} tone="neutral" />
+        <PageHeader title="Scorecard" subtitle={canSeeTeam ? "Targets and results for you and the team." : "Targets and results for you."} icon={Target} tone="neutral" />
         {canSeeTeam && (
           <Tabs
             ariaLabel="Scorecard sections"
@@ -45,7 +50,11 @@ export default function ScorecardPage() {
         )}
         <div role={canSeeTeam ? "tabpanel" : undefined} id={tabPanelId(ID_PREFIX, tab)} aria-labelledby={canSeeTeam ? tabId(ID_PREFIX, tab) : undefined}>
           <Card as="section" ariaLabel={tab === "team" ? "Team scorecard" : "My scorecard"}>
-            <EmptyState icon={Hammer} title="This screen is built in a later step" description={tab === "team" ? "The team scorecard." : "Your personal scorecard."} />
+            {tab === "mine" && !hasOwnedMetrics ? (
+              <EmptyState icon={ListChecks} title="No metrics are assigned to your role" description="A Desk Lead can assign them." />
+            ) : (
+              <EmptyState icon={Hammer} title="This screen is built in a later step" description={tab === "team" ? "The team scorecard." : "Your personal scorecard."} />
+            )}
           </Card>
         </div>
       </div>

@@ -9,8 +9,10 @@
  * - search: { value, onChange, placeholder, label } renders a 40px search input
  * - filters: { options: [{ value, label, count? }], value, onChange, label } renders the segmented
  *   control (label = its accessible name)
- * Either or both can be given; with neither it renders nothing.
+ * Either or both can be given; with neither (and no children) it renders nothing.
+ * - children: more controls after the filters (a second SegmentedControl, Select dropdowns...); the row wraps.
  */
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
@@ -27,10 +29,11 @@ interface TableToolbarProps<F extends string> {
     onChange: (value: F) => void;
     label: string;
   };
+  children?: ReactNode;
 }
 
-export function TableToolbar<F extends string>({ search, filters }: TableToolbarProps<F>) {
-  if (!search && !filters) return null;
+export function TableToolbar<F extends string>({ search, filters, children }: TableToolbarProps<F>) {
+  if (!search && !filters && !children) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -55,6 +58,7 @@ export function TableToolbar<F extends string>({ search, filters }: TableToolbar
       {filters && (
         <SegmentedControl options={filters.options} value={filters.value} onChange={filters.onChange} ariaLabel={filters.label} />
       )}
+      {children}
     </div>
   );
 }

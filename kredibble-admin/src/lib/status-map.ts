@@ -7,7 +7,17 @@
  *   success  Active, Verified, Published, Approved, Upcoming, Open (opportunities, grants)
  *   warning  Pending, Flagged, Open (reports), In review
  *   danger   Rejected, Suspended, Removed, Cancelled
- *   neutral  Draft, Past, Closed, Resolved, Dismissed
+ *   neutral  Draft, Past, Closed, Resolved, Dismissed, Planned, Applicant, Unpublished
+ *   info     Running (a program), Onboarding (an ambassador): in progress, nothing wrong, nothing finished (purple)
+ *
+ * Desk statuses (programs, ambassadors, testimonials, listings):
+ *   partner      prospect = neutral, outreach / proposal / mou = info (in progress), onboard / renew = success (closed)
+ *   program      planned = neutral, running = info, delivered = success, cancelled = danger
+ *   ambassador   applicant = neutral, onboarding = info, active = success, dormant = warning
+ *   database     verified = success, pending = warning
+ *   testimonial  pending = warning, approved = success, unpublished = neutral, rejected = danger
+ *   listing      draft = neutral, published = success
+ *   vetting      unvetted = warning, vetted = success
  *
  * "Open" is the one word that means two things: an open opportunity or grant is
  * good (success) but an open REPORT is waiting on a person (warning). Pass
@@ -15,7 +25,7 @@
  *
  * Unknown values fall back to "neutral" and display their raw text.
  */
-export type StatusTone = "success" | "warning" | "danger" | "neutral";
+export type StatusTone = "success" | "warning" | "danger" | "neutral" | "info";
 
 /** Disambiguates words whose tone depends on what they describe. */
 export type StatusKind = "report";
@@ -32,8 +42,20 @@ const STATUS_MAP: Record<string, StatusMeta> = {
   published: { tone: "success", label: "Published" },
   approved: { tone: "success", label: "Approved" },
   upcoming: { tone: "success", label: "Upcoming" },
+  delivered: { tone: "success", label: "Delivered" },
+  onboard: { tone: "success", label: "Onboard" },
+  renew: { tone: "success", label: "Renew" },
+  vetted: { tone: "success", label: "Vetted" },
   open: { tone: "success", label: "Open" },
+  // info
+  running: { tone: "info", label: "Running" },
+  outreach: { tone: "info", label: "Outreach" },
+  proposal: { tone: "info", label: "Proposal" },
+  mou: { tone: "info", label: "MOU" },
+  onboarding: { tone: "info", label: "Onboarding" },
   // warning
+  dormant: { tone: "warning", label: "Dormant" },
+  unvetted: { tone: "warning", label: "Unvetted" },
   pending: { tone: "warning", label: "Pending" },
   flagged: { tone: "warning", label: "Flagged" },
   in_review: { tone: "warning", label: "In review" },
@@ -43,6 +65,10 @@ const STATUS_MAP: Record<string, StatusMeta> = {
   removed: { tone: "danger", label: "Removed" },
   cancelled: { tone: "danger", label: "Cancelled" },
   // neutral
+  planned: { tone: "neutral", label: "Planned" },
+  prospect: { tone: "neutral", label: "Prospect" },
+  applicant: { tone: "neutral", label: "Applicant" },
+  unpublished: { tone: "neutral", label: "Unpublished" },
   draft: { tone: "neutral", label: "Draft" },
   past: { tone: "neutral", label: "Past" },
   closed: { tone: "neutral", label: "Closed" },

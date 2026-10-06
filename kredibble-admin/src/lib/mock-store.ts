@@ -20,7 +20,8 @@
  * - useMockStoreVersion() re-renders a component whenever anything in the store changes.
  */
 import { useSyncExternalStore } from "react";
-import { emptyCollections, type EntityCollections, type EntityName } from "@/lib/mock-entities";
+import type { EntityCollections, EntityName, KpiThresholds } from "@/lib/mock-entities";
+import { buildSeed } from "@/lib/mock-seed";
 import { isMockMode } from "@/lib/services/mock-mode";
 
 export type MockCollection =
@@ -81,18 +82,25 @@ export function overlayRows<T extends { id: string }>(collection: MockCollection
 }
 
 // ---------------------------------------------------------------------------------------------
-// Entity collections (programs, partners, ambassadors, database records, social posts, testimonials,
-// listings, targets). Typed and EMPTY for now; later steps add seed data and screens.
-// Same rules as the overrides above: memory only (a reload resets them), written only in mock mode.
+// Entity collections (programs, partners, ambassadors, database records, social posts, testimonials, listings,
+// listing metrics, amplification logs, monthly reports, website months, desk staff and the KPI targets) and the
+// KPI thresholds. They start from the deterministic seed (mock-seed.ts), which components never import: they read
+// the store (or a service in src/lib/services). Memory only (a reload resets them), written only in mock mode.
 // ---------------------------------------------------------------------------------------------
-let collections: EntityCollections = emptyCollections();
+const initial = buildSeed();
+let collections: EntityCollections = initial.collections;
+let thresholds: KpiThresholds = initial.thresholds;
 
 /** The current rows of one entity collection. */
 export const getMockCollection = <K extends EntityName>(name: K): EntityCollections[K] => collections[name];
 
-/** Replaces a collection (mock mode only: in real-API mode this does nothing). TODO(backend): persist this change. */
-export function setMockCollection<K extends EntityName>(name: K, rows: EntityCollections[K]) {
-  if (!isMockMode()) return;
+/**
+ * Replaces a collection. Mock mode only: in real-API mode this does nothing, except for `{ always: true }`, which the
+ * Team screens use (they were in-memory in every mode before the staff collection moved here).
+ * TODO(backend): persist this change.
+ */
+export function setMockCollection<K extends EntityName>(name: K, rows: EntityCollections[K], options: { always?: boolean } = {}) {
+  if (!options.always && !isMockMode()) return;
   collections = { ...collections, [name]: rows };
   emit();
 }
@@ -101,4 +109,14 @@ export function setMockCollection<K extends EntityName>(name: K, rows: EntityCol
 export function useMockCollection<K extends EntityName>(name: K): EntityCollections[K] {
   useMockStoreVersion();
   return collections[name];
+}
+
+/** When a KPI turns green or amber (stored values, never hard-coded in components). */
+export const getKpiThresholds = (): KpiThresholds => thresholds;
+
+/** Replaces the thresholds (mock mode only). TODO(backend): persist this change. */
+export function setKpiThresholds(next: KpiThresholds) {
+  if (!isMockMode()) return;
+  thresholds = { ...next };
+  emit();
 }

@@ -118,6 +118,18 @@ export function visibleNavGroups(can: (screen: Screen, level: AccessLevel) => bo
   );
 }
 
+/**
+ * Splits the visible groups: a group with TWO or more visible pages stays a group; a group left with exactly ONE
+ * visible page is not shown as a group (a lone page under a parent is just a click for nothing). That page becomes a
+ * direct row, listed after the groups, in the order of the groups it came from.
+ */
+export function splitNav(groups: NavGroup[]): { groups: NavGroup[]; direct: NavChild[] } {
+  return {
+    groups: groups.filter((group) => group.children.length > 1),
+    direct: groups.filter((group) => group.children.length === 1).map((group) => group.children[0]),
+  };
+}
+
 /** True when `pathname` is this child's page, a page nested under it, or under one of its `match` prefixes. */
 export function isChildActive(child: NavChild, pathname: string): boolean {
   if (child.href === "/") return pathname === "/";

@@ -1,21 +1,23 @@
 "use client";
 
 /**
- * Staff detail: one admin team member.
+ * Staff detail: one team member.
  * Built on the shared detail template.
  *
- * Fields: name, email, joined date, role, status.
- * Actions: change Role (Super Admin / Moderator / Support), Suspend access (danger zone, confirm
- * dialog) and Reinstate access (header, when suspended).
- * Data: the in-memory staff store (src/lib/mock-staff.ts), shared with the Staff list, so changes
- * show there too. The store IS the local state; each handler carries a TODO(backend).
+ * Fields: name, email, joined date, title and country (when known), roles (one or two), status.
+ * Actions: change Roles (a person holds one or two; at least one stays checked), Suspend access (danger zone,
+ * confirm dialog) and Reinstate access (header, when suspended).
+ * Data: the ONE staff collection (services/staff.ts), shared with the Team list, the invite form and the
+ * scorecards, so changes show everywhere. Each handler carries a TODO(backend).
  */
 import { useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Ban, RotateCcw } from "lucide-react";
+import { MAX_STAFF_ROLES } from "@/config/staff-roles";
+import { ROLE_IDS, ROLES, type Role } from "@/config/roles";
 import { formatDate } from "@/lib/format";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
-import { staffStore, type StaffRole } from "@/lib/mock-staff";
+import { loadStaffMember, setStaffRoles, subscribeStaff, toggleStaffStatus } from "@/lib/services/staff";
 import { useDetailData } from "@/lib/use-detail-data";
 import { DangerZone } from "@/components/detail/DangerZone";
 import { DetailHeader } from "@/components/detail/DetailHeader";
@@ -24,19 +26,15 @@ import { DetailError, DetailNotFound, DetailSkeleton } from "@/components/detail
 import { InfoCard } from "@/components/detail/InfoCard";
 import { Button } from "@/components/ui/Button";
 import { useConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Checkbox } from "@/components/ui/form/Checkbox";
 import { KeyValueList } from "@/components/ui/KeyValueList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 
-const ROLES: StaffRole[] = ["Super Admin", "Moderator", "Support"];
-
-// Module-level so the reference is stable (the store method needs its `this`).
-const subscribeToStaff = (notify: () => void) => staffStore.subscribe(notify);
-
 export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const load = useCallback(() => Promise.resolve(staffStore.members.find((s) => s.id === id)), [id]);
-  const { status, record: staff, error, retry } = useDetailData(load, { subscribe: subscribeToStaff });
+  const load = useCallback(() => loadStaffMember(id), [id]);
+  const { status, record: staff, error, retry } = useDetailData(load, { subscribe: subscribeStaff });
   const toast = useToast();
   const { confirm, dialog } = useConfirmDialog();
 
@@ -47,12 +45,14 @@ export default function StaffDetailPage() {
   if (!staff) return <DetailNotFound noun="Staff member" listLabel="Team" listHref="/team" />;
 
   const isActive = staff.status === "active";
+  const roleLabels = staff.roles.map((role) => ROLES[role].label);
 
-  const changeRole = (role: StaffRole) => {
-    if (role === staff.role) return;
+  const toggleRole = (role: Role, checked: boolean) => {
+    const next = checked ? [...staff.roles, role] : staff.roles.filter((held) => held !== role);
+    if (next.length < 1 || next.length > MAX_STAFF_ROLES) return;
     // TODO(backend): persist this change
-    staffStore.updateRole(staff.id, role);
-    toast.success(`${staff.name} was made ${role}.`);
+    setStaffRoles(staff.id, next);
+    toast.success(`${staff.name}'s roles were updated.`);
   };
 
   const suspend = () =>
@@ -60,21 +60,21 @@ export default function StaffDetailPage() {
       title: "Suspend access?",
       description: (
         <>
-          <strong className="text-ink">{staff.name}</strong> ({staff.email}, {staff.role}) will lose access to the admin until you
+          <strong className="text-ink">{staff.name}</strong> ({staff.email}, {roleLabels.join(" and ")}) will lose access to the admin until you
           reinstate it.
         </>
       ),
       confirmLabel: "Suspend access",
       onConfirm: () => {
         // TODO(backend): persist this change
-        staffStore.toggleStatus(staff.id);
+        toggleStaffStatus(staff.id);
         toast.success(`${staff.name} was suspended.`);
       },
     });
 
   const reinstate = () => {
     // TODO(backend): persist this change
-    staffStore.toggleStatus(staff.id);
+    toggleStaffStatus(staff.id);
     toast.success(`${staff.name} was reinstated.`);
   };
 
@@ -97,18 +97,23 @@ export default function StaffDetailPage() {
           />
         }
         main={
-          <InfoCard title="Role">
-            <div role="group" aria-label="Role" className="flex flex-wrap gap-2">
-              {ROLES.map((role) => (
-                <Button
-                  key={role}
-                  variant={staff.role === role ? "primary" : "secondary"}
-                  aria-pressed={staff.role === role}
-                  onClick={() => changeRole(role)}
-                >
-                  {role}
-                </Button>
-              ))}
+          <InfoCard title="Roles">
+            <p className="caption mb-4">A person holds one or two roles. What each role may open is set on the Team page, under Roles &amp; permissions.</p>
+            <div role="group" aria-label="Roles" className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {ROLE_IDS.map((role) => {
+                const held = staff.roles.includes(role);
+                return (
+                  <Checkbox
+                    key={role}
+                    checked={held}
+                    onChange={(checked) => toggleRole(role, checked)}
+                    label={ROLES[role].label}
+                    description={ROLES[role].description}
+                    // Two roles at most, and the last one cannot be removed.
+                    disabled={held ? staff.roles.length === 1 : staff.roles.length >= MAX_STAFF_ROLES}
+                  />
+                );
+              })}
             </div>
           </InfoCard>
         }
@@ -117,7 +122,9 @@ export default function StaffDetailPage() {
             <KeyValueList
               items={[
                 { label: "Email", value: staff.email },
-                { label: "Role", value: staff.role },
+                { label: roleLabels.length > 1 ? "Roles" : "Role", value: roleLabels.join(", ") },
+                { label: "Title", value: staff.title },
+                { label: "Country", value: staff.country },
                 { label: "Joined", value: formatDate(staff.joinedDate) },
               ]}
             />

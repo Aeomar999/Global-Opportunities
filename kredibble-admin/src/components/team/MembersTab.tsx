@@ -1,29 +1,29 @@
 "use client";
 
 /**
- * Team > Members: admin and support accounts, on the shared list template (DataTable).
- * Data: the in-memory staff store (src/lib/mock-staff.ts). It is live: inviting a member or changing a
- * role elsewhere updates this list through the store's subscription. Row links open /staff/[id].
+ * Team > Members: everyone on the team, on the shared list template (DataTable).
+ * Data: the ONE staff collection (services/staff.ts), the same people the invite form, the member page and the
+ * scorecards use. It is live: inviting a member or changing a role elsewhere updates this list through the store's
+ * subscription. The Role column shows a pill for EVERY role a person holds. Row links open /staff/[id].
+ * All members fit on one page (25 rows), so the number of rows is the number of people.
  */
 import { UserCog } from "lucide-react";
-import { staffStore, type StaffMember } from "@/lib/mock-staff";
+import { ROLES } from "@/config/roles";
+import type { StaffMember } from "@/lib/mock-entities";
+import { loadStaffRows, subscribeStaff } from "@/lib/services/staff";
 import { useListData } from "@/lib/use-list-data";
 import { DataTable } from "@/components/list/DataTable";
 import type { Column } from "@/components/list/types";
 
-// Module-level so they are stable references for the hook.
-const loadStaff = () => Promise.resolve([...staffStore.members]);
-const subscribeToStaff = (notify: () => void) => staffStore.subscribe(notify);
-
 const COLUMNS: Column<StaffMember>[] = [
-  { key: "name", header: "Name", type: "primary", width: "27%", title: (r) => r.name },
-  { key: "email", header: "Email", type: "text", width: "30%", value: (r) => r.email },
-  { key: "role", header: "Role", type: "pill", width: "20%", label: (r) => r.role },
-  { key: "status", header: "Status", type: "status", width: "23%", status: (r) => r.status },
+  { key: "name", header: "Name", type: "primary", width: "26%", title: (r) => r.name, subtitle: (r) => r.title },
+  { key: "email", header: "Email", type: "text", width: "26%", value: (r) => r.email },
+  { key: "role", header: "Role", type: "pill", width: "30%", mobileLabel: "Roles", label: (r) => r.roles.map((role) => ROLES[role].label) },
+  { key: "status", header: "Status", type: "status", width: "18%", status: (r) => r.status },
 ];
 
 export function MembersTab() {
-  const { rows, isLoading, error, retry } = useListData(loadStaff, { subscribe: subscribeToStaff });
+  const { rows, isLoading, error, retry } = useListData(loadStaffRows, { subscribe: subscribeStaff });
 
   return (
     <DataTable
@@ -35,6 +35,7 @@ export function MembersTab() {
       loading={isLoading}
       error={error}
       onRetry={retry}
+      pageSize={25}
       emptyNoData={{ icon: UserCog, title: "No staff accounts yet", description: "Invite the first admin or support member." }}
       emptyNoResults={{ icon: UserCog, title: "No staff match" }}
     />

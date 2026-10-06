@@ -9,7 +9,8 @@
  * ones the list pages use, mapped by src/lib/status-map.ts).
  *
  * Props:
- * - leading: { name } for a 56px initials avatar (people, companies), or { icon } for a 56px icon tile
+ * - leading: { name } for a 56px initials avatar (people, companies), or { icon, tone? } for a 56px icon tile
+ *   (tone "brand" = the orange entity tile)
  * - eyebrow: optional small node above the title (a type pill, for example)
  * - title: the h1 text
  * - badges: StatusBadge nodes shown beside the title
@@ -24,7 +25,7 @@ import { Card } from "@/components/ui/Card";
 import { IconTile } from "@/components/ui/IconTile";
 
 interface DetailHeaderProps {
-  leading: { name: string } | { icon: LucideIcon };
+  leading: { name: string } | { icon: LucideIcon; /** "brand" = the orange entity tile (Programs). Default: purple. */ tone?: "accent" | "brand" };
   eyebrow?: ReactNode;
   title: string;
   badges?: ReactNode;
@@ -36,7 +37,7 @@ export function DetailHeader({ leading, eyebrow, title, badges, meta, actions }:
   return (
     <Card as="section" ariaLabel="Summary" className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-4">
-        {"name" in leading ? <Avatar name={leading.name} size="lg" /> : <IconTile icon={leading.icon} tone="accent" size="lg" />}
+        {"name" in leading ? <Avatar name={leading.name} size="lg" /> : <IconTile icon={leading.icon} tone={leading.tone ?? "accent"} size="lg" />}
         <div className="min-w-0">
           {eyebrow && <div className="mb-1">{eyebrow}</div>}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

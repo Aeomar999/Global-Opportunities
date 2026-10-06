@@ -16,11 +16,12 @@
  *
  * Props: initialDevRoles (what the server read from the cookie), children.
  */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { DEV_ROLES_COOKIE, isDevRoleSwitcherEnabled, MAX_DEV_ROLES, serializeDevRoles } from "@/config/dev-roles";
 import { roleCan, type AccessLevel, type Screen } from "@/config/permissions";
 import { isRole, type Role } from "@/config/roles";
 import { getAdminUser } from "@/lib/api";
+import { rolePermissionsStore } from "@/lib/role-permissions";
 import { isMockMode } from "@/lib/services/mock-mode";
 
 /** The tooltip for an edit control that a view-only role cannot use. */
@@ -56,7 +57,11 @@ export function RoleProvider({ initialDevRoles, children }: { initialDevRoles: R
 
   const roles = devRoles.length > 0 ? devRoles : fromSession;
 
-  const can = useCallback((screen: Screen, level: AccessLevel) => roleCan(roles, screen, level), [roles]);
+  // The Moderator and Support rows of the matrix follow the toggles saved on Team > Roles & permissions, so `can` is
+  // rebuilt (and everything that uses it re-renders) whenever they are saved.
+  const matrixRevision = useSyncExternalStore(rolePermissionsStore.subscribe, rolePermissionsStore.getRevision, () => 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const can = useCallback((screen: Screen, level: AccessLevel) => roleCan(roles, screen, level), [roles, matrixRevision]);
 
   const setDevRoles = useCallback(
     (next: Role[]) => {

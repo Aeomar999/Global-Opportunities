@@ -31,7 +31,13 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 const TONES: Tone[] = ["accent", "brand", "success", "warning", "danger", "neutral"];
-const STATUSES = ["approved", "pending", "rejected", "active", "suspended", "draft", "unknown-value"];
+// One of every tone, then the desk statuses (programs, ambassadors, testimonials, listings, vetting).
+const STATUSES = [
+  "approved", "pending", "rejected", "active", "suspended", "draft", "unknown-value",
+  "planned", "running", "delivered", "cancelled",
+  "applicant", "onboarding", "dormant",
+  "unpublished", "published", "unvetted", "vetted",
+];
 
 const SAMPLE_MENU: MenuItem[] = [
   { label: "Open queue", href: "/verification", icon: ShieldCheck },
