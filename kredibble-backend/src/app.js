@@ -160,7 +160,6 @@ app.use((err, req, res, next) => {
     error: {
       message,
       code: err.code,
-      requestId,
       stack: env.isDevelopment ? err.stack : undefined,
     },
   });
