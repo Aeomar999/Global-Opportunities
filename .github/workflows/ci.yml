@@ -165,7 +165,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: kredibble-app/package-lock.json
-      - run: npm ci
+      - run: npm ci --legacy-peer-deps
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test -- --ci
