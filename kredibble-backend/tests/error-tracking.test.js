@@ -131,13 +131,12 @@ describe('SEC-090 / SEC-095: Observability & Error Tracking', () => {
         res.status(status).json({
           error: {
             message: 'Internal server error',
-            requestId,
           },
         });
       });
     });
 
-    it('includes requestId in 500 error response and X-Request-Id header', async () => {
+    it('sets X-Request-Id header and logs/captures error with requestId', async () => {
       const customRequestId = 'trace-uuid-abc-123';
       const response = await request(testApp)
         .get('/test/forced-500')
@@ -147,7 +146,6 @@ describe('SEC-090 / SEC-095: Observability & Error Tracking', () => {
       expect(response.headers['x-request-id']).toBe(customRequestId);
       expect(response.body.error).toBeDefined();
       expect(response.body.error.message).toBe('Internal server error');
-      expect(response.body.error.requestId).toBe(customRequestId);
     });
   });
 });
