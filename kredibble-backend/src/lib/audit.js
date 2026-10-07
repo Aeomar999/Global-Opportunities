@@ -98,7 +98,7 @@ export const auditContext = (req, res, next) => {
   req.auditContext = {
     ip: req.ip || req.headers['x-forwarded-for'] || 'unknown',
     userAgent: req.get('user-agent') || 'unknown',
-    requestId: req.get('x-request-id') || crypto.randomUUID(),
+    requestId: req.id || req.get('x-request-id') || crypto.randomUUID(),
   };
   // Propagate request ID in response headers (SEC-039)
   res.set('X-Request-Id', req.auditContext.requestId);
@@ -115,7 +115,7 @@ export function auditReq(req, params) {
   const { ip, userAgent, requestId } = req.auditContext || {
     ip: req.ip || req.headers['x-forwarded-for'] || 'unknown',
     userAgent: req.get('user-agent') || 'unknown',
-    requestId: req.get('x-request-id') || crypto.randomUUID(),
+    requestId: req.id || req.get('x-request-id') || crypto.randomUUID(),
   };
 
   return auditLog({

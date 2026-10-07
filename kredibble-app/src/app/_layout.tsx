@@ -2,9 +2,12 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, Platform } from 'react-native';
 import { ToastProvider } from '../components/ui/ToastProvider';
+import { initMobileErrorTracking, Sentry } from '../lib/sentry';
 import "../global.css";
 
-export default function RootLayout() {
+initMobileErrorTracking();
+
+function RootLayout() {
   return (
     <ToastProvider>
       <View style={Platform.OS === 'web' ? { flex: 1, alignItems: 'center', backgroundColor: '#f3f4f6' } : { flex: 1 }}>
@@ -21,3 +24,5 @@ export default function RootLayout() {
     </ToastProvider>
   );
 }
+
+export default Sentry.wrap(RootLayout);
