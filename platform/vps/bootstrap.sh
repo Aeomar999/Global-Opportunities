@@ -149,7 +149,8 @@ mkdir -p \
   /opt/god/development \
   /opt/god/bin \
   /opt/god/deploy \
-  /opt/platform/edge
+  /opt/platform/edge \
+  /opt/platform/vector
 
 chown -R deploy:deploy /opt/god
 chmod 750 /opt/god

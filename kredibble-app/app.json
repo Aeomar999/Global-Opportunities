@@ -50,7 +50,14 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "global-opportunities",
+          "project": "god-mobile"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

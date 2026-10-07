@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.21",
+    "@sentry/react-native": "^8.29.0",
     "babel-preset-expo": "~57.0.12",
     "clsx": "^2.1.1",
     "expo": "~57.0.26",

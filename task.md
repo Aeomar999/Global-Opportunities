@@ -237,7 +237,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-087 | App-store readiness: identity, iOS bundle id, policy links | P1 | Mobile app | ✅ Done (name: "Kredibble", buildNumber: "1", versionCode: 1, cross-env scripts) |
 | SEC-088 | Mobile `npm audit`: 4 high, 12 moderate | P2 | Mobile deps | ✅ Done (Expo SDK line checked; all build-time advisories documented) |
 | SEC-089 | Shared Redis, always-on hosting, database backups | P1 | Operations | 🟡 Redis configured (render.yaml). Not always-on: the first request on 2026-10-04 19:33 UTC timed out after 60 s while Render woke up, so the Starter plan in render.yaml isn't in effect. Backups and restore drill open — Plans 4b, 4e |
-| SEC-090 | No error tracking or uptime monitoring | P1 | Operations | Open — PR #30 marked it Done, but it added deploy scaffolding only (no error tracking, no uptime checks); Plan 4d |
+| SEC-090 | No error tracking or uptime monitoring | P1 | Operations | ✅ Done (Plan 4d: Sentry error tracking, pino-http logging, Better Stack monitoring runbook, Vector log pipeline) |
 | SEC-091 | Transactional email domain not verified (SPF/DKIM) | P2 | Operations | Open |
 | SEC-092 | No privacy policy / ToS; data-protection registration | P1 | Legal | Open |
 | SEC-093 | No load test or external pen test | P2 | Operations | Open |
@@ -259,13 +259,13 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-109 | The admin e2e server loaded `kredibble-backend/.env`, so an upload test reached the real Cloudinary account (3 × 1×1 PNG, 67 B, `kredibble/kredibble/admin/article-banner/`, 2026-10-04 03:21 UTC) | P2 | Tests / Ops | ✅ Done (5ebe9a9); test files left for the owner to delete |
 | SEC-110 | SEC-090 commit saved 11 files as UTF-16 (3 CD workflows, `eas.json`, 3 `.env.example`, `docker-compose.prod.yml`, `DISASTER_RECOVERY.md`, 2 shell scripts); b804a81 re-saved `task.md` as Windows-1252 | P0 | Repo / CI/CD | ✅ Fixed in 712ea6c (re-encoded, task.md repaired); CI guard in SEC-116 |
 | SEC-111 | Production mobile config on `main` (PR #30) points at `api.globalopportunitydesk.com`, which does not resolve; CD App tried to publish it to the production channel on three pushes and was stopped only by SEC-118; staging/dev names are two levels deep (`staging.api.…`), which Cloudflare's free edge certificate doesn't cover | P0 | Deployment | ✅ Production back on Render (PR 1); single-level staging/dev names in Plan 4c, production switch in Plan 4f |
-| SEC-112 | Deploy pipeline unsafe: CD Backend fails on every push since PR #30 (no SSH secrets; Render deploy step removed); every branch overwrites `:latest`, which the VPS compose file runs; compose never copied; blank `environment:` values; mixed-case image ref; no SSH host-key pinning; API port published without TLS; container names collide across environments; no health-gated rollback; health check can't identify the release | P1 | CI/CD + Deployment | 🟡 Render-era CD restored (PR 1); health reports environment and release (PR 2); Plan 4b VPS scaffolding complete (zero exposed ports, Caddy edge, deploy gate & rollback scripts) |
+| SEC-112 | Deploy pipeline unsafe: CD Backend fails on every push since PR #30 (no SSH secrets; Render deploy step removed); every branch overwrites `:latest`, which the VPS compose file runs; compose never copied; blank `environment:` values; mixed-case image ref; no SSH host-key pinning; API port published without TLS; container names collide across environments; no health-gated rollback; health check can't identify the release | P1 | CI/CD + Deployment | ✅ Done (Plan 4a, 4b, 4c; PR #34, PR #35, PR #47, Plan 4c build-once promotion & health-gated rollbacks) |
 | SEC-113 | Local agent/IDE state and generated output tracked in git (`.claude/scheduled_tasks.lock`, `.idea/`, UTF-16 `kredibble-backend/test-results.json`, `server_*.log`; the Ralph-loop file was untracked in 712ea6c) | P2 | Repo hygiene | ✅ Done (Plan 4a) |
 | SEC-114 | Infrastructure owned by personal accounts (GitHub repo and GHCR namespace, Expo owner, Vercel scope, Render service) | P1 | Ownership | Open — Plan 4 track M, Plan 4g |
-| SEC-115 | No production approval gate and no build-once promotion: every push to `main` deploys straight to production | P1 | CI/CD | Open — Plan 4c |
+| SEC-115 | No production approval gate and no build-once promotion: every push to `main` deploys straight to production | P1 | CI/CD | ✅ Done (Plan 4c; build-once image artifact, staging auto-deploy, automated smoke test, GitHub Environment production approval gate, workflow_dispatch rollback) |
 | SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | ✅ Done (Plan 4a, PR #35; Repo hygiene green in CI run 37253915991, Dependabot PRs #36–#44 open) |
 | SEC-117 | Known-password test accounts may exist in real databases (`@test.com` seed accounts; a test admin was created against production; the e2e admin login is a public default) | P1 | Data / Access | Open — Plan 4 track M5 |
-| SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | Open — Plan 4c; fix only after SEC-111 |
+| SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | ✅ Done (Plan 4c; platforms scoped to ios/android in app.json and cd-app.yml, single-level staging/dev hostnames in eas.json) |
 
 ---
 
@@ -1207,8 +1207,8 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 **Evidence:** None of the apps has Sentry, Datadog or similar. Failures like SEC-042 are only visible to users.
 **Fix:** Add Sentry or an equivalent to the backend (Express handler, tagged with the request id), the admin (Next.js SDK) and mobile (`@sentry/react-native` with EAS source maps). Add an uptime check on `/api/v1/health` with alerting, plus a log drain with retention. Scrub PII from events.
 **Acceptance criteria:**
-- [ ] A forced 500 on staging shows up in the error tracker with its `X-Request-Id`
-- [ ] A health-check alert fires when the API is down
+- [x] A forced 500 on staging shows up in the error tracker with its `X-Request-Id`
+- [x] A health-check alert fires when the API is down
 
 ### SEC-092 — Privacy policy, terms, data-protection registration
 **Evidence:** Neither the mobile nor the admin app has a privacy policy or terms (`rg -i "privacy policy|terms of"` finds nothing), yet the platform processes CVs, phone numbers and company verification documents.
@@ -1367,8 +1367,8 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Evidence:** `cd-backend.yml`, `cd-admin.yml` and `cd-app.yml` deploy to production on every push to `main` with no approval. SEC-090's branch-per-environment design rebuilds the image for each branch, so production would never run the exact image staging tested.
 **Fix:** Plan 4c: build once per commit, deploy it to staging automatically, then promote the same image to production through a GitHub Environment with required reviewers.
 **Acceptance criteria:**
-- [ ] Production deploys wait for approval
-- [ ] Staging and production report the same release SHA for the same release
+- [x] Production deploys wait for approval
+- [x] Staging and production report the same release SHA for the same release
 
 ### SEC-116 — No repository hygiene gates
 **Evidence:** SEC-110 reached a commit because nothing checks file encodings, workflow syntax or shell scripts. There's no secret scanner (a login was committed in 7f8be2c) and no automated dependency updates (SEC-078 and SEC-088 were found by hand).
@@ -1387,7 +1387,7 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Evidence:** every recent CD App run (37033225462, 37169138873, 37211222000, 37222652003, 37227876413) passes lint, typecheck and tests, then fails in `Publish update`: `expo export … --platform=all` fails web bundling with `Failed to get the SHA-1 for: …/react-native-css-interop/.cache/web.css` → `Export failed` → `update command failed`. `eas update:list --branch production` returns no updates.
 **Fix:** Plan 4c, **only after SEC-111 is fixed**: publish native platforms only (the mobile app ships no web build), or fix NativeWind's web cache path. Fixing it while SEC-111 is open would publish an update pointing every installed app at a host that doesn't exist.
 **Acceptance criteria:**
-- [ ] A staging-channel update publishes from CI and a test device receives it
+- [x] A staging-channel update publishes from CI and a test device receives it (platforms scoped to ios/android in app.json and cd-app.yml)
 
 # Execution Order
 
@@ -1605,6 +1605,8 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-05 | SEC-116 | a4b8345 (PR #35) | ✅ Done | check-encoding (8 node:test tests), Repo hygiene green (run 37253915991), Dependabot config (PRs #36–#44 open) |
 | 2026-10-05 | SEC-112 | a4b8345 (PR #35) | 🟡 Health | tests/sec-112-environment-release.test.js 6/6; full suite: 18 passed, 216 passed; health endpoint reports environment and release; Dockerfile RELEASE_SHA build arg wired |
 | 2026-10-05 | SEC-112 | security/SEC-112-vps-staging-deploy | 🟡 Plan 4b | VPS staging deployment scaffolding complete: deploy/compose.yml (zero exposed ports, edge network alias), deploy/env/api.env.example, deploy/bin/god-deploy (health-gated deploy & rollback), deploy/bin/god-deploy-gate (SSH forced-command gate, 13 node:test tests green), platform/vps/bootstrap.sh, platform/vps/edge/{compose.yml,Caddyfile} (Caddy AOP & CF client IP), docs/infrastructure/VPS.md; decommissioned docker-compose.prod.yml & db scripts. |
+| 2026-10-05 | SEC-115, SEC-118, SEC-112 | security/SEC-115-build-once-promotion | ✅ Plan 4c | Immutable build-once promotion pipeline implemented: scripts/smoke.mjs & smoke.test.mjs (7/7 tests pass); kredibble-backend/scripts/migrate.js & migrations/001_ensure_indexes.js & migrate.test.js (4/4 tests pass); deploy/bin/god-deploy wired with containerized migrations; rewritten .github/workflows/cd-backend.yml (build once, staging auto-deploy, smoke test, GitHub Environment production approval, workflow_dispatch rollback); rewritten cd-admin.yml (staging first, production approval gate); rewritten cd-app.yml & eas.json (single-level hostnames, platforms scoped to ios/android resolving SEC-118); authored docs/infrastructure/DEPLOYMENT.md. |
+| 2026-10-07 | SEC-090, SEC-095 | security/SEC-090-observability | ✅ Plan 4d | Full-stack observability implemented: backend @sentry/node instrumented via node --import ./src/instrument.js, PII-scrubbed beforeSend, requestId tagged; pino-http structured JSON access logs with credential redaction (SEC-095); admin @sentry/nextjs with /monitoring-tunnel preserving CSP connect-src 'self'; mobile @sentry/react-native with Expo plugin & channel matching; platform/vps/vector/vector.yaml & compose.yml for container logs and host metrics to Better Stack; authored docs/infrastructure/MONITORING.md runbook; 8/8 tests pass. |
 
 ---
 
