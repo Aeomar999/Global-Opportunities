@@ -26,7 +26,7 @@ import { currentMonth, kpiStatus, kpiTarget, kpiThresholds, monthsBefore } from 
 import { PARTNER_STAGES, PARTNER_STAGE_LABELS, type KpiThresholds, type MonthKey, type PartnerStage, type TargetChange, type ThresholdChange } from "@/lib/mock-entities";
 import { getMockCollection, getPartnerStageLabels, setMockCollection, setPartnerStageLabels } from "@/lib/mock-store";
 import { currentStaffMember, todayIsoDate } from "@/lib/services/listings";
-import { saveTargetsApi, hasAdminSession } from "@/lib/api";
+import { saveTargetsApi, saveThresholdsApi, hasAdminSession } from "@/lib/api";
 import { isMockMode } from "@/lib/services/mock-mode";
 
 // ---- targets ----------------------------------------------------------------------------------------------------------
@@ -152,6 +152,13 @@ export function saveThresholds(green: number, amber: number, effectiveFrom: Mont
     seq: nextSeq(),
   };
   setMockCollection("thresholdHistory", [...history, row], { always: true });
+
+  // BE-003: Persist to backend API when connected or in real mode
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    saveThresholdsApi(green, amber, effectiveFrom).catch((err) => {
+      console.warn("Could not persist thresholds to backend API", err);
+    });
+  }
 }
 
 /** The thresholds already saved to start in a LATER month (the newest of them), or undefined. */

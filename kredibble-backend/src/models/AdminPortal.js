@@ -220,3 +220,73 @@ targetChangeSchema.pre(['deleteOne', 'deleteMany'], function() {
 targetChangeSchema.index({ kpi: 1, effectiveFrom: 1, seq: -1 });
 
 export const TargetChange = mongoose.model('TargetChange', targetChangeSchema);
+
+// BE-003: Append-only ThresholdChange history
+const thresholdChangeSchema = new mongoose.Schema({
+  green: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 200,
+    validate: {
+      validator: Number.isInteger,
+      message: '{VALUE} is not an integer',
+    },
+  },
+  amber: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 200,
+    validate: {
+      validator: Number.isInteger,
+      message: '{VALUE} is not an integer',
+    },
+  },
+  effectiveFrom: {
+    type: String,
+    required: true,
+    match: /^\d{4}-\d{2}$/,
+    index: true,
+  },
+  previous: {
+    type: new mongoose.Schema({
+      green: Number,
+      amber: Number,
+    }, { _id: false }),
+    default: null,
+  },
+  changedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  changedByName: {
+    type: String,
+    trim: true,
+  },
+  changedAt: {
+    type: String,
+    default: () => new Date().toISOString().slice(0, 10),
+  },
+  seq: {
+    type: Number,
+    required: true,
+    index: true,
+  },
+}, { timestamps: true });
+
+thresholdChangeSchema.pre(['updateOne', 'updateMany', 'findOneAndUpdate', 'findOneAndDelete'], function() {
+  throw new Error('ThresholdChange is append-only and cannot be modified or deleted');
+});
+
+thresholdChangeSchema.pre(['deleteOne', 'deleteMany'], function() {
+  if (process.env.NODE_ENV === 'test' && this.getFilter && Object.keys(this.getFilter()).length === 0) {
+    return;
+  }
+  throw new Error('ThresholdChange is append-only and cannot be modified or deleted');
+});
+
+thresholdChangeSchema.index({ effectiveFrom: 1, seq: -1 });
+
+export const ThresholdChange = mongoose.model('ThresholdChange', thresholdChangeSchema);
+

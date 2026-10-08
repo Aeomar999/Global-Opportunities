@@ -14,7 +14,7 @@ export const staffInviteSchema = z.object({
   }),
 });
 
-// BE-002: batch targets save schema with effective-from month
+// BE-002, BE-003: batch targets save schema with effective-from month (supports targets, thresholds, or both)
 export const targetsBatchSchema = z.object({
   body: z.object({
     effectiveFrom: z.string().regex(/^\d{4}-\d{2}$/, 'effectiveFrom must be YYYY-MM format'),
@@ -25,7 +25,30 @@ export const targetsBatchSchema = z.object({
     .refine((items) => {
       const keys = items.map((item) => item.kpi);
       return new Set(keys).size === keys.length;
-    }, { message: 'Duplicate KPI in batch is not allowed' }),
+    }, { message: 'Duplicate KPI in batch is not allowed' }).optional(),
+    thresholds: z.object({
+      green: z.number().int('Green must be an integer').min(1, 'Green must be at least 1').max(200, 'Green cannot exceed 200'),
+      amber: z.number().int('Amber must be an integer').min(1, 'Amber must be at least 1').max(200, 'Amber cannot exceed 200'),
+    }).refine((data) => data.amber < data.green, {
+      message: 'amber must be below green',
+      path: ['amber'],
+    }).optional(),
+  }).refine((data) => Boolean((data.targets && data.targets.length > 0) || data.thresholds), {
+    message: 'Either targets or thresholds must be provided',
+    path: ['targets'],
   }),
 });
+
+// BE-003: dedicated thresholds save schema
+export const thresholdsSchema = z.object({
+  body: z.object({
+    effectiveFrom: z.string().regex(/^\d{4}-\d{2}$/, 'effectiveFrom must be YYYY-MM format'),
+    green: z.number().int('Green must be an integer').min(1, 'Green must be at least 1').max(200, 'Green cannot exceed 200'),
+    amber: z.number().int('Amber must be an integer').min(1, 'Amber must be at least 1').max(200, 'Amber cannot exceed 200'),
+  }).refine((data) => data.amber < data.green, {
+    message: 'amber must be below green',
+    path: ['amber'],
+  }),
+});
+
 

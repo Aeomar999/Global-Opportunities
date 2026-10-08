@@ -29,7 +29,8 @@ import {
 } from '../lib/permissions.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 import { getTargetsForMonth, getTargetHistory, saveTargetBatch, KPI_KEYS } from '../lib/targets.js';
-import { targetsBatchSchema } from '../schemas/admin.js';
+import { getThresholdsInForce, getThresholdHistory, saveThresholdChange, getCombinedChangeHistory } from '../lib/thresholds.js';
+import { targetsBatchSchema, thresholdsSchema } from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
 
 export const adminApiRouter = Router();
@@ -380,38 +381,123 @@ adminApiRouter.get('/targets/history', requireAdminOrStaffAuth, requireScreen('s
   listResponse(res, history.map(toClientObject), total, page, limit);
 }));
 
-// BE-002: POST /targets saves a batch of target changes with one effectiveFrom month
+// BE-002, BE-003: POST /targets saves a batch of target changes, optionally with thresholds under one effectiveFrom
 adminApiRouter.post('/targets', requireAdminOrStaffAuth, requireScreen('settings_admin', 'edit'), validate(targetsBatchSchema), asyncHandler(async (req, res) => {
-  const { effectiveFrom, targets } = req.body;
+  const { effectiveFrom, targets = [], thresholds } = req.body;
   const callerUser = await User.findById(req.auth.sub).select('name email').lean();
   const callerName = callerUser?.name || req.auth.email || 'Admin';
 
-  const inserted = await saveTargetBatch({
-    targets,
+  let insertedTargets = [];
+  if (targets.length > 0) {
+    insertedTargets = await saveTargetBatch({
+      targets,
+      effectiveFrom,
+      changedBy: req.auth.sub,
+      changedByName: callerName,
+    });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.TARGETS_UPDATE,
+      resourceType: AUDIT_RESOURCE_TYPES.SETTINGS,
+      resourceId: insertedTargets[0]?._id,
+      outcome: 'success',
+      metadata: {
+        targetKey: 'targets',
+        effectiveFrom,
+        changes: insertedTargets.map((row) => ({ kpi: row.kpi, value: row.value, previous: row.previous, seq: row.seq })),
+      },
+    });
+  }
+
+  let insertedThresholds = null;
+  if (thresholds) {
+    insertedThresholds = await saveThresholdChange({
+      green: thresholds.green,
+      amber: thresholds.amber,
+      effectiveFrom,
+      changedBy: req.auth.sub,
+      changedByName: callerName,
+    });
+
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.THRESHOLDS_UPDATE,
+      resourceType: AUDIT_RESOURCE_TYPES.SETTINGS,
+      resourceId: insertedThresholds._id,
+      outcome: 'success',
+      metadata: {
+        effectiveFrom,
+        green: thresholds.green,
+        amber: thresholds.amber,
+        previous: insertedThresholds.previous,
+        seq: insertedThresholds.seq,
+      },
+    });
+  }
+
+  res.status(201).json({
+    data: {
+      saved: insertedTargets.length + (insertedThresholds ? 1 : 0),
+      effectiveFrom,
+      targets: insertedTargets.map(toClientObject),
+      thresholds: insertedThresholds ? toClientObject(insertedThresholds) : undefined,
+    },
+  });
+}));
+
+// BE-003: GET /thresholds?month= resolves status thresholds in force for the month
+adminApiRouter.get('/thresholds', requireAdminOrStaffAuth, requireScreen('overview', 'view'), asyncHandler(async (req, res) => {
+  const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
+    ? req.query.month
+    : new Date().toISOString().slice(0, 7);
+  const thresholds = await getThresholdsInForce(month);
+  itemResponse(res, toClientObject(thresholds));
+}));
+
+// BE-003: GET /thresholds/history returns append-only threshold history, newest first
+adminApiRouter.get('/thresholds/history', requireAdminOrStaffAuth, requireScreen('settings_admin', 'view'), asyncHandler(async (req, res) => {
+  const { page, skip, limit } = pageOptions(req.query);
+  const { history, total } = await getThresholdHistory({ limit, skip });
+  listResponse(res, history.map(toClientObject), total, page, limit);
+}));
+
+// BE-003: POST /thresholds saves new status thresholds for a month
+adminApiRouter.post('/thresholds', requireAdminOrStaffAuth, requireScreen('settings_admin', 'edit'), validate(thresholdsSchema), asyncHandler(async (req, res) => {
+  const { green, amber, effectiveFrom } = req.body;
+  const callerUser = await User.findById(req.auth.sub).select('name email').lean();
+  const callerName = callerUser?.name || req.auth.email || 'Admin';
+
+  const row = await saveThresholdChange({
+    green,
+    amber,
     effectiveFrom,
     changedBy: req.auth.sub,
     changedByName: callerName,
   });
 
   await auditReq(req, {
-    action: AUDIT_ACTIONS.TARGETS_UPDATE,
+    action: AUDIT_ACTIONS.THRESHOLDS_UPDATE,
     resourceType: AUDIT_RESOURCE_TYPES.SETTINGS,
-    resourceId: inserted[0]?._id,
+    resourceId: row._id,
     outcome: 'success',
     metadata: {
-      targetKey: 'targets',
       effectiveFrom,
-      changes: inserted.map((row) => ({ kpi: row.kpi, value: row.value, previous: row.previous, seq: row.seq })),
+      green,
+      amber,
+      previous: row.previous,
+      seq: row.seq,
     },
   });
 
   res.status(201).json({
-    data: {
-      saved: inserted.length,
-      effectiveFrom,
-      targets: inserted.map(toClientObject),
-    },
+    data: toClientObject(row),
   });
+}));
+
+// BE-003: GET /change-history returns targets and thresholds together in ONE list, newest first
+adminApiRouter.get('/change-history', requireAdminOrStaffAuth, requireScreen('settings_admin', 'view'), asyncHandler(async (req, res) => {
+  const { page, skip, limit } = pageOptions(req.query);
+  const { history, total } = await getCombinedChangeHistory({ limit, skip });
+  listResponse(res, history.map(toClientObject), total, page, limit);
 }));
 
 // Legacy PUT /targets/:metric kept for backward compatibility until all callers migrate
@@ -454,8 +540,16 @@ adminApiRouter.put('/targets/:metric', requireAdminOrStaffAuth, requirePortalRol
 const metricStatus = (value, target, thresholds = {}) => {
   if (!target) return 'green';
   const ratio = value / target;
-  const green = Number.isFinite(thresholds.greenThreshold) ? thresholds.greenThreshold : 1;
-  const amber = Number.isFinite(thresholds.amberThreshold) ? thresholds.amberThreshold : 0.7;
+  const green = Number.isFinite(thresholds.greenRatio)
+    ? thresholds.greenRatio
+    : Number.isFinite(thresholds.greenThreshold)
+      ? thresholds.greenThreshold
+      : 0.95;
+  const amber = Number.isFinite(thresholds.amberRatio)
+    ? thresholds.amberRatio
+    : Number.isFinite(thresholds.amberThreshold)
+      ? thresholds.amberThreshold
+      : 0.7;
   return ratio >= green ? 'green' : ratio >= amber ? 'amber' : 'red';
 };
 
