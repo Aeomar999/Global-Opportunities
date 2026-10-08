@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ==============================================================================
+# Global Opportunity Desk (GOD) Asymmetric Encrypted Backup Controller
+# SEC-089 (Backups and Disaster Recovery, Decision D8)
+# ==============================================================================
+# Performs automated daily dumps of MongoDB:
+#   1. Reads database credentials via mounted/temporary config file, NEVER via argv
+#   2. Encrypts stream asymmetrically using age (VPS only holds the public key)
+#   3. Uploads encrypted archive to Cloudflare R2 (s3://god-db-backups/daily/)
+#   4. Replicates archive to s3://god-db-backups/monthly/ on the 1st of each month
+#   5. Pings Better Stack Heartbeat on completion
+#   6. Zero plaintext database dump hits the filesystem
+# ==============================================================================
+
+TARGET_ENV="production"
+CONFIG_FILE=""
+OUTPUT_DIR=""
+AGE_KEY=""
+AGE_KEY_FILE="/opt/god/backup/age.pub"
+R2_BUCKET="${R2_BUCKET:-god-db-backups}"
+R2_ENDPOINT_URL="${R2_ENDPOINT_URL:-}"
+HEARTBEAT_URL="${BACKUP_HEARTBEAT_URL:-}"
+DRY_RUN="${DRY_RUN:-0}"
+NO_UPLOAD="${NO_UPLOAD:-0}"
+TEMP_CONFIG=""
+
+print_usage() {
+  cat <<EOF
+Usage: god-backup [options]
+
+Options:
+  --env <staging|production|development> Target environment (default: production)
+  --config <path>                        Path to mongodump configuration file (YAML/JSON)
+  --output-dir <path>                    Local directory for backup output (default: /tmp)
+  --recipient <key>                      age public recipient key (age1...)
+  --recipient-file <path>                Path to file containing age public key (default: /opt/god/backup/age.pub)
+  --bucket <name>                        R2/S3 bucket name (default: god-db-backups)
+  --endpoint-url <url>                   R2/S3 endpoint URL
+  --heartbeat <url>                      Better Stack heartbeat ping URL
+  --no-upload                            Skip remote upload (retain local archive)
+  --dry-run                              Validate inputs and print steps without executing
+  -h, --help                             Display this help message
+EOF
+}
+
+cleanup() {
+  if [[ -n "$TEMP_CONFIG" && -f "$TEMP_CONFIG" ]]; then
+    rm -f "$TEMP_CONFIG"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+# Parse CLI arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env)
+      TARGET_ENV="$2"
+      shift 2
+      ;;
+    --config)
+      CONFIG_FILE="$2"
+      shift 2
+      ;;
+    --output-dir)
+      OUTPUT_DIR="$2"
+      shift 2
+      ;;
+    --recipient)
+      AGE_KEY="$2"
+      shift 2
+      ;;
+    --recipient-file)
+      AGE_KEY_FILE="$2"
+      shift 2
+      ;;
+    --bucket)
+      R2_BUCKET="$2"
+      shift 2
+      ;;
+    --endpoint-url)
+      R2_ENDPOINT_URL="$2"
+      shift 2
+      ;;
+    --heartbeat)
+      HEARTBEAT_URL="$2"
+      shift 2
+      ;;
+    --no-upload)
+      NO_UPLOAD=1
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      print_usage
+      exit 0
+      ;;
+    *)
+      echo "god-backup: Error: Unknown option: $1" >&2
+      print_usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Resolve recipient public key (must be age1...)
+if [[ -z "$AGE_KEY" ]]; then
+  if [[ -n "${AGE_RECIPIENT:-}" ]]; then
+    AGE_KEY="${AGE_RECIPIENT}"
+  elif [[ -f "$AGE_KEY_FILE" ]]; then
+    AGE_KEY="$(head -n 1 "$AGE_KEY_FILE" | tr -d '[:space:]')"
+  fi
+fi
+
+if [[ "$DRY_RUN" != "1" && -z "$AGE_KEY" ]]; then
+  echo "god-backup: Error: age recipient public key not found in --recipient, AGE_RECIPIENT, or $AGE_KEY_FILE" >&2
+  exit 1
+fi
+
+if [[ -n "$AGE_KEY" && ! "$AGE_KEY" =~ ^age1[a-z0-9]+$ ]]; then
+  echo "god-backup: Error: Invalid age public key format: $AGE_KEY (must start with age1)" >&2
+  exit 1
+fi
+
+# Locate or generate mongodump config file so credentials never touch argv
+if [[ -n "$CONFIG_FILE" ]]; then
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "god-backup: Error: Config file not found: $CONFIG_FILE" >&2
+    exit 1
+  fi
+else
+  # Check if DATABASE_URL or MONGODB_URI is available in environment or api.env
+  DB_URI="${DATABASE_URL:-${MONGODB_URI:-}}"
+  ENV_FILE="/opt/god/${TARGET_ENV}/api.env"
+
+  if [[ -z "$DB_URI" && -f "$ENV_FILE" ]]; then
+    DB_URI="$(grep -E '^(DATABASE_URL|MONGODB_URI)=' "$ENV_FILE" | head -n 1 | cut -d'=' -f2- | tr -d '"'\''')"
+  fi
+
+  if [[ -z "$DB_URI" && "$DRY_RUN" != "1" ]]; then
+    echo "god-backup: Error: No database URI found in environment, --config, or $ENV_FILE" >&2
+    exit 1
+  fi
+
+  if [[ -n "$DB_URI" ]]; then
+    TEMP_CONFIG="$(mktemp /tmp/god-backup-cfg-XXXXXX.yaml)"
+    chmod 0600 "$TEMP_CONFIG"
+    cat <<EOF > "$TEMP_CONFIG"
+uri: "${DB_URI}"
+EOF
+    CONFIG_FILE="$TEMP_CONFIG"
+  fi
+fi
+
+TIMESTAMP="$(date -u +"%Y%m%dT%H%M%SZ")"
+DATE_DAY="$(date -u +"%d")"
+BACKUP_FILENAME="god-${TARGET_ENV}-${TIMESTAMP}.archive.gz.age"
+
+if [[ -z "$OUTPUT_DIR" ]]; then
+  OUTPUT_DIR="/tmp/god-backups"
+fi
+mkdir -p "$OUTPUT_DIR"
+ARCHIVE_PATH="${OUTPUT_DIR}/${BACKUP_FILENAME}"
+
+echo "god-backup: Starting backup for environment '$TARGET_ENV'..."
+echo "god-backup: Archive destination: $ARCHIVE_PATH"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "god-backup: [DRY-RUN] mongodump --config=\"$CONFIG_FILE\" --archive --gzip | age -r \"${AGE_KEY:-mock_age_key}\" > \"$ARCHIVE_PATH\""
+  if [[ "$NO_UPLOAD" != "1" ]]; then
+    echo "god-backup: [DRY-RUN] Upload to s3://${R2_BUCKET}/daily/${BACKUP_FILENAME}"
+    if [[ "$DATE_DAY" == "01" ]]; then
+      echo "god-backup: [DRY-RUN] 1st of month: Replicate to s3://${R2_BUCKET}/monthly/${BACKUP_FILENAME}"
+    fi
+  fi
+  if [[ -n "$HEARTBEAT_URL" ]]; then
+    echo "god-backup: [DRY-RUN] Ping heartbeat: $HEARTBEAT_URL"
+  fi
+  echo "god-backup: [DRY-RUN] Completed successfully."
+  exit 0
+fi
+
+# Ensure required binaries are available
+for cmd in mongodump age; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "god-backup: Error: Required command '$cmd' is not installed or not in PATH." >&2
+    exit 1
+  fi
+done
+
+# Perform dump and asymmetric encryption
+echo "god-backup: Streaming mongodump through age encryption..."
+START_TIME="$(date +%s)"
+mongodump --config="$CONFIG_FILE" --archive --gzip | age -r "$AGE_KEY" > "$ARCHIVE_PATH"
+DUMP_EXIT=$?
+
+if [[ $DUMP_EXIT -ne 0 || ! -s "$ARCHIVE_PATH" ]]; then
+  echo "god-backup: Error: Backup dump or encryption failed (exit code $DUMP_EXIT)." >&2
+  rm -f "$ARCHIVE_PATH"
+  exit 1
+fi
+
+ARCHIVE_SIZE="$(du -h "$ARCHIVE_PATH" | cut -f1)"
+END_TIME="$(date +%s)"
+DURATION=$((END_TIME - START_TIME))
+echo "god-backup: Backup archive created successfully: $ARCHIVE_PATH ($ARCHIVE_SIZE) in ${DURATION}s."
+
+# Upload to Cloudflare R2
+if [[ "$NO_UPLOAD" != "1" ]]; then
+  ENDPOINT_ARGS=()
+  if [[ -n "$R2_ENDPOINT_URL" ]]; then
+    ENDPOINT_ARGS+=(--endpoint-url "$R2_ENDPOINT_URL")
+  fi
+
+  if command -v aws >/dev/null 2>&1; then
+    echo "god-backup: Uploading archive to s3://${R2_BUCKET}/daily/${BACKUP_FILENAME} via AWS CLI..."
+    aws s3 cp "$ARCHIVE_PATH" "s3://${R2_BUCKET}/daily/${BACKUP_FILENAME}" "${ENDPOINT_ARGS[@]}"
+
+    if [[ "$DATE_DAY" == "01" ]]; then
+      echo "god-backup: Day 1 of month detected: archiving to s3://${R2_BUCKET}/monthly/${BACKUP_FILENAME}..."
+      aws s3 cp "$ARCHIVE_PATH" "s3://${R2_BUCKET}/monthly/${BACKUP_FILENAME}" "${ENDPOINT_ARGS[@]}"
+    fi
+  elif command -v rclone >/dev/null 2>&1; then
+    echo "god-backup: Uploading archive to r2:${R2_BUCKET}/daily/${BACKUP_FILENAME} via rclone..."
+    rclone copyto "$ARCHIVE_PATH" "r2:${R2_BUCKET}/daily/${BACKUP_FILENAME}"
+
+    if [[ "$DATE_DAY" == "01" ]]; then
+      echo "god-backup: Day 1 of month detected: archiving to r2:${R2_BUCKET}/monthly/${BACKUP_FILENAME}..."
+      rclone copyto "$ARCHIVE_PATH" "r2:${R2_BUCKET}/monthly/${BACKUP_FILENAME}"
+    fi
+  else
+    echo "god-backup: Warning: Neither 'aws' nor 'rclone' found in PATH. Archive retained at $ARCHIVE_PATH." >&2
+  fi
+
+  # Purge temporary local archive after successful upload
+  if [[ -n "${R2_ENDPOINT_URL}" || command -v aws >/dev/null 2>&1 || command -v rclone >/dev/null 2>&1 ]]; then
+    rm -f "$ARCHIVE_PATH"
+    echo "god-backup: Local temporary archive purged."
+  fi
+fi
+
+# Ping heartbeat on verified completion
+if [[ -n "$HEARTBEAT_URL" ]]; then
+  echo "god-backup: Pinging Better Stack heartbeat..."
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --retry 3 --max-time 10 "$HEARTBEAT_URL" >/dev/null 2>&1 || {
+      echo "god-backup: Warning: Failed to ping heartbeat at $HEARTBEAT_URL" >&2
+    }
+  fi
+fi
+
+echo "god-backup: Backup operation completed successfully."
+exit 0

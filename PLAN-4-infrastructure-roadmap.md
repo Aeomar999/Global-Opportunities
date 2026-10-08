@@ -119,7 +119,7 @@ rollback any time: run the deploy workflow with an older sha
 | 4b | [GOD API on the VPS, staging first](PLAN-4b-api-on-vps.md) | SEC-112, SEC-089 (always-on host) | 4a; M1–M4; D1, D3, D5, D6 | 🟡 **Scaffolding implemented** (feature branch) |
 | 4c | [Build-once promotion pipeline](PLAN-4c-build-once-promotion.md) | SEC-115, SEC-112 (rollback), SEC-118 (OTA publishing) | 4b; M1, M6, M7; D2, D9 | **Done (PR #51, main)** |
 | 4d | [Observability](PLAN-4d-observability.md) | SEC-090, SEC-095 | 4a (Sentry can start right away); 4b for logs; M8 | 🟡 **Implemented** (feature branch) |
-| 4e | Backups and disaster recovery | SEC-089 (backups, restore drill) | 4b; M5, M9; D7, D8 | Not written |
+| 4e | [Backups and disaster recovery](PLAN-4e-backups-dr.md) | SEC-089 (backups, restore drill) | 4b; M5, M9; D7, D8 | 🟡 **Implemented** (feature branch) |
 | 4f | Cutover from Render, domain and decommission | SEC-111 (re-point), SEC-091, SEC-094, SEC-117 | 4b–4e; M10, M11 | Not written |
 | 4g | Ownership, access and the reusable app standard | SEC-114 | track M; written alongside 4b, finished after 4f | Not written |
 
@@ -160,7 +160,7 @@ Plans 4d and 4g can run in parallel with 4b/4c. Plan 4f must come last: monitori
 - Logs are searchable by request id for 14 days.
 - No cookie or token appears in any captured event (test).
 
-### 4e — Backups and disaster recovery
+### 4e — Backups and disaster recovery ([Implementation Plan](PLAN-4e-backups-dr.md) · *Implemented*)
 **Files:**
 - `deploy/bin/god-backup`: `mongodump --archive --gzip`, with credentials read from a mounted `--config` file, never from argv. Output goes through `age -r <public key>` and is uploaded to R2. It pings a heartbeat on success and also writes a `monthly/` copy on the 1st.
 - `platform/vps/systemd/god-backup-production.{service,timer}`.
