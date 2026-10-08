@@ -26,6 +26,16 @@
 
 ---
 
+## Document Index
+
+- **Security & Architecture Hardening:** [Finding Crosswalk](#finding-crosswalk-original-audit--task-id) • [Findings Summary](#findings-summary) • [P0 Ship Blockers](#p0--ship-blockers) • [P1 Launch Requirements](#p1--launch-requirements) • [P2 Hardening](#p2--hardening) • [P3 Hygiene](#p3--hygiene--code-quality--dx)
+- **Architecture Decisions:** [Open Questions & Resolutions (Q1–Q11)](#open-questions)
+- **Execution & Audit History:** [Central Progress Log](#progress-log)
+- **Product Backlog:** [App and Website Integration (Items 1–8)](#product-backlog--app-and-website-integration-added-2026-10-08)
+- **Backend Work Plan:** [Backend Implementation Tasks (BE-001–BE-027)](#backend-work-plan--everything-the-backend-still-has-to-do-added-2026-10-08)
+
+---
+
 ## Priority Definitions
 
 | Tier | Meaning | SLA | Gate |
@@ -224,7 +234,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-074 | Admin proxy configured for SameSite=Strict cookies | P1 | Admin + Deployment | ✅ Done |
 | SEC-075 | Admin cookie not accepted by data routes (only `/dashboard/summary`) | P1 | Backend auth | ✅ Done (admin data API + contract test, 8b68a3c) |
 | SEC-076 | Admin session expires at 15 min with no refresh | P1 | Admin + Backend | ✅ Done |
-| SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | ✅ Done (all pages on the admin API, mock files deleted, every admin update audited) |
+| SEC-077 | 20 of ~25 admin pages run on mock data | P1 | Admin app | 🟡 Core pages on live API; redesigned enterprise modules (Overview, Scorecard, Pipeline, Network, Settings) use modular mock services tracked for backend persistence in BE-001–BE-020 |
 | SEC-078 | Admin `next@16.2.10` has critical advisories | P1 | Admin deps | ✅ Done (upgraded to Next 16.3.8, builds cleanly) |
 | SEC-079 | Admin CSP allows `'unsafe-inline' 'unsafe-eval'` | P2 | Admin app | ✅ Done (unsafe-eval disabled in production next.config.ts) |
 | SEC-080 | Mobile app never refreshes tokens — sessions die at 15 min | P0 | Mobile app | ✅ Done (refreshes automatically on 401 via SecureStore) |
@@ -263,7 +273,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-113 | Local agent/IDE state and generated output tracked in git (`.claude/scheduled_tasks.lock`, `.idea/`, UTF-16 `kredibble-backend/test-results.json`, `server_*.log`; the Ralph-loop file was untracked in 712ea6c) | P2 | Repo hygiene | ✅ Done (Plan 4a) |
 | SEC-114 | Infrastructure owned by personal accounts (GitHub repo and GHCR namespace, Expo owner, Vercel scope, Render service) | P1 | Ownership | Open — Plan 4 track M, Plan 4g |
 | SEC-115 | No production approval gate and no build-once promotion: every push to `main` deploys straight to production | P1 | CI/CD | ✅ Done (Plan 4c; build-once image artifact, staging auto-deploy, automated smoke test, GitHub Environment production approval gate, workflow_dispatch rollback) |
-| SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | ✅ Done (Plan 4a, PR #35; Repo hygiene green in CI run 37253915991, Dependabot PRs #36–#44 open) |
+| SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | ✅ Done (Plan 4a, PR #35; Repo hygiene green in CI run 37253915991; Dependabot updates merged in PRs #36, #37, #38, #39, #42, #44, #48) |
 | SEC-117 | Known-password test accounts may exist in real databases (`@test.com` seed accounts; a test admin was created against production; the e2e admin login is a public default) | P1 | Data / Access | Open — Plan 4 track M5 |
 | SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | ✅ Done (Plan 4c; platforms scoped to ios/android in app.json and cd-app.yml, single-level staging/dev hostnames in eas.json) |
 
@@ -1154,10 +1164,12 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 ### SEC-077 — 20 of ~25 admin pages run on mock data
 **Evidence:** These pages import `src/lib/mock-*.ts`: analytics, community (+ detail), content/articles (+ detail), events (+ detail), grants (+ detail), hirers (+ detail), `opportunities/[id]`, reports (+ detail), seekers (+ detail), staff (+ invite, + detail), `verification/[id]`. Approve, suspend and resolve actions only change in-memory arrays.
 **Fix:** Wire each page to the admin API (SEC-075), deleting its mock file as you go, with empty, error and loading states. Admin mutations must be audit-logged.
-**Status:** Admin API routes for seekers, hirers, events, grants, articles, staff, community channels, verification companies, and verification documents have been added to `kredibble-backend/src/routes/admin-api.js` with combined auth (`requireAdminOrStaffAuth`). Admin client (`kredibble-admin/src/lib/api.ts`) updated with corresponding API methods. **Seekers and Hirers list/detail pages wired to API.** Remaining work: wire remaining admin pages to API, delete mock files, add loading/error/empty states.
+**Status:** Core administrative pages (seekers, hirers, verification, events, grants, articles, community moderation, staff roles) were connected to the backend API (`routes/admin-api.js`) in 1d484ed, with legacy mock files deleted.
+**Update (PR #59, 2026-10-08):** In PR #59 (`admin/partners-pipeline`), the admin portal was completely redesigned into an enterprise suite (Overview KPI grid, Scorecard & attainment calculation, Monthly reports, Partners & pipeline health, Network & ambassador referral engine, Beneficiaries database, Social posts & amplification, Settings for integrations/targets/stages, curated listings queue, and Programs). This architecture is cleanly abstracted behind service facades (`kredibble-admin/src/lib/services/*.ts`) operating on in-memory mock stores and validated by +9,812 lines of Playwright E2E tests. The backend endpoints to persist these new enterprise domains are now systematically tracked under `BE-001` through `BE-020` in the [Backend Work Plan](#backend-work-plan--everything-the-backend-still-has-to-do-added-2026-10-08).
 **Acceptance criteria:**
-- [x] `rg "lib/mock-" kredibble-admin/src/app` returns nothing (all `src/lib/mock-*.ts` deleted)
-- [x] Every admin action persists and appears in `AuditLog` (creates, deletes and, since 1a418c9, every admin update; staff invites audited)
+- [x] `rg "lib/mock-" kredibble-admin/src/app` returns nothing (legacy `src/lib/mock-*.ts` deleted)
+- [x] Every admin action persists and appears in `AuditLog` (creates, deletes, updates, and staff invites on core collections)
+- [ ] Enterprise redesign endpoints persisted to MongoDB and live API (tracked in BE-001–BE-020)
 
 ### SEC-078 — Admin Next.js has critical advisories
 **Evidence:** `npm audit --omit=dev` in `kredibble-admin`: `next@16.2.10` is critical (RCE in image optimisation and `next/og`, middleware bypass, SSRF, cache confusion); `postcss` and `sharp` are high.
@@ -1375,7 +1387,7 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Fix:** Plan 4a: `scripts/check-encoding.mjs`; a `Repo hygiene` CI job running the encoding check, actionlint, shellcheck and gitleaks; `.github/dependabot.yml`.
 **Acceptance criteria:**
 - [x] `Repo hygiene` runs on every PR and is green
-- [x] Dependabot opens weekly update PRs
+- [x] Dependabot opens weekly update PRs (PRs #36, #37, #38, #39, #42, #44, #48 merged to main)
 
 ### SEC-117 — Known-password test accounts may exist in real databases
 **Evidence:** the gitignored `kredibble-backend/scripts/seed-test-credentials.js` creates `admin@test.com`, `seeker@test.com` and `hirer@test.com` with weak passwords. The P0 section above records a test admin created against the production database. The e2e admin login (`test-admin@kredibble.com`) is a public default in `scripts/e2e-server.js`.
@@ -1602,13 +1614,19 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-04 | SEC-110–118 | — | Findings recorded | Plan 4 roadmap; SEC-089 and SEC-090 statuses corrected; SEC-111 hazard confirmed from CD App logs (no production update was published) |
 | 2026-10-05 | SEC-111 | 0652afd (PR #34) | ✅ Disarmed | eas.json production → kredibble-api.onrender.com (health 200); cd-backend restored to 374eae1 |
 | 2026-10-05 | SEC-113 | d5be84a (PR #35) | ✅ Done | test-results.json, .claude lock, .idea/, server logs untracked; files kept on disk |
-| 2026-10-05 | SEC-116 | a4b8345 (PR #35) | ✅ Done | check-encoding (8 node:test tests), Repo hygiene green (run 37253915991), Dependabot config (PRs #36–#44 open) |
+| 2026-10-05 | SEC-116 | a4b8345 (PR #35) | ✅ Done | check-encoding (8 node:test tests), Repo hygiene green (run 37253915991), Dependabot config (PRs #36–#48 merged) |
 | 2026-10-05 | SEC-112 | a4b8345 (PR #35) | 🟡 Health | tests/sec-112-environment-release.test.js 6/6; full suite: 18 passed, 216 passed; health endpoint reports environment and release; Dockerfile RELEASE_SHA build arg wired |
 | 2026-10-05 | SEC-112 | security/SEC-112-vps-staging-deploy | 🟡 Plan 4b | VPS staging deployment scaffolding complete: deploy/compose.yml (zero exposed ports, edge network alias), deploy/env/api.env.example, deploy/bin/god-deploy (health-gated deploy & rollback), deploy/bin/god-deploy-gate (SSH forced-command gate, 13 node:test tests green), platform/vps/bootstrap.sh, platform/vps/edge/{compose.yml,Caddyfile} (Caddy AOP & CF client IP), docs/infrastructure/VPS.md; decommissioned docker-compose.prod.yml & db scripts. |
 | 2026-10-05 | SEC-115, SEC-118, SEC-112 | security/SEC-115-build-once-promotion | ✅ Plan 4c | Immutable build-once promotion pipeline implemented: scripts/smoke.mjs & smoke.test.mjs (7/7 tests pass); kredibble-backend/scripts/migrate.js & migrations/001_ensure_indexes.js & migrate.test.js (4/4 tests pass); deploy/bin/god-deploy wired with containerized migrations; rewritten .github/workflows/cd-backend.yml (build once, staging auto-deploy, smoke test, GitHub Environment production approval, workflow_dispatch rollback); rewritten cd-admin.yml (staging first, production approval gate); rewritten cd-app.yml & eas.json (single-level hostnames, platforms scoped to ios/android resolving SEC-118); authored docs/infrastructure/DEPLOYMENT.md. |
+| 2026-10-06 | Dependabot updates | PRs #36, #37, #38, #39, #42, #44, #48 | ✅ Merged | Automated dependency bumps merged to main: Docker node:26-alpine (#36), admin React 19.3.0 & lucide-react 1.50.0 (#37), admin @types/node 26.6.4 (#38), admin eslint (#39), backend ioredis 6.0.0 (#42), backend bcryptjs 3.0.3 (#44), and backend patch/minor group (#48). |
+| 2026-10-07 | SEC-051 / Oracle fix | 33d1161 (PR #54) | ✅ Done | Removed requestId from error JSON response body to preserve timing/oracle identity. |
 | 2026-10-07 | SEC-090, SEC-095 | security/SEC-090-observability | ✅ Plan 4d | Full-stack observability implemented: backend @sentry/node instrumented via node --import ./src/instrument.js, PII-scrubbed beforeSend, requestId tagged; pino-http structured JSON access logs with credential redaction (SEC-095); admin @sentry/nextjs with /monitoring-tunnel preserving CSP connect-src 'self'; mobile @sentry/react-native with Expo plugin & channel matching; platform/vps/vector/vector.yaml & compose.yml for container logs and host metrics to Better Stack; authored docs/infrastructure/MONITORING.md runbook; 8/8 tests pass. |
 | 2026-10-07 | SEC-089 | security/SEC-089-backups-dr | ✅ Plan 4e | Automated asymmetric database backups and disaster recovery implemented: deploy/bin/god-backup (mongodump through age encryption to Cloudflare R2, monthly archiving, credentials via config file, Better Stack heartbeat); deploy/bin/god-restore (safe-by-default, production guard requires --i-understand-this-overwrites-production, stream decrypts directly to mongorestore); platform/vps/systemd/god-backup-production.{service,timer} (sandboxed nightly 02:00 UTC execution); kredibble-backend/scripts/verify-restore.js & tests/verify-restore.test.js (programmatic collection, document count, and freshness checks; 4/4 tests pass); deploy/bin/*.test.mjs (24/24 deploy suite tests pass); .github/workflows/restore-drill.yml (monthly and on-demand restore drill measuring RTO); authored docs/infrastructure/DISASTER_RECOVERY.md (answers 7 recovery questions across all 6 assets; deleted root draft). |
+| 2026-10-08 | SEC-089 / CI guard | 225a7cc (PR #56) | ✅ Done | Added gitleaks:allow and .gitleaksignore entry for age public test key to unblock CI. |
+| 2026-10-08 | Roadmap status sync | 327df12 (PR #57) | ✅ Done | Marked Plan 4d (observability) and Plan 4e (backups & DR) as Done in PLAN-4-infrastructure-roadmap.md. |
 | 2026-10-08 | task.md Checkbox Sync | docs/sync-task-md-checkboxes | ✅ Synchronized | Synchronized acceptance criteria checkboxes across SEC-001, 006, 009, 010, 042, 043, 044, 045, 047, 049, 050, 052, 054–059, 066–068, 070–074, 078, 080, 081, 084, 097, and 104 to reflect verified code on main; updated SEC-089 summary to reflect Plan 4e completion; 17 genuinely open operational/legal criteria remain. |
+| 2026-10-08 | Admin redesign (PR #59) | 48d4833, 05923cb (PR #59) | ✅ Redesigned | Comprehensive enterprise redesign of kredibble-admin: Overview KPI grid, Scorecard & attainment calculation, Monthly reports, Partners & pipeline health, Network & ambassador referral engine, Beneficiaries database, Social posts & monthly totals, Settings (integrations, targets, stages, account), Curated opportunities queue with vetting checkpoint, and Programs. Architected with modular service facades (src/lib/services/) and +9,812 lines of Playwright E2E tests. |
+| 2026-10-08 | Backlog & Work Plan | 05923cb (PR #59) | 📋 Planned | Ingested PO Product Backlog items 1–8 (Opportunity Listings, News Category, App Colours, Stakeholder Segments, Ambassador Registration, AI Assistant, Website–App Integration, Email Verification) and Backend Work Plan tasks BE-001–BE-027 into task.md. |
 
 ---
 
