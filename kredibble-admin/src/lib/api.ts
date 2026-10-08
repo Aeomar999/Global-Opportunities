@@ -765,6 +765,45 @@ export const updateRolesPermissions = async (toggles: Record<string, Record<stri
   });
 };
 
+// BE-002: Targets API
+export interface TargetApiItem {
+  kpi: string;
+  value: number;
+  effectiveFrom: string;
+  seq: number;
+  metric: string;
+  target: number;
+}
+
+export interface TargetHistoryApiItem {
+  id: string;
+  kpi: string;
+  value: number;
+  effectiveFrom: string;
+  previous: number | null;
+  changedBy?: string;
+  changedByName?: string;
+  changedAt: string;
+  seq: number;
+  replaced: boolean;
+}
+
+export const getTargets = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<TargetApiItem[]>(`/admin/targets${query}`);
+};
+
+export const getTargetHistory = async () => {
+  return request<TargetHistoryApiItem[]>("/admin/targets/history");
+};
+
+export const saveTargetsApi = async (effectiveFrom: string, targets: { kpi: string; value: number }[]) => {
+  return request<{ saved: number; effectiveFrom: string; targets: TargetApiItem[] }>("/admin/targets", {
+    method: "POST",
+    body: JSON.stringify({ effectiveFrom, targets }),
+  });
+};
+
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with
 // `npm run user:create-admin -- --email ... --name ...` in kredibble-backend.

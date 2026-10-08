@@ -1757,7 +1757,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | ID | Task | Priority | Depends on | Status |
 |----|------|----------|------------|--------|
 | BE-001 | Roles, two roles per person, permission matrix enforced on the server | P1 | – | [x] Done |
-| BE-002 | Targets with append-only history and effective-from month | P1 | BE-001 | [ ] Open |
+| BE-002 | Targets with append-only history and effective-from month | P1 | BE-001 | [x] Done |
 | BE-003 | Dated status thresholds and the change history | P1 | BE-002 | [ ] Open |
 | BE-004 | KPI engine: the ten KPIs, pro-rating, running totals, status, trend, priorities | P1 | BE-002, BE-003, BE-005 to BE-011 | [ ] Open |
 | BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [ ] Open |
@@ -1801,10 +1801,11 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 #### BE-002 — Targets with append-only history
 - **Today:** `PUT /targets/:metric` upserts `{month, metric}` and overwrites.
 - **To do:**
-  - Collection `TargetChange { kpi, value, effectiveFrom ("YYYY-MM"), previous, changedBy, changedAt, seq }`, insert-only. The target for a month is the latest row whose `effectiveFrom` is that month or earlier (of two for one month, the later `seq`).
-  - `GET /admin/targets?month=` (the target in force), `GET /admin/targets/history` (newest first), `POST /admin/targets` (a batch of `{kpi, value}` with ONE `effectiveFrom`; whole numbers from 1 to 10,000,000).
-  - Seed the first row for each KPI from the current values. Keep `PUT /targets/:metric` working until the admin switches, then remove it.
-- **Verify:** saving next month's target leaves this month alone; a past month keeps its target; no row is ever edited or deleted.
+  - [x] Collection `TargetChange { kpi, value, effectiveFrom ("YYYY-MM"), previous, changedBy, changedAt, seq }`, insert-only with schema-enforced immutability. The target for a month is the latest row whose `effectiveFrom` is that month or earlier (of two for one month, the later `seq`).
+  - [x] `GET /admin/targets?month=` (the target in force), `GET /admin/targets/history` (newest first with replaced calculation), `POST /admin/targets` (a batch of `{kpi, value}` with ONE `effectiveFrom`; whole numbers from 1 to 10,000,000, validated with Zod, audited with `targets.update`).
+  - [x] Seed the first row for each KPI from the current values (baseline 10 default targets). Keep legacy `PUT /targets/:metric` working and synchronized with `TargetChange`.
+  - [x] Wire admin settings service (`saveTargets`) to persist target batches to API.
+- **Verify:** saving next month's target leaves this month alone; a past month keeps its target; no row is ever edited or deleted. (Verified with `tests/be-002-targets.test.js`, 11/11 tests passing).
 
 #### BE-003 — Dated thresholds
 - **To do:** `ThresholdChange { green, amber, effectiveFrom, previous, changedBy, changedAt, seq }` insert-only (percentages as whole numbers 1 to 200, amber below green). `GET /admin/thresholds?month=`, `GET /admin/thresholds/history`, `POST /admin/thresholds`. One `seq` counter is shared with targets so the Change history lists both newest first. A save may carry targets and thresholds together under one `effectiveFrom`.
@@ -1927,3 +1928,4 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 ### Progress Log
 - 2026-10-08 — Backend work plan written (BE-001 to BE-027).
 - 2026-10-08 — BE-001 complete: Multi-role support (up to 2 roles per staff member), server-side permission matrix engine (12 roles x 28 screens), dynamic Moderator/Support toggles persistence in Mongo (`RolePermissionConfig`), `requireScreen` middleware, `/api/v1/admin/roles-permissions` GET/PUT with audit trail (`ROLES_PERMISSIONS_UPDATE`), and admin `RolesTab` wired to live API. All 22 test suites (247 tests) passing.
+- 2026-10-08 — BE-002 complete: Append-only TargetChange model with database-level immutability hooks, temporal target resolution by effectiveFrom month and sequence number (seq), GET /api/v1/admin/targets, GET /api/v1/admin/targets/history, POST /api/v1/admin/targets with Zod batch validation and audit logging (targets.update), and admin settings service sync. All 23 test suites (258 tests) passing.

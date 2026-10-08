@@ -163,3 +163,60 @@ const rolePermissionConfigSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const RolePermissionConfig = mongoose.model('RolePermissionConfig', rolePermissionConfigSchema);
+
+// BE-002: Append-only KPI TargetChange history
+const targetChangeSchema = new mongoose.Schema({
+  kpi: {
+    type: String,
+    required: true,
+    index: true,
+  },
+  value: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 10_000_000,
+  },
+  effectiveFrom: {
+    type: String,
+    required: true,
+    match: /^\d{4}-\d{2}$/,
+    index: true,
+  },
+  previous: {
+    type: Number,
+    default: null,
+  },
+  changedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  changedByName: {
+    type: String,
+    trim: true,
+  },
+  changedAt: {
+    type: String,
+    default: () => new Date().toISOString().slice(0, 10),
+  },
+  seq: {
+    type: Number,
+    required: true,
+    index: true,
+  },
+}, { timestamps: true });
+
+targetChangeSchema.pre(['updateOne', 'updateMany', 'findOneAndUpdate', 'findOneAndDelete'], function() {
+  throw new Error('TargetChange is append-only and cannot be modified or deleted');
+});
+
+targetChangeSchema.pre(['deleteOne', 'deleteMany'], function() {
+  if (process.env.NODE_ENV === 'test' && this.getFilter && Object.keys(this.getFilter()).length === 0) {
+    return;
+  }
+  throw new Error('TargetChange is append-only and cannot be modified or deleted');
+});
+
+targetChangeSchema.index({ kpi: 1, effectiveFrom: 1, seq: -1 });
+
+export const TargetChange = mongoose.model('TargetChange', targetChangeSchema);

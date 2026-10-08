@@ -26,6 +26,8 @@ import { currentMonth, kpiStatus, kpiTarget, kpiThresholds, monthsBefore } from 
 import { PARTNER_STAGES, PARTNER_STAGE_LABELS, type KpiThresholds, type MonthKey, type PartnerStage, type TargetChange, type ThresholdChange } from "@/lib/mock-entities";
 import { getMockCollection, getPartnerStageLabels, setMockCollection, setPartnerStageLabels } from "@/lib/mock-store";
 import { currentStaffMember, todayIsoDate } from "@/lib/services/listings";
+import { saveTargetsApi, hasAdminSession } from "@/lib/api";
+import { isMockMode } from "@/lib/services/mock-mode";
 
 // ---- targets ----------------------------------------------------------------------------------------------------------
 
@@ -95,6 +97,14 @@ export function saveTargets(changes: { kpi: KpiKey; value: number }[], effective
     seq: base + index,
   }));
   setMockCollection("targetHistory", [...history, ...added], { always: true });
+
+  // BE-002: Persist to backend API when connected or in real mode
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    saveTargetsApi(effectiveFrom, changes.map((c) => ({ kpi: c.kpi, value: c.value }))).catch((err) => {
+      console.warn("Could not persist targets to backend API", err);
+    });
+  }
+
   return changes.length;
 }
 

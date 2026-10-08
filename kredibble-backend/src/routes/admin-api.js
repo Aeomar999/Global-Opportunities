@@ -4,7 +4,7 @@ import { requireAdminOrStaffAuth } from '../middleware/auth.js';
 import { requirePortalRoles, requireScreen } from '../middleware/portal-auth.js';
 import { ApiError, asyncHandler, itemResponse, listResponse, notFound } from '../utils/http.js';
 import { Opportunity } from '../models/Platform.js';
-import { StaffMember } from '../models/User.js';
+import { StaffMember, User } from '../models/User.js';
 import {
   AdminActivity,
   Ambassador,
@@ -27,7 +27,10 @@ import {
   computeFullMatrix,
   invalidateTogglesCache,
 } from '../lib/permissions.js';
-import { auditReq, AUDIT_ACTIONS } from '../lib/audit.js';
+import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
+import { getTargetsForMonth, getTargetHistory, saveTargetBatch, KPI_KEYS } from '../lib/targets.js';
+import { targetsBatchSchema } from '../schemas/admin.js';
+import { validate } from '../middleware/validate.js';
 
 export const adminApiRouter = Router();
 
@@ -361,12 +364,57 @@ adminApiRouter.get('/social-posts/monthly-totals', requireAdminOrStaffAuth, requ
   itemResponse(res, { month, team, platforms: totals.map((item) => ({ platform: item._id, ...item, _id: undefined })) });
 }));
 
-adminApiRouter.get('/targets', requireAdminOrStaffAuth, requirePortalRoles(...ALL_PORTAL_ROLES), asyncHandler(async (req, res) => {
-  const { month } = monthBounds(req.query.month);
-  const targets = await MonthlyTarget.find({ month }).sort({ metric: 1 });
+// BE-002: GET /targets?month= resolves the 10 KPI targets in force for the requested month
+adminApiRouter.get('/targets', requireAdminOrStaffAuth, requireScreen('overview', 'view'), asyncHandler(async (req, res) => {
+  const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
+    ? req.query.month
+    : new Date().toISOString().slice(0, 7);
+  const targets = await getTargetsForMonth(month);
   listResponse(res, targets.map(toClientObject));
 }));
 
+// BE-002: GET /targets/history returns the append-only TargetChange log, newest first
+adminApiRouter.get('/targets/history', requireAdminOrStaffAuth, requireScreen('settings_admin', 'view'), asyncHandler(async (req, res) => {
+  const { page, skip, limit } = pageOptions(req.query);
+  const { history, total } = await getTargetHistory({ limit, skip });
+  listResponse(res, history.map(toClientObject), total, page, limit);
+}));
+
+// BE-002: POST /targets saves a batch of target changes with one effectiveFrom month
+adminApiRouter.post('/targets', requireAdminOrStaffAuth, requireScreen('settings_admin', 'edit'), validate(targetsBatchSchema), asyncHandler(async (req, res) => {
+  const { effectiveFrom, targets } = req.body;
+  const callerUser = await User.findById(req.auth.sub).select('name email').lean();
+  const callerName = callerUser?.name || req.auth.email || 'Admin';
+
+  const inserted = await saveTargetBatch({
+    targets,
+    effectiveFrom,
+    changedBy: req.auth.sub,
+    changedByName: callerName,
+  });
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.TARGETS_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.SETTINGS,
+    resourceId: inserted[0]?._id,
+    outcome: 'success',
+    metadata: {
+      targetKey: 'targets',
+      effectiveFrom,
+      changes: inserted.map((row) => ({ kpi: row.kpi, value: row.value, previous: row.previous, seq: row.seq })),
+    },
+  });
+
+  res.status(201).json({
+    data: {
+      saved: inserted.length,
+      effectiveFrom,
+      targets: inserted.map(toClientObject),
+    },
+  });
+}));
+
+// Legacy PUT /targets/:metric kept for backward compatibility until all callers migrate
 adminApiRouter.put('/targets/:metric', requireAdminOrStaffAuth, requirePortalRoles('Desk Lead', 'Admin Support'), asyncHandler(async (req, res) => {
   const { month } = monthBounds(req.body.month);
   const target = Number(req.body.target);
@@ -388,6 +436,18 @@ adminApiRouter.put('/targets/:metric', requireAdminOrStaffAuth, requirePortalRol
     } },
     { new: true, upsert: true, setDefaultsOnInsert: true },
   );
+
+  // If this metric matches one of the 10 KPIs and target >= 1, also append to TargetChange to keep history in sync
+  if (KPI_KEYS.includes(req.params.metric) && target >= 1) {
+    const callerUser = await User.findById(req.auth.sub).select('name email').lean();
+    await saveTargetBatch({
+      targets: [{ kpi: req.params.metric, value: Math.round(target) }],
+      effectiveFrom: month,
+      changedBy: req.auth.sub,
+      changedByName: callerUser?.name || 'Admin',
+    });
+  }
+
   itemResponse(res, toClientObject(record));
 }));
 

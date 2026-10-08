@@ -2,22 +2,34 @@ import { StaffMember } from '../models/User.js';
 import { ApiError } from '../utils/http.js';
 import { roleCan, normalizeLegacyRole, getEffectiveToggles } from '../lib/permissions.js';
 
-const normalizeRole = (role) => String(role || '').trim().toLowerCase();
+const toCanonicalRole = (role) => {
+  const norm = normalizeLegacyRole(role);
+  return norm.length > 0 ? norm[0] : String(role || '').trim().toLowerCase().replace(/\s+/g, '_');
+};
+
+const rawNormalized = (str) => String(str || '').trim().toLowerCase();
 
 export const requirePortalRoles = (...allowedRoles) => async (req, res, next) => {
   try {
     if (req.auth?.role === 'admin') return next();
 
     const staff = await StaffMember.findOne({ userId: req.auth?.sub, status: 'active' });
-    const staffRoles = staff?.roles?.length
-      ? staff.roles
-      : String(staff?.role || '')
-          .split(',')
-          .map(normalizeRole)
-          .filter(Boolean);
-    const permitted = allowedRoles.map(normalizeRole);
+    if (!staff) {
+      return next(new ApiError(403, 'You do not have access to this admin function'));
+    }
 
-    if (!staff || !staffRoles.some((role) => permitted.includes(role))) {
+    const staffRoles = staff.roles?.length
+      ? staff.roles
+      : String(staff.role || '').split(',').map((r) => r.trim()).filter(Boolean);
+
+    const hasMatch = staffRoles.some((sRole) =>
+      allowedRoles.some((aRole) =>
+        toCanonicalRole(sRole) === toCanonicalRole(aRole) ||
+        rawNormalized(sRole) === rawNormalized(aRole)
+      )
+    );
+
+    if (!hasMatch) {
       return next(new ApiError(403, 'You do not have access to this admin function'));
     }
     req.portalStaff = staff;
