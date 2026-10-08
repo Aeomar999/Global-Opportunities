@@ -209,4 +209,84 @@ export const pipelineStagesSchema = z.object({
   }),
 });
 
+export const AMBASSADOR_TIERS = [
+  'ambassador', 'senior', 'lead',
+  'Ambassador', 'Senior Ambassador', 'Campus Lead', 'Regional Lead',
+];
+
+export const AMBASSADOR_STATUSES = [
+  'applicant', 'onboarding', 'active', 'dormant',
+];
+
+export const MEMBER_TYPES = [
+  'student', 'graduate', 'staff', 'volunteer',
+];
+
+export const ambassadorCreateSchema = z.object({
+  body: z.object({
+    fullName: z.string().trim().min(1, 'fullName is required').max(200).optional(),
+    name: z.string().trim().min(1, 'name is required').max(200).optional(),
+    email: z.string().email('Invalid email').trim().toLowerCase(),
+    phone: z.string().max(50).optional(),
+    country: z.string().max(100).optional(),
+    city: z.string().max(100).optional(),
+    campus: z.string().max(200).optional(),
+    memberType: z.enum(MEMBER_TYPES).optional(),
+    description: z.string().max(2000).optional(),
+    roleTitle: z.string().max(200).optional(),
+    profilePhoto: z.string().max(1000).optional(),
+    photoUrl: z.string().max(1000).optional(),
+    tier: z.enum(AMBASSADOR_TIERS).optional(),
+    status: z.enum(AMBASSADOR_STATUSES).optional(),
+    assignedLeadId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid assignedLeadId').nullable().optional(),
+    trained: z.boolean().optional(),
+    linkedUserId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid linkedUserId').nullable().optional(),
+    linkedSeekerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid linkedSeekerId').nullable().optional(),
+    referralCode: z.string().regex(/^GOD-[2-9A-HJ-NP-Z]{6}$/, 'Invalid referralCode format (must be GOD- followed by 6 characters excluding 0, O, 1, I)').optional(),
+    joinedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'joinedAt must be YYYY-MM-DD').optional(),
+    dormantSince: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dormantSince must be YYYY-MM-DD').optional(),
+  }).refine((data) => Boolean(data.fullName || data.name), {
+    message: 'fullName or name is required',
+    path: ['fullName'],
+  }),
+});
+
+export const ambassadorUpdateSchema = z.object({
+  body: z.object({
+    fullName: z.string().trim().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    email: z.string().email('Invalid email').trim().toLowerCase().optional(),
+    phone: z.string().max(50).optional(),
+    country: z.string().max(100).optional(),
+    city: z.string().max(100).optional(),
+    campus: z.string().max(200).optional(),
+    memberType: z.enum(MEMBER_TYPES).optional(),
+    description: z.string().max(2000).optional(),
+    roleTitle: z.string().max(200).optional(),
+    profilePhoto: z.string().max(1000).optional(),
+    photoUrl: z.string().max(1000).optional(),
+    tier: z.enum(AMBASSADOR_TIERS).optional(),
+    status: z.enum(AMBASSADOR_STATUSES).optional(),
+    assignedLeadId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid assignedLeadId').nullable().optional(),
+    trained: z.boolean().optional(),
+    linkedUserId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid linkedUserId').nullable().optional(),
+    linkedSeekerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid linkedSeekerId').nullable().optional(),
+    referralCode: z.string().optional(),
+    joinedAt: z.string().optional(),
+    dormantSince: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dormantSince must be YYYY-MM-DD').nullable().optional(),
+  }),
+});
+
+export const amplificationCreateSchema = z.object({
+  body: z.object({
+    channel: z.string().trim().min(1, 'channel is required').max(100),
+    at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'at must be YYYY-MM-DD').optional(),
+    clicks: z.number().int().min(0).optional(),
+    applications: z.number().int().min(0).optional(),
+    listingId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid listingId').nullable().optional(),
+    note: z.string().max(2000).optional(),
+  }),
+});
+
+
 

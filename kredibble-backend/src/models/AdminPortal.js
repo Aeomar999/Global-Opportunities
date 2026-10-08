@@ -88,6 +88,16 @@ partnerSchema.pre('save', function() {
   }
 });
 
+export const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+export function generateReferralCode() {
+  let code = 'GOD-';
+  for (let i = 0; i < 6; i++) {
+    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
 const ambassadorSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   email: { type: String, required: true, lowercase: true, trim: true, index: true },
@@ -95,26 +105,74 @@ const ambassadorSchema = new mongoose.Schema({
   country: String,
   city: String,
   profilePhoto: String,
-  memberType: String,
+  memberType: { type: String, enum: ['student', 'graduate', 'staff', 'volunteer'], default: 'student' },
   description: String,
   roleTitle: String,
   campus: String,
-  tier: { type: String, enum: ['Ambassador', 'Senior Ambassador', 'Campus Lead', 'Regional Lead'], default: 'Ambassador' },
-  status: { type: String, enum: ['applicant', 'onboarding', 'active', 'dormant'], default: 'applicant', index: true },
+  tier: {
+    type: String,
+    enum: ['ambassador', 'senior', 'lead', 'Ambassador', 'Senior Ambassador', 'Campus Lead', 'Regional Lead'],
+    default: 'ambassador',
+    index: true,
+  },
+  status: {
+    type: String,
+    enum: ['applicant', 'onboarding', 'active', 'dormant'],
+    default: 'applicant',
+    index: true,
+  },
   assignedLeadId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   trained: { type: Boolean, default: false },
   linkedUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   referralCode: { type: String, unique: true, sparse: true },
+  joinedAt: { type: String, match: /^\d{4}-\d{2}-\d{2}$/, index: true },
+  dormantSince: { type: String, match: /^\d{4}-\d{2}-\d{2}$/, index: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   wordpressSync: syncField(),
 }, { timestamps: true });
 
+ambassadorSchema.virtual('name')
+  .get(function () { return this.fullName; })
+  .set(function (value) { this.fullName = value; });
+
+ambassadorSchema.virtual('photoUrl')
+  .get(function () { return this.profilePhoto; })
+  .set(function (value) { this.profilePhoto = value; });
+
+ambassadorSchema.virtual('linkedSeekerId')
+  .get(function () { return this.linkedUserId; })
+  .set(function (value) { this.linkedUserId = value; });
+
+ambassadorSchema.pre('save', async function () {
+  if (!this.joinedAt) {
+    this.joinedAt = new Date().toISOString().slice(0, 10);
+  }
+  if (!this.referralCode) {
+    let code = generateReferralCode();
+    while (await mongoose.models.Ambassador.exists({ referralCode: code })) {
+      code = generateReferralCode();
+    }
+    this.referralCode = code;
+  }
+  if (this.status === 'dormant' && !this.dormantSince) {
+    this.dormantSince = new Date().toISOString().slice(0, 10);
+  } else if (this.status && this.status !== 'dormant') {
+    this.dormantSince = undefined;
+  }
+});
+
 const ambassadorAmplificationSchema = new mongoose.Schema({
   ambassadorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ambassador', required: true, index: true },
   channel: { type: String, required: true },
+  at: { type: String, default: () => new Date().toISOString().slice(0, 10), index: true },
+  clicks: { type: Number, default: 0, min: 0 },
+  applications: { type: Number, default: 0, min: 0 },
+  listingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity' },
   note: String,
   loggedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
+
+ambassadorAmplificationSchema.index({ ambassadorId: 1, at: 1 });
 
 const beneficiarySchema = new mongoose.Schema({
   fullName: { type: String, required: true },
@@ -123,12 +181,15 @@ const beneficiarySchema = new mongoose.Schema({
   country: String,
   institution: String,
   sourceType: { type: String, required: true, enum: ['organic', 'ambassador-referral', 'event', 'partner-channel', 'bulk-import'], index: true },
-  ambassadorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ambassador' },
+  ambassadorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ambassador', index: true },
   opportunityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity' },
   verified: { type: Boolean, default: false, index: true },
+  verifiedAt: { type: String, index: true },
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   wordpressSync: syncField(),
 }, { timestamps: true });
+
+beneficiarySchema.index({ ambassadorId: 1, verified: 1, verifiedAt: 1 });
 
 const socialPostSchema = new mongoose.Schema({
   platform: { type: String, required: true, enum: ['Facebook', 'Instagram', 'X', 'LinkedIn', 'TikTok', 'YouTube', 'WhatsApp', 'other'], index: true },

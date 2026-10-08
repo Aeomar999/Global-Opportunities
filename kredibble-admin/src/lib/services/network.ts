@@ -20,6 +20,14 @@ import { getMockCollection, setMockCollection, subscribeMockStore } from "@/lib/
 import { seekerAccounts } from "@/lib/mock-seekers";
 import type { AmplificationLog, Ambassador, DatabaseRecord, MonthKey, SocialPlatform } from "@/lib/mock-entities";
 import { todayIsoDate } from "@/lib/services/listings";
+import {
+  createAmbassadorApi,
+  updateAmbassadorApi,
+  deleteAmbassadorApi,
+  logAmplificationApi,
+  hasAdminSession,
+} from "@/lib/api";
+import { isMockMode } from "@/lib/services/mock-mode";
 
 const MOCK_DELAY_MS = 300;
 // The first load of a page takes a moment (a skeleton shows). Every later read is instant, so a change is on screen at once.
@@ -199,6 +207,34 @@ export function createAmbassador(fields: AmbassadorFields): Ambassador {
     dormantSince: fields.status === "dormant" ? todayIsoDate() : undefined,
   };
   write([ambassador, ...existing]);
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    createAmbassadorApi({
+      name: ambassador.name,
+      fullName: ambassador.name,
+      email: ambassador.email,
+      phone: ambassador.phone,
+      country: ambassador.country,
+      city: ambassador.city,
+      campus: ambassador.campus,
+      memberType: ambassador.memberType,
+      description: ambassador.description,
+      roleTitle: ambassador.roleTitle,
+      photoUrl: ambassador.photoUrl,
+      profilePhoto: ambassador.photoUrl,
+      tier: ambassador.tier,
+      status: ambassador.status,
+      assignedLeadId: ambassador.assignedLeadId,
+      trained: ambassador.trained,
+      linkedSeekerId: ambassador.linkedSeekerId,
+      referralCode: ambassador.referralCode,
+      joinedAt: ambassador.joinedAt,
+      dormantSince: ambassador.dormantSince,
+    }).catch((err) => {
+      console.warn("Could not persist ambassador creation to backend API", err);
+    });
+  }
+
   return ambassador;
 }
 
@@ -215,7 +251,43 @@ export function updateAmbassador(id: string, fields: AmbassadorFields): Ambassad
     dormantSince: fields.status === "dormant" ? current.dormantSince ?? todayIsoDate() : undefined,
   };
   write(getMockCollection("ambassadors").map((ambassador) => (ambassador.id === id ? next : ambassador)));
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updateAmbassadorApi(id, {
+      name: next.name,
+      fullName: next.name,
+      email: next.email,
+      phone: next.phone,
+      country: next.country,
+      city: next.city,
+      campus: next.campus,
+      memberType: next.memberType,
+      description: next.description,
+      roleTitle: next.roleTitle,
+      photoUrl: next.photoUrl,
+      profilePhoto: next.photoUrl,
+      tier: next.tier,
+      status: next.status,
+      assignedLeadId: next.assignedLeadId,
+      trained: next.trained,
+      linkedSeekerId: next.linkedSeekerId,
+      dormantSince: next.dormantSince,
+    }).catch((err) => {
+      console.warn("Could not persist ambassador update to backend API", err);
+    });
+  }
+
   return next;
+}
+
+/** Removes an ambassador from the network. */
+export function removeAmbassador(id: string) {
+  write(getMockCollection("ambassadors").filter((ambassador) => ambassador.id !== id));
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    deleteAmbassadorApi(id).catch((err) => {
+      console.warn("Could not persist ambassador deletion to backend API", err);
+    });
+  }
 }
 
 /** Logs one share by hand: today, the channel and an optional note. It counts toward this month's shares at once. */
@@ -230,5 +302,17 @@ export function logAmplification(ambassadorId: string, channel: SocialPlatform, 
     note: note?.trim() || undefined,
   };
   setMockCollection("amplificationLogs", [log, ...getMockCollection("amplificationLogs")], { always: true });
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    logAmplificationApi(ambassadorId, {
+      channel,
+      note: log.note,
+      at: log.at,
+      clicks: 0,
+    }).catch((err) => {
+      console.warn("Could not persist amplification log to backend API", err);
+    });
+  }
+
   return log;
 }

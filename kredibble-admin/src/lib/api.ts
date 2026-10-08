@@ -1041,6 +1041,142 @@ export const updatePipelineStagesApi = async (stages?: Partial<PipelineStageLabe
   });
 };
 
+export interface AmbassadorApiRecord {
+  id: string;
+  name: string;
+  fullName?: string;
+  email: string;
+  phone?: string;
+  country: string;
+  city: string;
+  campus: string;
+  memberType: "student" | "graduate" | "staff" | "volunteer";
+  description?: string;
+  roleTitle?: string;
+  profilePhoto?: string;
+  photoUrl?: string;
+  tier: "ambassador" | "senior" | "lead";
+  status: "applicant" | "onboarding" | "active" | "dormant";
+  assignedLeadId?: string;
+  leadName?: string;
+  trained: boolean;
+  linkedUserId?: string;
+  linkedSeekerId?: string;
+  referralCode: string;
+  joinedAt: string;
+  dormantSince?: string;
+}
+
+export interface AmplificationLogApiRecord {
+  id: string;
+  ambassadorId: string;
+  channel: string;
+  at: string;
+  clicks: number;
+  applications?: number;
+  listingId?: string;
+  note?: string;
+}
+
+export interface NetworkSummaryApiRecord {
+  size: number;
+  active: number;
+  sharedActive: number;
+  activityRate: number | null;
+  month: string;
+}
+
+export interface LeaderboardRowApiRecord {
+  rank: number;
+  shares: number;
+  clicks: number;
+  signups: number;
+  ambassador: AmbassadorApiRecord;
+  sharesLogged?: number;
+  distinctReferredClicks?: number;
+  verifiedSignups?: number;
+  name?: string;
+  country?: string;
+  campus?: string;
+  tier?: string;
+}
+
+export const getAmbassadors = async (params?: {
+  status?: string;
+  tier?: string;
+  country?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.status) query.set("status", params.status);
+  if (params?.tier) query.set("tier", params.tier);
+  if (params?.country) query.set("country", params.country);
+  if (params?.q) query.set("q", params.q);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<AmbassadorApiRecord>(`/admin/ambassadors${queryString}`);
+};
+
+export const getAmbassadorById = async (id: string) => {
+  return request<AmbassadorApiRecord>(`/admin/ambassadors/${id}`);
+};
+
+export const getAmbassadorDetailApi = async (id: string, month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<{
+    ambassador: AmbassadorApiRecord;
+    leadName?: string;
+    logs: AmplificationLogApiRecord[];
+    stats: { shares: number; clicks: number; signups: number };
+  }>(`/admin/ambassadors/${id}/detail${query}`);
+};
+
+export const createAmbassadorApi = async (data: Partial<AmbassadorApiRecord>) => {
+  return request<AmbassadorApiRecord>("/admin/ambassadors", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateAmbassadorApi = async (id: string, data: Partial<AmbassadorApiRecord>) => {
+  return request<AmbassadorApiRecord>(`/admin/ambassadors/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteAmbassadorApi = async (id: string) => {
+  return request<{ id: string }>(`/admin/ambassadors/${id}`, {
+    method: "DELETE",
+  });
+};
+
+export const logAmplificationApi = async (
+  ambassadorId: string,
+  data: { channel: string; note?: string; clicks?: number; at?: string }
+) => {
+  return request<AmplificationLogApiRecord>(`/admin/ambassadors/${ambassadorId}/amplifications`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const getAmbassadorAmplificationsApi = async (ambassadorId: string) => {
+  return requestPage<AmplificationLogApiRecord>(`/admin/ambassadors/${ambassadorId}/amplifications`);
+};
+
+export const getNetworkSummaryApi = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<NetworkSummaryApiRecord>(`/admin/network/summary${query}`);
+};
+
+export const getLeaderboardApi = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<LeaderboardRowApiRecord[]>(`/admin/leaderboard${query}`);
+};
 
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with

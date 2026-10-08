@@ -1887,7 +1887,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | BE-004 | KPI engine: the ten KPIs, pro-rating, running totals, status, trend, priorities | P1 | BE-002, BE-003, BE-005 to BE-011 | [ ] Open |
 | BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [x] Done |
 | BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [x] Done |
-| BE-007 | Ambassadors and the Network: dates, statuses, amplification, leaderboard, summary | P1 | – | [ ] Open |
+| BE-007 | Ambassadors and the Network: dates, statuses, amplification, leaderboard, summary | P1 | – | [x] Done |
 | BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [ ] Open |
 | BE-009 | Social posts: logging, validation, monthly totals by platform | P2 | – | [ ] Open |
 | BE-010 | Testimonials: statuses, decisions, counts | P2 | – | [ ] Open |
@@ -1973,8 +1973,16 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 #### BE-007 — Ambassadors and the Network
 - **Today:** `fullName, email, phone, country, city, memberType, roleTitle, campus, tier, status, assignedLeadId, trained, linkedUserId, referralCode`; amplification logs exist.
-- **To do:** add `joinedAt` and `dormantSince`; statuses applicant, onboarding, active, dormant; tiers ambassador, senior, lead. "Active ambassadors" at the end of a month = joined by then and not dormant by then. Unique referral code ("GOD-" plus six characters, no 0 O 1 I). Amplification log `{ambassadorId, channel, at, clicks, note}`; signups attributed through verified database records. `GET /admin/network/summary?month=` (size, active, activity rate = active ambassadors who shared in the month ÷ active), `GET /admin/leaderboard?month=` (ranked by verified signups, then clicks, then shares, then name; applicants excluded).
-- **Verify:** the leaderboard order and the activity rate equal the admin's unit tests on the same data.
+- **To do:**
+  - [x] Add `joinedAt` (YYYY-MM-DD) and `dormantSince` (YYYY-MM-DD); statuses `applicant`, `onboarding`, `active`, `dormant`; tiers `ambassador`, `senior`, `lead`. Pre-save hooks automatically enforce joinedAt defaults, referral code assignment, and dormantSince syncing.
+  - [x] Active ambassadors at end of month: `joinedAt <= endOfMonth && (!dormantSince || dormantSince > endOfMonth)`.
+  - [x] Unique referral code format: `"GOD-"` plus 6 characters from `CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"` (32 chars, no `0`, `O`, `1`, `I`), auto-generated on create if missing, immutable on update.
+  - [x] Amplification log schema: `{ ambassadorId, channel, at, clicks, note }`, with creation endpoint `POST /admin/ambassadors/:id/amplifications` and list endpoint `GET /admin/ambassadors/:id/amplifications`.
+  - [x] Signups attributed through verified database records (`Beneficiary` with `ambassadorId`, `verified === true`, and `verifiedAt` within calendar month).
+  - [x] `GET /admin/network/summary?month=`: returns `{ size, active, sharedActive, activityRate, month }` where `activityRate = active > 0 ? sharedActive / active : null`.
+  - [x] `GET /admin/leaderboard?month=`: ranked deterministically by verified signups (desc), distinct clicks (desc), logged shares (desc), and ambassador name (asc); applicants excluded.
+  - [x] Admin network service facade (`kredibble-admin/src/lib/services/network.ts`) and API client (`kredibble-admin/src/lib/api.ts`) wired to live API endpoints.
+- **Verify:** the leaderboard order and the activity rate equal the admin's unit tests on the same data. (Verified with `tests/be-007-ambassadors.test.js`, 8/8 tests passing; full suite 27 suites / 295 tests passing; admin API contract tests passing; admin typecheck and eslint clean).
 
 #### BE-008 — Database records
 - **To do:** fields `source` (organic, ambassador, event, partner, import), `verified`, `verifiedAt`, `createdAt`, `addedBy`, `ambassadorId`, `listingId`. Verify sets `verifiedAt` to today; undo puts back exactly what was there. Duplicate check on create and update: first by email (trimmed, case-insensitive), then by phone (digits only, without the country calling code, the national 0 or a leading + or 00); return which field matched. `GET /admin/beneficiaries/pace?month=` (verified, target, pro-rated pace, status). `GET /admin/beneficiaries/sources?month=`. Pending count for the sidebar pill.
@@ -2070,6 +2078,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - 2026-10-08 — BE-003 complete: Dated status thresholds with shared monotonic sequence counter (seq), ThresholdChange model, GET /api/v1/admin/thresholds with effective-from temporal resolution, POST /api/v1/admin/thresholds with audit logging (thresholds.update), GET /api/v1/admin/targets/history unified feed sorted by seq, and admin settings service sync. All 24 test suites (269 tests) passing.
 - 2026-10-08 — BE-005 complete: Programs lifecycle model with deliveredAt date stamping, status flow (scheduled -> active -> delivered / cancelled), non-blocking operational warning for participant attendance exceeding targets, GET /api/v1/admin/programs/upcoming, dashboard metric counting programs delivered in month, and admin programs service wired. All 25 test suites (279 tests) passing.
 - 2026-10-08 — BE-006 complete: Partners stage history with append-only stageHistory ([{ stage, at, from, by, byName }]), POST /api/v1/admin/partners/:id/move transition endpoint returning closedChange, derived closed status (onboard/renew), GET /api/v1/admin/partners/pipeline-health with 6-month historical moving window conversion analytics and needed deals capacity planning, GET/PUT /api/v1/admin/settings/pipeline-stages with reset support and 24-character case-insensitive uniqueness validation, audit logging (partner.move, pipeline_stages.update), and admin partners/settings services wired. All 26 test suites (287 tests) passing.
+- 2026-10-08 — BE-007 complete: Ambassadors and the Network: joinedAt & dormantSince date tracking, canonical statuses (applicant, onboarding, active, dormant) and tiers (ambassador, senior, lead), referral code engine ("GOD-" + 6 glyphs from 32-char confusable-free alphabet), amplification logging (channel, clicks, note, at), verified beneficiary attribution, GET /api/v1/admin/network/summary, deterministic 4-tier GET /api/v1/admin/leaderboard, and admin network service wired. All 27 test suites (295 tests) passing.
 - 2026-10-08 — Mobile production readiness audit: Verified ~65–70% completion. Discovered registration broken on native iOS/Android (web DOM file inputs), missing email verification screen, canned AI assistant, unintegrated event payment flow, mock fallbacks in notifications/saved items, missing store policy links, and 0 screen UI tests. Filed SEC-119 through SEC-128 and authored Mobile Work Plan (MOB-010 to MOB-019).
 
 ---
