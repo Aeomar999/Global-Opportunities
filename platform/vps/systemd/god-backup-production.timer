@@ -1,0 +1,15 @@
+[Unit]
+Description=Nightly Database Backup Timer for GOD Production (SEC-089)
+Documentation=https://github.com/Aeomar999/Global-Opportunities/blob/main/docs/infrastructure/DISASTER_RECOVERY.md
+
+[Timer]
+# Run every night at 02:00:00 UTC
+OnCalendar=*-*-* 02:00:00 UTC
+# 5-minute randomized jitter to prevent burst network contention
+RandomizedDelaySec=300
+# Catch up if the server was offline when the timer was scheduled to fire
+Persistent=true
+Unit=god-backup-production.service
+
+[Install]
+WantedBy=timers.target

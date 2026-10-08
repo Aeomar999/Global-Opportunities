@@ -1,0 +1,198 @@
+name: Disaster Recovery Restore Drill
+
+on:
+  schedule:
+    # 04:00 UTC on the 1st of every calendar month
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+    inputs:
+      backup_archive:
+        description: 'Specific backup archive path/S3 key (leave empty for newest daily)'
+        required: false
+        default: ''
+
+concurrency:
+  group: restore-drill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  drill:
+    name: Monthly Restore & Integrity Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: backup-drill
+
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: kredibble-backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: kredibble-backend
+        run: npm ci --legacy-peer-deps
+
+      - name: Install system restore utilities (age, mongorestore, mongodump)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends age awscli curl
+          # Install MongoDB Database Tools
+          curl -fsSL https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.10.0.deb -o /tmp/tools.deb
+          sudo dpkg -i /tmp/tools.deb || sudo apt-get install -f -y
+          rm -f /tmp/tools.deb
+          mongodump --version
+          mongorestore --version
+          age --version
+
+      - name: Execute Restore Drill
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET || 'god-db-backups' }}
+          BACKUP_AGE_SECRET_KEY: ${{ secrets.BACKUP_AGE_SECRET_KEY }}
+          DRILL_HEARTBEAT_URL: ${{ secrets.DRILL_HEARTBEAT_URL }}
+          CUSTOM_ARCHIVE: ${{ github.event.inputs.backup_archive }}
+        run: |
+          set -euo pipefail
+          TEST_MONGO_URI="mongodb://localhost:27017/drill_verified"
+
+          # Check if remote production backup credentials are configured
+          if [[ -n "${BACKUP_AGE_SECRET_KEY:-}" && -n "${R2_ACCESS_KEY_ID:-}" ]]; then
+            echo "==> Production secrets found: Executing live R2 backup restore drill..."
+
+            export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+            export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+
+            ENDPOINT_FLAG=()
+            if [[ -n "${R2_ENDPOINT_URL:-}" ]]; then
+              ENDPOINT_FLAG=(--endpoint-url "$R2_ENDPOINT_URL")
+            fi
+
+            # Determine archive to restore
+            if [[ -n "$CUSTOM_ARCHIVE" ]]; then
+              TARGET_KEY="$CUSTOM_ARCHIVE"
+            else
+              echo "Listing newest archive from s3://${R2_BUCKET}/daily/..."
+              TARGET_KEY="$(aws s3 ls "s3://${R2_BUCKET}/daily/" "${ENDPOINT_FLAG[@]}" | sort | tail -n 1 | awk '{print $4}')"
+            fi
+
+            if [[ -z "$TARGET_KEY" ]]; then
+              echo "restore-drill: Error: No backup archive found in s3://${R2_BUCKET}/daily/" >&2
+              exit 1
+            fi
+
+            echo "Selected backup archive: $TARGET_KEY"
+            LOCAL_ARCHIVE="/tmp/latest_backup.archive.gz.age"
+            aws s3 cp "s3://${R2_BUCKET}/daily/${TARGET_KEY}" "$LOCAL_ARCHIVE" "${ENDPOINT_FLAG[@]}"
+
+            # Write age identity to private file
+            IDENTITY_FILE="/tmp/age-identity.txt"
+            (umask 077 && printf "%s\n" "$BACKUP_AGE_SECRET_KEY" > "$IDENTITY_FILE")
+
+            # Restore into isolated test MongoDB
+            ./deploy/bin/god-restore \
+              --archive "$LOCAL_ARCHIVE" \
+              --identity "$IDENTITY_FILE" \
+              --target-uri "$TEST_MONGO_URI"
+
+            rm -f "$IDENTITY_FILE" "$LOCAL_ARCHIVE"
+
+            # Verify integrity
+            echo "==> Verifying restored dataset integrity..."
+            node kredibble-backend/scripts/verify-restore.js \
+              --uri "$TEST_MONGO_URI" \
+              --max-age-hours 26 \
+              --min-users 1 \
+              --min-opportunities 1
+
+            # Ping Better Stack drill heartbeat on successful drill
+            if [[ -n "${DRILL_HEARTBEAT_URL:-}" ]]; then
+              echo "Pinging Better Stack drill heartbeat..."
+              curl -fsS --retry 3 --max-time 10 "$DRILL_HEARTBEAT_URL" || true
+            fi
+
+            echo "==> LIVE RESTORE DRILL COMPLETED SUCCESSFULLY."
+          else
+            echo "==> Notice: R2_ACCESS_KEY_ID or BACKUP_AGE_SECRET_KEY not set."
+            echo "==> Executing synthetic end-to-end backup, encryption, restore, and verification drill..."
+
+            # 1. Generate ephemeral age keypair
+            KEY_FILE="/tmp/temp-age.key"
+            age-keygen -o "$KEY_FILE"
+            PUB_KEY="$(age-keygen -y "$KEY_FILE")"
+
+            # 2. Seed test data in MongoDB
+            node -e '
+              import("mongoose").then(async ({ default: mongoose }) => {
+                await mongoose.connect("mongodb://localhost:27017/synthetic_source");
+                const now = new Date();
+                await mongoose.connection.db.collection("users").insertOne({
+                  email: "synthetic.admin@globalopportunitydesk.com",
+                  role: "admin",
+                  createdAt: now,
+                  updatedAt: now
+                });
+                await mongoose.connection.db.collection("opportunities").insertOne({
+                  title: "Principal Engineer",
+                  status: "approved",
+                  createdAt: now,
+                  updatedAt: now
+                });
+                await mongoose.connection.db.collection("seekers").insertOne({
+                  headline: "Staff Engineer",
+                  createdAt: now
+                });
+                await mongoose.connection.db.collection("hirers").insertOne({
+                  companyName: "Global Opportunity Desk",
+                  createdAt: now
+                });
+                await mongoose.disconnect();
+              });
+            '
+
+            # 3. Create backup using god-backup
+            mkdir -p /tmp/synthetic-backups
+            export DATABASE_URL="mongodb://localhost:27017/synthetic_source"
+            ./deploy/bin/god-backup \
+              --recipient "$PUB_KEY" \
+              --output-dir /tmp/synthetic-backups \
+              --no-upload
+
+            ARCHIVE="$(find /tmp/synthetic-backups -type f -name 'god-production-*.archive.gz.age' | head -n 1)"
+
+            # 4. Restore using god-restore into target test database
+            ./deploy/bin/god-restore \
+              --archive "$ARCHIVE" \
+              --identity "$KEY_FILE" \
+              --target-uri "$TEST_MONGO_URI"
+
+            # 5. Verify restored database
+            node kredibble-backend/scripts/verify-restore.js \
+              --uri "$TEST_MONGO_URI" \
+              --max-age-hours 1 \
+              --min-users 1 \
+              --min-opportunities 1
+
+            rm -rf /tmp/synthetic-backups "$KEY_FILE"
+            echo "==> SYNTHETIC RESTORE DRILL COMPLETED SUCCESSFULLY."
+          fi

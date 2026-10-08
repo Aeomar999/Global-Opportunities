@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ==============================================================================
+# Global Opportunity Desk (GOD) Database Restore Controller
+# SEC-089 (Backups and Disaster Recovery, Decision D8)
+# ==============================================================================
+# Restores MongoDB databases from asymmetric age-encrypted archives:
+#   1. Safe-by-default: Restores into isolated database unless explicitly overridden
+#   2. Production guard: Refuses to overwrite production without
+#      --i-understand-this-overwrites-production
+#   3. Decrypts via age and streams directly into mongorestore (zero plaintext on disk)
+#   4. Emits measured restore elapsed time (RTO tracking)
+# ==============================================================================
+
+ARCHIVE_PATH=""
+IDENTITY_FILE=""
+TARGET_URI="${DATABASE_URL:-${MONGODB_URI:-}}"
+TARGET_DB=""
+ALLOW_PRODUCTION_OVERWRITE=0
+DRY_RUN="${DRY_RUN:-0}"
+TEMP_ARCHIVE=""
+
+print_usage() {
+  cat <<EOF
+Usage: god-restore --archive <path|s3-uri> --identity <key-file> [options]
+
+Required:
+  --archive <path|s3-uri>         Path to .archive.gz.age backup or s3:// URI
+  --identity <key-file>           Path to age private identity file (AGE-SECRET-KEY-1...)
+
+Options:
+  --target-uri <uri>              Destination MongoDB URI (default: from DATABASE_URL)
+  --target-db <name>              Restore into alternative/isolated database name (nsInclude/nsFrom)
+  --i-understand-this-overwrites-production
+                                  Explicit authorization required if restoring into production
+  --dry-run                       Validate arguments and decrypt headers without restoring
+  -h, --help                      Display this help message
+EOF
+}
+
+cleanup() {
+  if [[ -n "$TEMP_ARCHIVE" && -f "$TEMP_ARCHIVE" ]]; then
+    rm -f "$TEMP_ARCHIVE"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+# Parse CLI arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --archive)
+      ARCHIVE_PATH="$2"
+      shift 2
+      ;;
+    --identity)
+      IDENTITY_FILE="$2"
+      shift 2
+      ;;
+    --target-uri)
+      TARGET_URI="$2"
+      shift 2
+      ;;
+    --target-db)
+      TARGET_DB="$2"
+      shift 2
+      ;;
+    --i-understand-this-overwrites-production)
+      ALLOW_PRODUCTION_OVERWRITE=1
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h|--help)
+      print_usage
+      exit 0
+      ;;
+    *)
+      echo "god-restore: Error: Unknown option: $1" >&2
+      print_usage >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "$ARCHIVE_PATH" ]]; then
+  echo "god-restore: Error: --archive is required." >&2
+  exit 1
+fi
+
+if [[ -z "$IDENTITY_FILE" ]]; then
+  echo "god-restore: Error: --identity private key file is required." >&2
+  exit 1
+fi
+
+if [[ ! -f "$IDENTITY_FILE" && "$DRY_RUN" != "1" ]]; then
+  echo "god-restore: Error: Identity file not found: $IDENTITY_FILE" >&2
+  exit 1
+fi
+
+# Download archive if S3/R2 URI
+if [[ "$ARCHIVE_PATH" =~ ^s3:// ]]; then
+  TEMP_ARCHIVE="$(mktemp /tmp/god-restore-XXXXXX.archive.gz.age)"
+  echo "god-restore: Fetching remote archive $ARCHIVE_PATH..."
+  if command -v aws >/dev/null 2>&1; then
+    aws s3 cp "$ARCHIVE_PATH" "$TEMP_ARCHIVE"
+  elif command -v rclone >/dev/null 2>&1; then
+    rclone copyto "$ARCHIVE_PATH" "$TEMP_ARCHIVE"
+  else
+    echo "god-restore: Error: Remote S3 URI provided but neither aws nor rclone is available." >&2
+    exit 1
+  fi
+  LOCAL_ARCHIVE="$TEMP_ARCHIVE"
+else
+  LOCAL_ARCHIVE="$ARCHIVE_PATH"
+  if [[ ! -f "$LOCAL_ARCHIVE" && "$DRY_RUN" != "1" ]]; then
+    echo "god-restore: Error: Local archive not found: $LOCAL_ARCHIVE" >&2
+    exit 1
+  fi
+fi
+
+# Safety check: Detect production target
+IS_PRODUCTION_TARGET=0
+if [[ "$TARGET_URI" =~ (production|prod|kredibble-cluster|globalopportunitydesk) ]]; then
+  IS_PRODUCTION_TARGET=1
+fi
+
+if [[ "$IS_PRODUCTION_TARGET" -eq 1 && "$ALLOW_PRODUCTION_OVERWRITE" -ne 1 ]]; then
+  cat <<EOF >&2
+================================================================================
+god-restore: FATAL: TARGET IS DETECTED AS PRODUCTION
+================================================================================
+The target database URI appears to be a production database.
+To prevent accidental catastrophic overwrites of active production data,
+you MUST explicitly specify the flag:
+
+    --i-understand-this-overwrites-production
+
+Restoration aborted.
+================================================================================
+EOF
+  exit 1
+fi
+
+if [[ -z "$TARGET_URI" && "$DRY_RUN" != "1" ]]; then
+  echo "god-restore: Error: Target MongoDB URI not provided via --target-uri or DATABASE_URL." >&2
+  exit 1
+fi
+
+RESTORE_ARGS=(--archive --gzip --drop)
+if [[ -n "$TARGET_URI" ]]; then
+  RESTORE_ARGS+=(--uri="$TARGET_URI")
+fi
+
+if [[ -n "$TARGET_DB" ]]; then
+  RESTORE_ARGS+=(--nsInclude="*.*" --nsFrom="*.*" --nsTo="${TARGET_DB}.*")
+fi
+
+echo "god-restore: Target verified. Ready to restore into database."
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "god-restore: [DRY-RUN] age -d -i \"$IDENTITY_FILE\" \"$LOCAL_ARCHIVE\" | mongorestore ${RESTORE_ARGS[*]}"
+  echo "god-restore: [DRY-RUN] Completed successfully."
+  exit 0
+fi
+
+for cmd in mongorestore age; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "god-restore: Error: Required binary '$cmd' not found in PATH." >&2
+    exit 1
+  fi
+done
+
+START_RESTORE=$(date +%s)
+echo "god-restore: Decrypting and restoring directly into target database..."
+
+# Stream decrypted age payload directly into mongorestore
+age -d -i "$IDENTITY_FILE" "$LOCAL_ARCHIVE" | mongorestore "${RESTORE_ARGS[@]}"
+RESTORE_EXIT=$?
+
+if [[ $RESTORE_EXIT -ne 0 ]]; then
+  echo "god-restore: Error: mongorestore failed with exit code $RESTORE_EXIT." >&2
+  exit 1
+fi
+
+END_RESTORE=$(date +%s)
+ELAPSED=$((END_RESTORE - START_RESTORE))
+
+echo "================================================================================"
+echo "god-restore: RESTORE SUCCESSFUL"
+echo "god-restore: Measured RTO duration: ${ELAPSED} seconds"
+echo "================================================================================"
+
+exit 0

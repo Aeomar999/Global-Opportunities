@@ -41,7 +41,8 @@ apt-get install -y --no-install-recommends \
   fail2ban \
   unattended-upgrades \
   jq \
-  net-tools
+  net-tools \
+  age
 
 echo "==> Step 2: Configuring unattended security updates..."
 systemctl enable --now unattended-upgrades
@@ -149,6 +150,7 @@ mkdir -p \
   /opt/god/development \
   /opt/god/bin \
   /opt/god/deploy \
+  /opt/god/backup \
   /opt/platform/edge \
   /opt/platform/vector
 
@@ -163,11 +165,13 @@ echo "     /etc/ssl/cloudflare/origin.crt"
 echo "     /etc/ssl/cloudflare/origin.key (chmod 600)"
 echo "2. Add the CI deploy SSH public key to /home/deploy/.ssh/authorized_keys with:"
 echo '     command="/opt/god/bin/god-deploy-gate",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty ssh-ed25519 <KEY> CI Deploy Key'
-echo "3. Copy deployment scripts into /opt/god/bin/ and make them executable:"
-echo "     cp deploy/bin/god-deploy /opt/god/bin/"
-echo "     cp deploy/bin/god-deploy-gate /opt/god/bin/"
-echo "     chmod 755 /opt/god/bin/god-deploy*"
+echo "3. Copy deployment and backup scripts into /opt/god/bin/ and make them executable:"
+echo "     cp deploy/bin/god-deploy deploy/bin/god-deploy-gate deploy/bin/god-backup deploy/bin/god-restore /opt/god/bin/"
+echo "     chmod 755 /opt/god/bin/god-*"
 echo "4. Copy deploy/compose.yml to /opt/god/deploy/compose.yml"
 echo "5. Create /opt/god/<env>/api.env (chmod 600, deploy:deploy)"
-echo "6. Launch edge reverse proxy: docker compose -f platform/vps/edge/compose.yml up -d"
+echo "6. Install backup systemd service and timer:"
+echo "     cp platform/vps/systemd/god-backup-production.* /etc/systemd/system/"
+echo "     systemctl daemon-reload && systemctl enable --now god-backup-production.timer"
+echo "7. Launch edge reverse proxy: docker compose -f platform/vps/edge/compose.yml up -d"
 echo "--------------------------------------------------------------------------------"
