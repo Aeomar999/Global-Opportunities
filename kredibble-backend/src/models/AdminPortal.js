@@ -43,22 +43,50 @@ programSchema.pre('save', function() {
   }
 });
 
+const partnerStageEntrySchema = new mongoose.Schema({
+  stage: { type: String, required: true, enum: ['prospect', 'outreach', 'proposal', 'MOU', 'mou', 'onboard', 'renew'] },
+  at: { type: String, default: () => new Date().toISOString().slice(0, 10) },
+  from: { type: String, enum: ['prospect', 'outreach', 'proposal', 'MOU', 'mou', 'onboard', 'renew'] },
+  by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  byName: { type: String, trim: true },
+}, { _id: false });
+
 const partnerSchema = new mongoose.Schema({
   organizationName: { type: String, required: true },
-  partnerType: { type: String, required: true, enum: ['corporate', 'university', 'foundation', 'NGO', 'government', 'media', 'tech'] },
-  stage: { type: String, required: true, enum: ['prospect', 'outreach', 'proposal', 'MOU', 'onboard', 'renew'], default: 'prospect', index: true },
+  partnerType: { type: String, required: true, enum: ['corporate', 'university', 'foundation', 'NGO', 'ngo', 'government', 'media', 'tech', 'media_tech'] },
+  stage: { type: String, required: true, enum: ['prospect', 'outreach', 'proposal', 'MOU', 'mou', 'onboard', 'renew'], default: 'prospect', index: true },
   closed: { type: Boolean, default: false, index: true },
   assignedOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   country: String,
+  sector: String,
   contactName: String,
   contactEmail: String,
   contactPhone: String,
   provides: String,
   sourcedBy: String,
   notes: String,
+  stageHistory: { type: [partnerStageEntrySchema], default: [] },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   wordpressSync: syncField(),
 }, { timestamps: true });
+
+partnerSchema.virtual('name').get(function() { return this.organizationName; }).set(function(v) { this.organizationName = v; });
+partnerSchema.virtual('type').get(function() { return this.partnerType; }).set(function(v) { this.partnerType = v; });
+partnerSchema.virtual('ownerId').get(function() { return this.assignedOwnerId ? this.assignedOwnerId.toString() : undefined; }).set(function(v) { this.assignedOwnerId = v; });
+partnerSchema.virtual('sourcedVia').get(function() { return this.sourcedBy; }).set(function(v) { this.sourcedBy = v; });
+
+partnerSchema.pre('save', function() {
+  const isClosed = ['onboard', 'renew'].includes(String(this.stage).toLowerCase());
+  this.closed = isClosed;
+
+  if (!this.stageHistory || this.stageHistory.length === 0) {
+    this.stageHistory = [{
+      stage: this.stage || 'prospect',
+      at: new Date().toISOString().slice(0, 10),
+      by: this.createdBy,
+    }];
+  }
+});
 
 const ambassadorSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
@@ -179,6 +207,30 @@ const rolePermissionConfigSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const RolePermissionConfig = mongoose.model('RolePermissionConfig', rolePermissionConfigSchema);
+
+export const DEFAULT_PIPELINE_STAGE_LABELS = Object.freeze({
+  prospect: 'Prospect',
+  outreach: 'Outreach',
+  proposal: 'Proposal',
+  mou: 'MOU',
+  onboard: 'Onboard',
+  renew: 'Renew',
+});
+
+const pipelineStageConfigSchema = new mongoose.Schema({
+  key: { type: String, default: 'global', unique: true },
+  stages: {
+    prospect: { type: String, default: 'Prospect' },
+    outreach: { type: String, default: 'Outreach' },
+    proposal: { type: String, default: 'Proposal' },
+    mou: { type: String, default: 'MOU' },
+    onboard: { type: String, default: 'Onboard' },
+    renew: { type: String, default: 'Renew' },
+  },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+}, { timestamps: true });
+
+export const PipelineStageConfig = mongoose.model('PipelineStageConfig', pipelineStageConfigSchema);
 
 // BE-002: Append-only KPI TargetChange history
 const targetChangeSchema = new mongoose.Schema({

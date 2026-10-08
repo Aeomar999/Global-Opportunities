@@ -116,4 +116,97 @@ export const programUpdateSchema = z.object({
   }),
 });
 
+export const PARTNER_TYPES = [
+  'corporate', 'university', 'foundation', 'NGO', 'ngo', 'government', 'media', 'tech', 'media_tech',
+];
+
+export const PARTNER_STAGES = [
+  'prospect', 'outreach', 'proposal', 'MOU', 'mou', 'onboard', 'renew',
+];
+
+export const CANONICAL_STAGE_KEYS = [
+  'prospect', 'outreach', 'proposal', 'mou', 'onboard', 'renew',
+];
+
+export const partnerCreateSchema = z.object({
+  body: z.object({
+    organizationName: z.string().trim().min(1, 'organizationName is required').max(200).optional(),
+    name: z.string().trim().min(1, 'name is required').max(200).optional(),
+    partnerType: z.enum(PARTNER_TYPES).optional(),
+    type: z.enum(PARTNER_TYPES).optional(),
+    stage: z.enum(PARTNER_STAGES).default('prospect'),
+    assignedOwnerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ownerId').nullable().optional(),
+    ownerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ownerId').nullable().optional(),
+    country: z.string().max(100).optional(),
+    sector: z.string().max(100).optional(),
+    contactName: z.string().max(100).optional(),
+    contactEmail: z.string().email('Invalid email').or(z.literal('')).optional(),
+    contactPhone: z.string().max(50).optional(),
+    provides: z.string().max(1000).optional(),
+    sourcedBy: z.string().max(200).optional(),
+    sourcedVia: z.string().max(200).optional(),
+    notes: z.string().max(2000).optional(),
+  }).refine((data) => Boolean(data.organizationName || data.name), {
+    message: 'organizationName or name is required',
+    path: ['organizationName'],
+  }).refine((data) => Boolean(data.partnerType || data.type), {
+    message: 'partnerType or type is required',
+    path: ['partnerType'],
+  }),
+});
+
+export const partnerUpdateSchema = z.object({
+  body: z.object({
+    organizationName: z.string().trim().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    partnerType: z.enum(PARTNER_TYPES).optional(),
+    type: z.enum(PARTNER_TYPES).optional(),
+    stage: z.enum(PARTNER_STAGES).optional(),
+    assignedOwnerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ownerId').nullable().optional(),
+    ownerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ownerId').nullable().optional(),
+    country: z.string().max(100).optional(),
+    sector: z.string().max(100).optional(),
+    contactName: z.string().max(100).optional(),
+    contactEmail: z.string().email('Invalid email').or(z.literal('')).optional(),
+    contactPhone: z.string().max(50).optional(),
+    provides: z.string().max(1000).optional(),
+    sourcedBy: z.string().max(200).optional(),
+    sourcedVia: z.string().max(200).optional(),
+    notes: z.string().max(2000).optional(),
+  }),
+});
+
+export const partnerMoveSchema = z.object({
+  body: z.object({
+    to: z.enum(PARTNER_STAGES, { errorMap: () => ({ message: 'Invalid target stage' }) }),
+  }),
+});
+
+export const pipelineStagesSchema = z.object({
+  body: z.object({
+    reset: z.boolean().optional(),
+    stages: z.record(z.string()).optional(),
+    prospect: z.string().optional(),
+    outreach: z.string().optional(),
+    proposal: z.string().optional(),
+    mou: z.string().optional(),
+    onboard: z.string().optional(),
+    renew: z.string().optional(),
+  }).refine((body) => {
+    if (body.reset === true) return true;
+    const stages = body.stages || body;
+    for (const key of CANONICAL_STAGE_KEYS) {
+      const val = stages[key];
+      if (typeof val !== 'string' || val.trim().length < 1 || val.trim().length > 24) {
+        return false;
+      }
+    }
+    const labels = CANONICAL_STAGE_KEYS.map((key) => String(stages[key]).trim().toLowerCase());
+    return new Set(labels).size === CANONICAL_STAGE_KEYS.length;
+  }, {
+    message: 'Each of the six stage labels must be 1 to 24 characters and unique from each other',
+    path: ['stages'],
+  }),
+});
+
 

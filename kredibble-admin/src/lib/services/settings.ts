@@ -26,7 +26,7 @@ import { currentMonth, kpiStatus, kpiTarget, kpiThresholds, monthsBefore } from 
 import { PARTNER_STAGES, PARTNER_STAGE_LABELS, type KpiThresholds, type MonthKey, type PartnerStage, type TargetChange, type ThresholdChange } from "@/lib/mock-entities";
 import { getMockCollection, getPartnerStageLabels, setMockCollection, setPartnerStageLabels } from "@/lib/mock-store";
 import { currentStaffMember, todayIsoDate } from "@/lib/services/listings";
-import { saveTargetsApi, saveThresholdsApi, hasAdminSession } from "@/lib/api";
+import { saveTargetsApi, saveThresholdsApi, updatePipelineStagesApi, hasAdminSession } from "@/lib/api";
 import { isMockMode } from "@/lib/services/mock-mode";
 
 // ---- targets ----------------------------------------------------------------------------------------------------------
@@ -286,10 +286,22 @@ export function validateStageLabels(labels: Record<PartnerStage, string>): Parti
 
 export function saveStageLabels(labels: Record<PartnerStage, string>): void {
   setPartnerStageLabels(labels);
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updatePipelineStagesApi(labels).catch((err) => {
+      console.warn("Could not persist stage labels to backend API", err);
+    });
+  }
 }
 
 export function resetStageLabels(): void {
   setPartnerStageLabels({ ...PARTNER_STAGE_LABELS });
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updatePipelineStagesApi(undefined, true).catch((err) => {
+      console.warn("Could not reset stage labels on backend API", err);
+    });
+  }
 }
 
 // ---- integrations (write-only credentials) ---------------------------------------------------------------------------

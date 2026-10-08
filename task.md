@@ -1886,7 +1886,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | BE-003 | Dated status thresholds and the change history | P1 | BE-002 | [x] Done |
 | BE-004 | KPI engine: the ten KPIs, pro-rating, running totals, status, trend, priorities | P1 | BE-002, BE-003, BE-005 to BE-011 | [ ] Open |
 | BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [x] Done |
-| BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [ ] Open |
+| BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [x] Done |
 | BE-007 | Ambassadors and the Network: dates, statuses, amplification, leaderboard, summary | P1 | – | [ ] Open |
 | BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [ ] Open |
 | BE-009 | Social posts: logging, validation, monthly totals by platform | P2 | – | [ ] Open |
@@ -1965,10 +1965,11 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 #### BE-006 — Partners and the pipeline
 - **Today:** `stage` and `closed` only.
 - **To do:**
-  - `stageHistory: [{ stage, at, by }]` appended on every move (first entry on create). `POST /admin/partners/:id/move { to }`. A partner is closed when its stage is `onboard` or `renew` (derived, never stored on its own).
-  - `GET /admin/partners/pipeline-health?month=`: open deals now, deals needed (target × reached Outreach ÷ closed, rounded up), close rate over the last 6 months, status healthy (ratio 1 or more), thin (0.6 or more), critical, or unknown ("not enough data").
-  - Stage names: `GET` and `PUT /admin/settings/pipeline-stages` (six display names, each 1 to 24 characters and different from the others, case-insensitive; the keys and what counts as closed never change) and a reset.
-- **Verify:** "Partners onboarded" for a month counts partners that moved to Onboard or Renew in it.
+  - [x] `stageHistory: [{ stage, at, by, byName }]` appended on every move (first entry on create). `POST /admin/partners/:id/move { to }` returns `{ partner, from, to, closedChange }`. A partner is closed when its stage is `onboard` or `renew` (derived, synced on pre-save, never stored independently).
+  - [x] `GET /admin/partners/pipeline-health?month=`: open deals now, deals needed (target × reached Outreach ÷ closed, rounded up), close rate over the last 6 months, status healthy (ratio 1 or more), thin (0.6 or more), critical, or unknown ("not enough data").
+  - [x] Stage names: `GET` and `PUT /admin/settings/pipeline-stages` (six display names, each 1 to 24 characters and case-insensitive unique; keys and closed status never change) and `{ reset: true }`.
+  - [x] Admin services wired: `kredibble-admin/src/lib/api.ts` typed methods, `kredibble-admin/src/lib/services/partners.ts` live moves/crud, and `kredibble-admin/src/lib/services/settings.ts` stage labels sync.
+- **Verify:** "Partners onboarded" for a month counts partners that moved to Onboard or Renew in it. (Verified with `tests/be-006-partners.test.js`, 8/8 tests passing; full suite 26 suites / 287 tests passing; admin contract tests passing; admin typecheck and eslint clean).
 
 #### BE-007 — Ambassadors and the Network
 - **Today:** `fullName, email, phone, country, city, memberType, roleTitle, campus, tier, status, assignedLeadId, trained, linkedUserId, referralCode`; amplification logs exist.
@@ -2066,6 +2067,9 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - 2026-10-08 — Backend work plan written (BE-001 to BE-027).
 - 2026-10-08 — BE-001 complete: Multi-role support (up to 2 roles per staff member), server-side permission matrix engine (12 roles x 28 screens), dynamic Moderator/Support toggles persistence in Mongo (`RolePermissionConfig`), `requireScreen` middleware, `/api/v1/admin/roles-permissions` GET/PUT with audit trail (`ROLES_PERMISSIONS_UPDATE`), and admin `RolesTab` wired to live API. All 22 test suites (247 tests) passing.
 - 2026-10-08 — BE-002 complete: Append-only TargetChange model with database-level immutability hooks, temporal target resolution by effectiveFrom month and sequence number (seq), GET /api/v1/admin/targets, GET /api/v1/admin/targets/history, POST /api/v1/admin/targets with Zod batch validation and audit logging (targets.update), and admin settings service sync. All 23 test suites (258 tests) passing.
+- 2026-10-08 — BE-003 complete: Dated status thresholds with shared monotonic sequence counter (seq), ThresholdChange model, GET /api/v1/admin/thresholds with effective-from temporal resolution, POST /api/v1/admin/thresholds with audit logging (thresholds.update), GET /api/v1/admin/targets/history unified feed sorted by seq, and admin settings service sync. All 24 test suites (269 tests) passing.
+- 2026-10-08 — BE-005 complete: Programs lifecycle model with deliveredAt date stamping, status flow (scheduled -> active -> delivered / cancelled), non-blocking operational warning for participant attendance exceeding targets, GET /api/v1/admin/programs/upcoming, dashboard metric counting programs delivered in month, and admin programs service wired. All 25 test suites (279 tests) passing.
+- 2026-10-08 — BE-006 complete: Partners stage history with append-only stageHistory ([{ stage, at, from, by, byName }]), POST /api/v1/admin/partners/:id/move transition endpoint returning closedChange, derived closed status (onboard/renew), GET /api/v1/admin/partners/pipeline-health with 6-month historical moving window conversion analytics and needed deals capacity planning, GET/PUT /api/v1/admin/settings/pipeline-stages with reset support and 24-character case-insensitive uniqueness validation, audit logging (partner.move, pipeline_stages.update), and admin partners/settings services wired. All 26 test suites (287 tests) passing.
 - 2026-10-08 — Mobile production readiness audit: Verified ~65–70% completion. Discovered registration broken on native iOS/Android (web DOM file inputs), missing email verification screen, canned AI assistant, unintegrated event payment flow, mock fallbacks in notifications/saved items, missing store policy links, and 0 screen UI tests. Filed SEC-119 through SEC-128 and authored Mobile Work Plan (MOB-010 to MOB-019).
 
 ---

@@ -17,6 +17,8 @@ import {
   SocialPost,
   Testimonial,
   RolePermissionConfig,
+  PipelineStageConfig,
+  DEFAULT_PIPELINE_STAGE_LABELS,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
@@ -30,7 +32,16 @@ import {
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 import { getTargetsForMonth, getTargetHistory, saveTargetBatch, KPI_KEYS } from '../lib/targets.js';
 import { getThresholdsInForce, getThresholdHistory, saveThresholdChange, getCombinedChangeHistory } from '../lib/thresholds.js';
-import { targetsBatchSchema, thresholdsSchema, programSchema, programUpdateSchema } from '../schemas/admin.js';
+import {
+  targetsBatchSchema,
+  thresholdsSchema,
+  programSchema,
+  programUpdateSchema,
+  partnerCreateSchema,
+  partnerUpdateSchema,
+  partnerMoveSchema,
+  pipelineStagesSchema,
+} from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
 
 export const adminApiRouter = Router();
@@ -75,12 +86,78 @@ const monthBounds = (month) => {
 const logActivity = (actorId, action, entityType, document) =>
   AdminActivity.create({ actorId, action, entityType, entityId: document._id, summary: document.title || document.name || document.fullName || document.organizationName });
 
-const preparePartner = (data) => {
-  const next = { ...data };
-  if (String(next.stage || '').toLowerCase() === 'mou') next.stage = 'MOU';
-  if (next.stage) next.closed = ['onboard', 'renew'].includes(next.stage);
-  else delete next.closed;
-  return next;
+export const toPartnerClientObject = (document) => {
+  if (!document) return null;
+  const value = document.toJSON ? document.toJSON({ virtuals: true }) : document;
+  const ownerDoc = value.assignedOwnerId;
+  const ownerName = ownerDoc && typeof ownerDoc === 'object'
+    ? (ownerDoc.name || undefined)
+    : undefined;
+  const ownerIdStr = ownerDoc && typeof ownerDoc === 'object'
+    ? (ownerDoc._id?.toString() || ownerDoc.id)
+    : (ownerDoc ? ownerDoc.toString() : undefined);
+
+  const stage = value.stage || 'prospect';
+  const isClosed = ['onboard', 'renew'].includes(String(stage).toLowerCase());
+
+  return {
+    id: value.id || value._id?.toString(),
+    ...value,
+    _id: undefined,
+    __v: undefined,
+    name: value.name || value.organizationName,
+    organizationName: value.organizationName || value.name,
+    type: value.type || value.partnerType,
+    partnerType: value.partnerType || value.type,
+    ownerId: ownerIdStr,
+    assignedOwnerId: ownerIdStr,
+    ownerName,
+    stage,
+    stageHistory: (value.stageHistory || []).map((entry) => ({
+      stage: entry.stage,
+      at: entry.at,
+      from: entry.from,
+      by: entry.by?._id?.toString() || entry.by?.toString() || entry.by,
+      byName: entry.byName,
+    })),
+    closed: isClosed,
+    sourcedVia: value.sourcedVia || value.sourcedBy,
+    sourcedBy: value.sourcedBy || value.sourcedVia,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+};
+
+export const preparePartner = (data = {}, actorId, existing = {}) => {
+  const organizationName = (data.organizationName || data.name || existing.organizationName || '').trim();
+  const partnerType = data.partnerType || data.type || existing.partnerType || 'corporate';
+  let stage = data.stage || existing.stage || 'prospect';
+  if (String(stage).toLowerCase() === 'mou') stage = 'mou';
+
+  const assignedOwnerId = data.assignedOwnerId !== undefined
+    ? (data.assignedOwnerId || null)
+    : (data.ownerId !== undefined ? (data.ownerId || null) : existing.assignedOwnerId);
+
+  const prepared = {
+    organizationName,
+    partnerType,
+    stage,
+    assignedOwnerId,
+    country: data.country ?? existing.country,
+    sector: data.sector ?? existing.sector,
+    contactName: data.contactName ?? existing.contactName,
+    contactEmail: data.contactEmail ?? existing.contactEmail,
+    contactPhone: data.contactPhone ?? existing.contactPhone,
+    provides: data.provides ?? existing.provides,
+    sourcedBy: data.sourcedBy ?? data.sourcedVia ?? existing.sourcedBy,
+    notes: data.notes ?? existing.notes,
+  };
+
+  if (Array.isArray(data.stageHistory) && data.stageHistory.length > 0) {
+    prepared.stageHistory = data.stageHistory;
+  }
+
+  return prepared;
 };
 
 const syncManagedRecord = async (resource, document) => {
@@ -409,7 +486,171 @@ addManagedRoutes({
   validateUpdate: validate(programUpdateSchema),
   filters: ['status', 'country', 'programType'],
 });
-addManagedRoutes({ path: '/partners', Model: Partner, resource: 'partners', roles: PARTNER_ROLES, screen: 'partners', prepare: preparePartner, filters: ['stage', 'country', 'partnerType', 'closed'] });
+export const calculatePipelineHealth = async (monthQuery) => {
+  const month = typeof monthQuery === 'string' && /^\d{4}-\d{2}$/.test(monthQuery)
+    ? monthQuery
+    : new Date().toISOString().slice(0, 7);
+
+  const nowIso = new Date().toISOString().slice(0, 7);
+  let todayDate;
+  if (month === nowIso) {
+    todayDate = new Date();
+  } else {
+    const [yearStr, monthStr] = month.split('-');
+    todayDate = new Date(Date.UTC(Number(yearStr), Number(monthStr), 0, 23, 59, 59));
+  }
+
+  const windowStartDate = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth() - 6, todayDate.getUTCDate()));
+  const windowStart = windowStartDate.toISOString().slice(0, 10);
+  const windowEnd = todayDate.toISOString().slice(0, 10);
+
+  const nextMonthDate = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth() + 1, 1));
+  const nextMonth = nextMonthDate.toISOString().slice(0, 7);
+
+  const nextMonthTargets = await getTargetsForMonth(nextMonth);
+  const targetItem = nextMonthTargets.find((t) => t.kpi === 'partners_onboarded' || t.metric === 'partners_onboarded')
+    || nextMonthTargets.find((t) => t.kpi === 'partnersClosed' || t.metric === 'partnersClosed');
+  const target = targetItem?.value ?? targetItem?.target ?? 2;
+
+  const allPartners = await Partner.find().lean();
+  const openStages = ['prospect', 'outreach', 'proposal', 'mou', 'MOU'];
+  const closedStages = ['onboard', 'renew', 'Onboard', 'Renew'];
+
+  const openDeals = allPartners.filter((p) => openStages.includes(p.stage)).length;
+
+  const reachedOutreach = new Set();
+  const closedInWindow = new Set();
+
+  for (const p of allPartners) {
+    const partnerId = p._id.toString();
+    const history = p.stageHistory || [];
+    for (const move of history) {
+      const moveAt = String(move.at || '').slice(0, 10);
+      if (!moveAt || moveAt < windowStart || moveAt > windowEnd) continue;
+
+      if (String(move.stage).toLowerCase() === 'outreach') {
+        reachedOutreach.add(partnerId);
+      }
+
+      const isToClosed = closedStages.includes(move.stage);
+      const isFromClosed = move.from && closedStages.includes(move.from);
+      if (isToClosed && !isFromClosed) {
+        closedInWindow.add(partnerId);
+      }
+    }
+  }
+
+  const reachedCount = reachedOutreach.size;
+  const closedCount = closedInWindow.size;
+  const closeRate = reachedCount > 0 ? (closedCount / reachedCount) : null;
+
+  let needed = null;
+  let ratio = null;
+  let status = 'unknown';
+
+  if (target <= 0) {
+    needed = 0;
+    ratio = null;
+    status = 'healthy';
+  } else if (closeRate === null) {
+    needed = null;
+    ratio = null;
+    status = 'unknown';
+  } else if (closeRate === 0) {
+    needed = null;
+    ratio = null;
+    status = 'critical';
+  } else {
+    needed = Math.ceil((target * reachedCount) / closedCount);
+    ratio = openDeals / needed;
+    if (ratio >= 1.0) status = 'healthy';
+    else if (ratio >= 0.6) status = 'thin';
+    else status = 'critical';
+  }
+
+  return {
+    openDeals,
+    needed,
+    ratio,
+    status,
+    closeRate,
+    closedInWindow: closedCount,
+    reachedOutreachInWindow: reachedCount,
+    target,
+    month,
+    historicalCloseRate: closeRate ?? 0,
+    requiredOpenDeals: needed ?? 0,
+  };
+};
+
+adminApiRouter.get('/partners/pipeline-health', requireAdminOrStaffAuth, requireScreen('partners', 'view'), asyncHandler(async (req, res) => {
+  const health = await calculatePipelineHealth(req.query.month);
+  itemResponse(res, health);
+}));
+
+adminApiRouter.post('/partners/:id/move', requireAdminOrStaffAuth, requireScreen('partners', 'edit'), validate(partnerMoveSchema), asyncHandler(async (req, res) => {
+  const partner = await Partner.findById(validId(req.params.id, 'Partner'));
+  if (!partner) throw notFound('Partner');
+
+  let to = req.body.to;
+  if (String(to).toLowerCase() === 'mou') to = 'mou';
+  const from = partner.stage;
+
+  if (String(from).toLowerCase() === String(to).toLowerCase()) {
+    await partner.populate('assignedOwnerId', 'name email');
+    return itemResponse(res, { partner: toPartnerClientObject(partner), from, to, closedChange: null });
+  }
+
+  const wasClosed = ['onboard', 'renew'].includes(String(from).toLowerCase());
+  const nowClosed = ['onboard', 'renew'].includes(String(to).toLowerCase());
+  const closedChange = wasClosed === nowClosed ? null : (nowClosed ? 'closed' : 'reopened');
+
+  const callerUser = await User.findById(req.auth.sub).select('name email').lean();
+  const callerName = callerUser?.name || req.auth.email || 'Staff';
+
+  const entry = {
+    stage: to,
+    from,
+    at: new Date().toISOString().slice(0, 10),
+    by: req.auth.sub,
+    byName: callerName,
+  };
+
+  partner.stage = to;
+  partner.stageHistory.push(entry);
+  await partner.save();
+  await partner.populate('assignedOwnerId', 'name email');
+
+  await logActivity(req.auth.sub, `moved to ${to}`, 'partners', partner);
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.PARTNER_MOVE,
+    resourceType: AUDIT_RESOURCE_TYPES.PARTNER,
+    resourceId: partner._id,
+    outcome: 'success',
+    metadata: { from, to, closedChange },
+  });
+
+  itemResponse(res, {
+    partner: toPartnerClientObject(partner),
+    from,
+    to,
+    closedChange,
+  });
+}));
+
+addManagedRoutes({
+  path: '/partners',
+  Model: Partner,
+  resource: 'partners',
+  roles: PARTNER_ROLES,
+  screen: 'partners',
+  prepare: preparePartner,
+  transform: toPartnerClientObject,
+  populate: { path: 'assignedOwnerId', select: 'name email' },
+  validateCreate: validate(partnerCreateSchema),
+  validateUpdate: validate(partnerUpdateSchema),
+  filters: ['stage', 'country', 'partnerType', 'closed'],
+});
 addManagedRoutes({ path: '/ambassadors', Model: Ambassador, resource: 'ambassadors', roles: AMBASSADOR_ROLES, screen: 'network', filters: ['status', 'tier', 'country'] });
 addManagedRoutes({ path: '/social-posts', Model: SocialPost, resource: 'social-posts', roles: SOCIAL_ROLES, screen: 'social', filters: ['platform'] });
 
@@ -702,7 +943,24 @@ const dashboardMetrics = async (month) => {
         { deliveredAt: null, endAt: { $gte: start, $lt: end } },
       ],
     }),
-    Partner.countDocuments({ closed: true, updatedAt: { $gte: start, $lt: end } }),
+    Partner.countDocuments({
+      $or: [
+        {
+          stageHistory: {
+            $elemMatch: {
+              stage: { $in: ['onboard', 'renew', 'Onboard', 'Renew'] },
+              at: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) },
+            },
+          },
+        },
+        {
+          $and: [
+            { stageHistory: { $size: 0 } },
+            { closed: true, updatedAt: { $gte: start, $lt: end } },
+          ],
+        },
+      ],
+    }),
     Ambassador.countDocuments({ status: 'active' }),
     Beneficiary.countDocuments({ verified: true }),
     Beneficiary.countDocuments({ createdAt: { $gte: start, $lt: end } }),
@@ -715,17 +973,7 @@ const dashboardMetrics = async (month) => {
   };
 };
 
-const partnerPipelineHealth = async (month) => {
-  const [total, closed, open, target] = await Promise.all([
-    Partner.countDocuments(),
-    Partner.countDocuments({ closed: true }),
-    Partner.countDocuments({ closed: false }),
-    MonthlyTarget.findOne({ month, metric: 'partnersClosed' }),
-  ]);
-  const closeRate = total ? closed / total : 0;
-  const requiredOpenDeals = target?.target && closeRate ? Math.ceil(target.target / closeRate) : 0;
-  return { openDeals: open, historicalCloseRate: closeRate, requiredOpenDeals, status: requiredOpenDeals ? metricStatus(open, requiredOpenDeals, target) : 'green' };
-};
+const partnerPipelineHealth = (month) => calculatePipelineHealth(month);
 
 const targetProgress = (values, targets) => {
   const targetsByMetric = new Map(targets.map((target) => [target.metric, target]));
@@ -820,7 +1068,28 @@ const scorecardForStaff = async (staff, month, targetsByMetric) => {
     });
   }
   if (roles.includes('partnerships officer')) {
-    metrics.push({ metric: 'partnersClosed', value: await Partner.countDocuments({ assignedOwnerId: userId, closed: true, updatedAt: { $gte: start, $lt: end } }) });
+    metrics.push({
+      metric: 'partnersClosed',
+      value: await Partner.countDocuments({
+        assignedOwnerId: userId,
+        $or: [
+          {
+            stageHistory: {
+              $elemMatch: {
+                stage: { $in: ['onboard', 'renew', 'Onboard', 'Renew'] },
+                at: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) },
+              },
+            },
+          },
+          {
+            $and: [
+              { stageHistory: { $size: 0 } },
+              { closed: true, updatedAt: { $gte: start, $lt: end } },
+            ],
+          },
+        ],
+      }),
+    });
   }
   if (roles.some((role) => ['database officer', 'country lead'].includes(role))) {
     metrics.push({ metric: 'beneficiariesAdded', value: await Beneficiary.countDocuments({ addedBy: userId, createdAt: { $gte: start, $lt: end } }) });
@@ -868,9 +1137,55 @@ adminApiRouter.get('/dashboard', requireAdminOrStaffAuth, requirePortalRoles(...
   itemResponse(res, { month, kpis, priorities: kpis.filter((kpi) => kpi.target > 0), trend, pipeline, upcomingPrograms: upcomingPrograms.map(toClientObject), recentActivity: activities.map(toClientObject) });
 }));
 
-adminApiRouter.get('/settings/pipeline-stages', requireAdminOrStaffAuth, requirePortalRoles(...ALL_PORTAL_ROLES), (req, res) => {
-  itemResponse(res, ['prospect', 'outreach', 'proposal', 'MOU', 'onboard', 'renew']);
-});
+adminApiRouter.get('/settings/pipeline-stages', requireAdminOrStaffAuth, requireScreen('settings_admin', 'view'), asyncHandler(async (req, res) => {
+  const config = await PipelineStageConfig.findOne({ key: 'global' });
+  const stages = config?.stages
+    ? (config.stages.toJSON ? config.stages.toJSON() : { ...config.stages })
+    : { ...DEFAULT_PIPELINE_STAGE_LABELS };
+  itemResponse(res, stages);
+}));
+
+adminApiRouter.put('/settings/pipeline-stages', requireAdminOrStaffAuth, requireScreen('settings_admin', 'edit'), validate(pipelineStagesSchema), asyncHandler(async (req, res) => {
+  const body = req.body;
+  let stagesToSave;
+  if (body.reset === true) {
+    stagesToSave = { ...DEFAULT_PIPELINE_STAGE_LABELS };
+  } else {
+    const incoming = body.stages || body;
+    stagesToSave = {
+      prospect: incoming.prospect.trim(),
+      outreach: incoming.outreach.trim(),
+      proposal: incoming.proposal.trim(),
+      mou: incoming.mou.trim(),
+      onboard: incoming.onboard.trim(),
+      renew: incoming.renew.trim(),
+    };
+  }
+
+  let config = await PipelineStageConfig.findOne({ key: 'global' });
+  const previous = config?.stages
+    ? (config.stages.toJSON ? config.stages.toJSON() : { ...config.stages })
+    : { ...DEFAULT_PIPELINE_STAGE_LABELS };
+
+  if (!config) {
+    config = new PipelineStageConfig({ key: 'global', stages: stagesToSave });
+  } else {
+    config.stages = stagesToSave;
+  }
+  config.updatedBy = req.auth.sub;
+  await config.save();
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.PIPELINE_STAGES_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.SETTINGS,
+    resourceId: config._id,
+    outcome: 'success',
+    metadata: { setting: 'pipeline_stages', previous, updated: stagesToSave, reset: Boolean(body.reset) },
+  });
+
+  const responseStages = config.stages.toJSON ? config.stages.toJSON() : config.stages;
+  itemResponse(res, responseStages);
+}));
 
 adminApiRouter.get('/settings/integrations', requireAdminOrStaffAuth, requirePortalRoles('Desk Lead', 'Admin Support'), (req, res) => {
   itemResponse(res, {
