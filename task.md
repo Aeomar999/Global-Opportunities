@@ -2062,6 +2062,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - 2026-10-08 — Mobile production readiness audit: Verified ~65–70% completion. Discovered registration broken on native iOS/Android (web DOM file inputs), missing email verification screen, canned AI assistant, unintegrated event payment flow, mock fallbacks in notifications/saved items, missing store policy links, and 0 screen UI tests. Filed SEC-119 through SEC-128 and authored Mobile Work Plan (MOB-010 to MOB-019).
 - 2026-10-08 — MOB-010 complete: Installed and configured `expo-document-picker`, implemented cross-platform file picking engine (`pickDocument`, `pickImage`) in `src/lib/file-picker.ts` (PDF/DOCX/TXT/images up to 5 MB), upgraded `signup.tsx` to enable native CV and company verification documents/logo upload across iOS/Android/Web, added `uploadFile` multipart helper in `src/lib/api.ts` with server-derived upload purpose and Bearer token auth, and added unit test suite (`__tests__/file-picker.test.ts`) covering all picking, size validation, and upload flows (31/31 tests passing).
 - 2026-10-08 — MOB-011 complete: Replaced web DOM file inputs in `hirer-profile/company.tsx`, `recruiter.tsx`, and `verification.tsx` with native `pickImage` and `pickDocument` helpers with Cloudinary upload via `uploadFile`, enforced server-scoped `status: 'pending'` for verification documents, cleaned up require imports across profile screens (lowering ESLint warnings to 111 with 0 errors), and confirmed all 31 tests passing.
+- 2026-10-08 — MOB-012 complete: Implemented mobile email verification screen (`src/app/(auth)/verify-email.tsx`) with 6-digit OTP cells, auto-focus next cell, paste support, 60-second resend countdown, and error alerts; added `requestEmailVerification` and `verifyEmail` methods to `src/lib/api.ts` with `emailVerified` type field on `AuthUser`; built global 403 `EMAIL_VERIFICATION_REQUIRED` interceptor routing directly to verification flow; added comprehensive test suite (`__tests__/email-verification.test.ts`) covering OTP validation, request/verify API methods, and 403 handler routing (39/39 tests passing with 0 type errors).
 
 ---
 
@@ -2073,7 +2074,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 |---|---|---|---|---|
 | MOB-010 | SEC-119 | Native document & CV upload in registration | P0 | [x] Completed |
 | MOB-011 | SEC-120 | Native profile media & verification doc pickers | P0 | [x] Completed |
-| MOB-012 | SEC-121 | Mobile email verification screen & 403 gate handling | P0 | [ ] Open |
+| MOB-012 | SEC-121 | Mobile email verification screen & 403 gate handling | P0 | [x] Completed |
 | MOB-013 | SEC-122 | Community feed native attachments & modal inputs | P1 | [ ] Open |
 | MOB-014 | SEC-123 | Event booking payment gateway / ticket URL gating | P1 | [ ] Open |
 | MOB-015 | SEC-124 | Store compliance: in-app policy links, push notifications, netinfo | P1 | [ ] Open |
