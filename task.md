@@ -1751,6 +1751,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-08 | BE-001, BE-018 | feature/BE-001-roles-permission-matrix | ✅ Done | Roles stored as string[] (max 2 per staff member across 12 canonical roles); permission matrix engine in lib/roles-engine.js; requireScreen middleware; Moderator/Support toggles persistence; RolesTab live backend integration; audit trail (ROLES_PERMISSIONS_UPDATE); 15/15 tests pass. |
 | 2026-10-08 | BE-002 | feature/BE-002-targets-history | ✅ Done | TargetChange insert-only collection with schema-enforced immutability and temporal state resolution; GET/POST /admin/targets, GET /admin/targets/history; audit logging (targets.update); admin settings service integration; 11/11 tests pass. |
 | 2026-10-08 | BE-003 | feature/BE-003-dated-thresholds | ✅ Done | ThresholdChange insert-only collection (percentages 1–200, amber < green); shared atomic seq counter with targets; GET /admin/thresholds?month=, GET /admin/thresholds/history, POST /admin/thresholds, combined save in POST /admin/targets, unified GET /admin/change-history; admin settings service integration; 11/11 tests pass. |
+| 2026-10-08 | BE-005 | feature/BE-005-programs | ✅ Done | Program.deliveredAt lifecycle field and pre-save hooks; status flow planned, running, delivered, cancelled; GET /admin/programs/upcoming returning next 5 planned or running programs sorted by start date with partner; non-blocking participant warning; monthly metrics and scorecard calculation updated to deliveredAt; admin api client and programs service facade wired; 10/10 tests pass. |
 
 ---
 
@@ -1884,7 +1885,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | BE-002 | Targets with append-only history and effective-from month | P1 | BE-001 | [x] Done |
 | BE-003 | Dated status thresholds and the change history | P1 | BE-002 | [x] Done |
 | BE-004 | KPI engine: the ten KPIs, pro-rating, running totals, status, trend, priorities | P1 | BE-002, BE-003, BE-005 to BE-011 | [ ] Open |
-| BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [ ] Open |
+| BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [x] Done |
 | BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [ ] Open |
 | BE-007 | Ambassadors and the Network: dates, statuses, amplification, leaderboard, summary | P1 | – | [ ] Open |
 | BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [ ] Open |
@@ -1952,8 +1953,14 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 #### BE-005 — Programs
 - **Today:** `title, programType, status, format, partnerId, country, location, participantCount, participantTarget, facilitators, notes, startAt, endAt`.
-- **To do:** add `deliveredAt` (required when status becomes `delivered`; it decides the month it counts in). Status flow planned, running, delivered, cancelled. `GET /admin/programs/upcoming` (the next five planned or running by start date, with the partner name). Participants may not exceed the target by accident (warn, do not block).
-- **Verify:** "Programs organised" for a month equals the programs delivered in it.
+- **To do:**
+  - [x] Add `deliveredAt` (required when status becomes `delivered`; auto-stamped or specified; cleared if transitioned away from delivered; decides the month it counts in).
+  - [x] Status flow `planned`, `running`, `delivered`, `cancelled`.
+  - [x] `GET /admin/programs/upcoming`: the next five planned or running by start date, with the partner name populated.
+  - [x] Participants may not exceed target by accident: non-blocking warning (`warning: "Participants (...) exceed target (...)"`), does not block persistence.
+  - [x] Update monthly metrics and scorecard calculation to count delivered programs using `deliveredAt` (with fallback to `endAt` for legacy data).
+  - [x] Wire admin frontend programs service facade (`kredibble-admin/src/lib/services/programs.ts`) and API client (`kredibble-admin/src/lib/api.ts`).
+- **Verify:** "Programs organised" for a month equals the programs delivered in it. (Verified with `tests/be-005-programs.test.js`, 10/10 tests passing; full suite 25 suites / 279 tests passing; admin typecheck and eslint clean).
 
 #### BE-006 — Partners and the pipeline
 - **Today:** `stage` and `closed` only.
