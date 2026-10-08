@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import crypto from 'node:crypto';
+import { ROLE_IDS, normalizeLegacyRole } from '../lib/permissions.js';
 
 const normalizeEmail = (email) => String(email).trim().toLowerCase();
 
@@ -45,10 +46,34 @@ const staffMemberSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  role: { type: String, required: true }, // e.g. SUPER_ADMIN, MODERATOR
+  roles: {
+    type: [String],
+    default: [],
+    validate: {
+      validator: (roles) => {
+        if (!Array.isArray(roles)) return false;
+        if (roles.length < 1 || roles.length > 2) return false;
+        return roles.every((r) => ROLE_IDS.includes(r));
+      },
+      message: 'Staff member must have 1 or 2 valid roles from the 12 role IDs',
+    },
+  },
+  role: { type: String }, // maintained for backward compatibility
   status: { type: String, default: 'active' },
   joinedDate: String,
 }, { timestamps: true });
+
+staffMemberSchema.pre('validate', function() {
+  if ((!this.roles || this.roles.length === 0) && this.role) {
+    const normalized = normalizeLegacyRole(this.role);
+    if (normalized.length > 0) {
+      this.roles = normalized;
+    }
+  }
+  if (Array.isArray(this.roles) && this.roles.length > 0 && !this.role) {
+    this.role = this.roles.join(',');
+  }
+});
 
 export const User = mongoose.model('User', userSchema);
 export const StaffMember = mongoose.model('StaffMember', staffMemberSchema);

@@ -22,6 +22,7 @@ export const AUDIT_ACTIONS = {
   ADMIN_DELETE: 'admin.delete',
   ADMIN_USER_UPDATE: 'admin.user.update',
   ADMIN_OPPORTUNITY_MODERATE: 'admin.opportunity.moderate',
+  ROLES_PERMISSIONS_UPDATE: 'ROLES_PERMISSIONS_UPDATE',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',

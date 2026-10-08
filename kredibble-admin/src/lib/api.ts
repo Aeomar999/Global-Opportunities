@@ -5,6 +5,15 @@ export type AuthUser = {
   name: string;
   email: string;
   role: AuthRole | string;
+  roles?: string[];
+  screens?: Partial<Record<string, "view" | "edit">>;
+  staff?: {
+    id: string;
+    name: string;
+    email: string;
+    roles: string[];
+    status: string;
+  } | null;
 };
 
 export type SeekerProfile = {
@@ -736,6 +745,24 @@ export const getOpportunityById = async (id: string) => {
 export const moderateOpportunity = async (id: string, decision: "approve" | "reject") => {
   const body = decision === "approve" ? { vetted: true, moderationStatus: "published" } : { moderationStatus: "rejected" };
   return request<OpportunityRecord>(`/admin/opportunities/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+};
+
+export interface RolesPermissionsPayload {
+  roleIds: string[];
+  screens: string[];
+  toggles: Record<string, Record<string, boolean>>;
+  matrix: Record<string, Record<string, "view" | "edit">>;
+}
+
+export const getRolesPermissions = async () => {
+  return request<RolesPermissionsPayload>("/admin/roles-permissions");
+};
+
+export const updateRolesPermissions = async (toggles: Record<string, Record<string, boolean>>) => {
+  return request<{ toggles: Record<string, Record<string, boolean>> }>("/admin/roles-permissions", {
+    method: "PUT",
+    body: JSON.stringify({ toggles }),
+  });
 };
 
 // There is deliberately no admin self-service signup. Public registration

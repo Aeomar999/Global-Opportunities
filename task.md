@@ -1756,7 +1756,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 | ID | Task | Priority | Depends on | Status |
 |----|------|----------|------------|--------|
-| BE-001 | Roles, two roles per person, permission matrix enforced on the server | P1 | – | [ ] Open |
+| BE-001 | Roles, two roles per person, permission matrix enforced on the server | P1 | – | [x] Done |
 | BE-002 | Targets with append-only history and effective-from month | P1 | BE-001 | [ ] Open |
 | BE-003 | Dated status thresholds and the change history | P1 | BE-002 | [ ] Open |
 | BE-004 | KPI engine: the ten KPIs, pro-rating, running totals, status, trend, priorities | P1 | BE-002, BE-003, BE-005 to BE-011 | [ ] Open |
@@ -1791,11 +1791,12 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 #### BE-001 — Roles, two roles per person, permission matrix
 - **Today:** `StaffMember.role` is a single string; portal roles are names like "Desk Lead" and "Admin Support".
 - **To do:**
-  - Store `roles: string[]` (one or two) using the 12 ids: `super_admin, moderator, support, partnerships_officer, opportunities_officer, training_officer, database_officer, communications_officer, social_media_manager, country_lead, admin_support, desk_lead`. Migrate the existing single roles.
-  - Store the permission matrix (screen × view/edit) and the Moderator and Support toggles. `GET` and `PUT /admin/roles-permissions` (Desk Lead and Super Admin only; Desk Lead may view, Super Admin edits).
-  - One middleware `requireScreen(screen, level)` on EVERY admin route, using the union of the person's roles. A wrong role gets 403.
-  - `GET /me` returns the roles and the resolved screens.
-- **Verify:** every role can open exactly the screens in the admin's `config/permissions.ts`; a request without the grant returns 403 whatever the UI does.
+  - [x] Store `roles: string[]` (one or two) using the 12 ids: `super_admin, moderator, support, partnerships_officer, opportunities_officer, training_officer, database_officer, communications_officer, social_media_manager, country_lead, admin_support, desk_lead`. Migrate the existing single roles with backwards-compatible schema hooks.
+  - [x] Store the permission matrix (screen × view/edit) and the Moderator and Support toggles. `GET` and `PUT /admin/roles-permissions` (Desk Lead and Super Admin only; Desk Lead may view, Super Admin edits).
+  - [x] One middleware `requireScreen(screen, level)` on EVERY admin route, using the union of the person's roles. A wrong role gets 403.
+  - [x] `GET /me` (and `/auth/admin/me`) returns the roles and the resolved screens.
+  - [x] Admin frontend (`RolesTab.tsx`) connected to live backend API with optimistic updates and persistence.
+- **Verify:** every role can open exactly the screens in the admin's `config/permissions.ts`; a request without the grant returns 403 whatever the UI does. (Verified with `tests/be-001-permissions.test.js`, 15 unit/integration tests).
 
 #### BE-002 — Targets with append-only history
 - **Today:** `PUT /targets/:metric` upserts `{month, metric}` and overwrites.
@@ -1924,4 +1925,5 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 7. **Stakeholder segments (BE-023):** can a user be in both segments at once (proposal: an ambassador is also in the general community)?
 
 ### Progress Log
-- 2026-10-08 — Backend work plan written (BE-001 to BE-027). No backend work started.
+- 2026-10-08 — Backend work plan written (BE-001 to BE-027).
+- 2026-10-08 — BE-001 complete: Multi-role support (up to 2 roles per staff member), server-side permission matrix engine (12 roles x 28 screens), dynamic Moderator/Support toggles persistence in Mongo (`RolePermissionConfig`), `requireScreen` middleware, `/api/v1/admin/roles-permissions` GET/PUT with audit trail (`ROLES_PERMISSIONS_UPDATE`), and admin `RolesTab` wired to live API. All 22 test suites (247 tests) passing.
