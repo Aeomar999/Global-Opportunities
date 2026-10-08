@@ -1,24 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Modal, Animated, Dimensions, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, Modal, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronLeft, Bell, BellOff, MoreHorizontal, LogOut, Send, X, Link as LinkIcon,
-  Plus, Keyboard, Camera, Mic, Image as ImageIcon, BarChart3, ClipboardList, HelpCircle, Trash2,
+  Plus, Keyboard, Camera, Mic, Image as ImageIcon, BarChart3, ClipboardList, HelpCircle,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { Colors, FontWeight, Shadow } from '../../constants/design';
 import { authStore } from '../../constants/authStore';
-import { getChannel, getChannelPosts, createChannelPost } from '../../lib/api';
+import { getChannel, getChannelPosts, createChannelPost, uploadFile } from '../../lib/api';
+import { pickImage, pickCameraImage } from '../../lib/file-picker';
+import { socketService } from '../../lib/socket';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-type AttachAction = 'image' | 'Poll' | 'Quiz' | 'Question';
+type AttachAction = 'photo' | 'camera' | 'Poll' | 'Quiz' | 'Question';
+type InteractiveKind = 'Poll' | 'Quiz' | 'Question';
 
-// Plain data: handlers are dispatched from the press callback, so render never
-// holds functions that touch the toast/recording refs.
 const ATTACH_ITEMS: { label: string; Icon: any; color: string; action: AttachAction }[] = [
-  { label: 'Photo', Icon: ImageIcon, color: '#8B5CF6', action: 'image' },
-  { label: 'Camera', Icon: Camera, color: '#EF4444', action: 'image' },
+  { label: 'Photo', Icon: ImageIcon, color: '#8B5CF6', action: 'photo' },
+  { label: 'Camera', Icon: Camera, color: '#EF4444', action: 'camera' },
   { label: 'Poll', Icon: BarChart3, color: '#10B981', action: 'Poll' },
   { label: 'Quiz', Icon: ClipboardList, color: '#F59E0B', action: 'Quiz' },
   { label: 'Question', Icon: HelpCircle, color: '#3B82F6', action: 'Question' },
@@ -40,9 +41,13 @@ export default function ChannelFeedScreen() {
 
   const [announceText, setAnnounceText] = useState('');
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
-  const recordIntervalRef = useRef<any>(null);
+  const [isPosting, setIsPosting] = useState(false);
+
+  // Interactive Modal State (Poll, Quiz, Question)
+  const [interactiveModalOpen, setInteractiveModalOpen] = useState(false);
+  const [interactiveKind, setInteractiveKind] = useState<InteractiveKind>('Poll');
+  const [interactiveTitle, setInteractiveTitle] = useState('');
+  const [interactiveBody, setInteractiveBody] = useState('');
   
   // Custom Toast UI State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -86,7 +91,6 @@ export default function ChannelFeedScreen() {
   // Real-time socket events
   useEffect(() => {
     if (!channelId) return;
-    const { socketService } = require('../../lib/socket');
 
     // connect() is async now that it reads the session token from secure store,
     // so the socket does not exist on the next line. `cancelled` keeps a
@@ -207,115 +211,101 @@ export default function ChannelFeedScreen() {
   // ─── Owner compose bar (WhatsApp-style) ──────────────────────────────────────
 
   const handleSendText = async () => {
-    if (!announceText.trim()) return;
+    if (!announceText.trim() || isPosting) return;
+    setIsPosting(true);
     try {
       const newPost = await createChannelPost(channelId, {
         body: announceText.trim(),
         authorName: authStore.company?.name || 'Hirer',
       });
-      setPosts([newPost, ...posts]);
+      setPosts(prev => [newPost, ...prev]);
       setAnnounceText('');
       triggerToast('Posted to channel');
-    } catch (err) {
-      alert('Failed to post');
+    } catch (err: any) {
+      triggerToast(err?.message || 'Failed to post');
+    } finally {
+      setIsPosting(false);
     }
   };
 
-  const pickImageAndPost = () => {
+  const handlePickImage = async (useCamera = false) => {
     setAttachMenuOpen(false);
-    if (Platform.OS !== 'web') return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    (input as any).onchange = async (e: any) => {
-      const file = e.target?.files?.[0];
-      if (file) {
-        const url = URL.createObjectURL(file); // Mock upload for UI preview
-        try {
-          const newPost = await createChannelPost(channelId, {
-            body: 'Posted an image',
-            authorName: authStore.company?.name || 'Hirer',
-            bannerImage: url
-          });
-          setPosts([newPost, ...posts]);
-          triggerToast('Photo posted');
-        } catch(err) {
-          alert('Failed to post photo');
-        }
-      }
-    };
-    input.click();
+    try {
+      const picked = useCamera
+        ? await pickCameraImage({ aspect: [16, 9], quality: 0.85 })
+        : await pickImage({ aspect: [16, 9], quality: 0.85 });
+      if (!picked) return;
+      setIsPosting(true);
+      triggerToast('Uploading photo...');
+      const uploadRes = await uploadFile(picked, 'company-logos');
+      const newPost = await createChannelPost(channelId, {
+        body: announceText.trim() || 'Shared a photo',
+        authorName: authStore.company?.name || 'Hirer',
+        bannerImage: uploadRes.url,
+      });
+      setPosts(prev => [newPost, ...prev]);
+      setAnnounceText('');
+      triggerToast('Photo posted');
+    } catch (err: any) {
+      console.error('Failed to post photo:', err);
+      triggerToast(err?.message || 'Failed to post photo');
+    } finally {
+      setIsPosting(false);
+    }
   };
 
-  const promptAndPost = async (kind: 'Poll' | 'Quiz' | 'Question') => {
+  const handleOpenInteractive = (kind: InteractiveKind) => {
     setAttachMenuOpen(false);
-    if (Platform.OS !== 'web') return;
-    const text = window.prompt(`Write your ${kind.toLowerCase()}`);
-    if (text && text.trim()) {
-      const emoji = kind === 'Poll' ? '📊' : kind === 'Quiz' ? '📝' : '❓';
-      try {
-        const newPost = await createChannelPost(channelId, {
-          title: `${emoji} ${kind}`,
-          body: text.trim(),
-          authorName: authStore.company?.name || 'Hirer'
-        });
-        setPosts([newPost, ...posts]);
-        triggerToast(`${kind} posted`);
-      } catch (err) {
-        alert(`Failed to post ${kind}`);
-      }
+    setInteractiveKind(kind);
+    setInteractiveTitle('');
+    setInteractiveBody('');
+    setInteractiveModalOpen(true);
+  };
+
+  const handleCreateInteractivePost = async () => {
+    if (!interactiveBody.trim() || isPosting) return;
+    const emoji = interactiveKind === 'Poll' ? '📊' : interactiveKind === 'Quiz' ? '📝' : '❓';
+    const postTitle = interactiveTitle.trim() || `${emoji} ${interactiveKind}`;
+    setIsPosting(true);
+    try {
+      const newPost = await createChannelPost(channelId, {
+        title: postTitle,
+        body: interactiveBody.trim(),
+        authorName: authStore.company?.name || 'Hirer',
+        hasRespondButton: true,
+      });
+      setPosts(prev => [newPost, ...prev]);
+      setInteractiveModalOpen(false);
+      setInteractiveTitle('');
+      setInteractiveBody('');
+      triggerToast(`${interactiveKind} posted`);
+    } catch (err: any) {
+      console.error(`Failed to post ${interactiveKind}:`, err);
+      triggerToast(err?.message || `Failed to post ${interactiveKind}`);
+    } finally {
+      setIsPosting(false);
     }
   };
 
   const handleAttach = (action: AttachAction) => {
-    if (action === 'image') pickImageAndPost();
-    else promptAndPost(action);
-  };
-
-  const stopRecordTimer = () => {
-    if (recordIntervalRef.current) {
-      clearInterval(recordIntervalRef.current);
-      recordIntervalRef.current = null;
+    if (action === 'photo') {
+      handlePickImage(false);
+    } else if (action === 'camera') {
+      handlePickImage(true);
+    } else {
+      handleOpenInteractive(action);
     }
   };
 
-  const startRecording = () => {
+  const handleMicPress = () => {
     setAttachMenuOpen(false);
-    setIsRecording(true);
-    setRecordSeconds(0);
-    recordIntervalRef.current = setInterval(() => setRecordSeconds(s => s + 1), 1000);
+    triggerToast('Voice messages will be supported in an upcoming update');
   };
 
-  const cancelRecording = () => {
-    stopRecordTimer();
-    setIsRecording(false);
-    setRecordSeconds(0);
-  };
-
-  const sendRecording = async () => {
-    stopRecordTimer();
-    const mm = Math.floor(recordSeconds / 60);
-    const ss = String(recordSeconds % 60).padStart(2, '0');
-    
-    try {
-      const newPost = await createChannelPost(channelId, {
-        body: `🎤 Voice message · ${mm}:${ss}`,
-        authorName: authStore.company?.name || 'Hirer'
-      });
-      setPosts([newPost, ...posts]);
-      setIsRecording(false);
-      setRecordSeconds(0);
-      triggerToast('Voice message sent');
-    } catch(err) {
-      alert('Failed to send voice message');
-    }
-  };
-
-  useEffect(() => stopRecordTimer, []);
-
-  if (!channel) {
+  if (isLoading || !channel) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={Colors.primary} style={{ marginBottom: 12 }} />
         <Text style={{ color: Colors.textMuted }} className="font-sans">Loading channel feed...</Text>
       </SafeAreaView>
     );
@@ -404,7 +394,7 @@ export default function ChannelFeedScreen() {
         >
           {isOwner ? (
             <TouchableOpacity
-              onPress={() => { setShowDropdown(false); alert(`Showing member management for ${channel.name}`); }}
+              onPress={() => { setShowDropdown(false); triggerToast(`Member management for ${channel.name} is coming soon`); }}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -628,101 +618,70 @@ export default function ChannelFeedScreen() {
             </View>
           )}
 
-          {isRecording ? (
-            /* Recording bar */
-            <View
+          {/* Input row */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+            }}
+          >
+            <TouchableOpacity onPress={() => setAttachMenuOpen(prev => !prev)} style={{ padding: 4 }} disabled={isPosting}>
+              {attachMenuOpen ? (
+                <Keyboard size={24} color={Colors.textMuted} />
+              ) : (
+                <Plus size={24} color={Colors.textMuted} />
+              )}
+            </TouchableOpacity>
+
+            <TextInput
+              placeholder={`Post an update to ${channel.name}`}
+              placeholderTextColor={Colors.textPlaceholder}
+              value={announceText}
+              onChangeText={setAnnounceText}
+              onFocus={() => setAttachMenuOpen(false)}
+              editable={!isPosting}
               style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 12,
+                flex: 1,
+                backgroundColor: Colors.bgScreen,
+                borderRadius: 24,
                 paddingHorizontal: 16,
-                paddingVertical: 12,
+                height: 44,
+                fontSize: 13,
+                color: Colors.textBody,
               }}
-            >
-              <TouchableOpacity onPress={cancelRecording} style={{ padding: 4 }}>
-                <Trash2 size={20} color="#EF4444" />
-              </TouchableOpacity>
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444' }} />
-                <Text style={{ fontSize: 14, color: Colors.textBody, fontWeight: '600' }} className="font-sans">
-                  {Math.floor(recordSeconds / 60)}:{String(recordSeconds % 60).padStart(2, '0')}
-                </Text>
-                <Text style={{ fontSize: 12, color: Colors.textMuted }} className="font-sans">
-                  Recording voice message...
-                </Text>
-              </View>
+              className="font-sans"
+            />
+
+            {announceText.trim() ? (
               <TouchableOpacity
-                onPress={sendRecording}
+                onPress={handleSendText}
+                disabled={isPosting}
                 style={{
                   width: 40, height: 40, borderRadius: 20,
                   backgroundColor: Colors.primary,
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Send size={16} color={Colors.white} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            /* Input row */
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-              }}
-            >
-              <TouchableOpacity onPress={() => setAttachMenuOpen(prev => !prev)} style={{ padding: 4 }}>
-                {attachMenuOpen ? (
-                  <Keyboard size={24} color={Colors.textMuted} />
+                {isPosting ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
                 ) : (
-                  <Plus size={24} color={Colors.textMuted} />
+                  <Send size={16} color={Colors.white} />
                 )}
               </TouchableOpacity>
-
-              <TextInput
-                placeholder={`Post an update to ${channel.name}`}
-                placeholderTextColor={Colors.textPlaceholder}
-                value={announceText}
-                onChangeText={setAnnounceText}
-                onFocus={() => setAttachMenuOpen(false)}
-                style={{
-                  flex: 1,
-                  backgroundColor: Colors.bgScreen,
-                  borderRadius: 24,
-                  paddingHorizontal: 16,
-                  height: 44,
-                  fontSize: 13,
-                  color: Colors.textBody,
-                  outline: 'none',
-                } as any}
-                className="font-sans"
-              />
-
-              {announceText.trim() ? (
-                <TouchableOpacity
-                  onPress={handleSendText}
-                  style={{
-                    width: 40, height: 40, borderRadius: 20,
-                    backgroundColor: Colors.primary,
-                    alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Send size={16} color={Colors.white} />
+            ) : (
+              <>
+                <TouchableOpacity onPress={() => handlePickImage(true)} style={{ padding: 4 }} disabled={isPosting}>
+                  <Camera size={22} color={Colors.textMuted} />
                 </TouchableOpacity>
-              ) : (
-                <>
-                  <TouchableOpacity onPress={pickImageAndPost} style={{ padding: 4 }}>
-                    <Camera size={22} color={Colors.textMuted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={startRecording} style={{ padding: 4 }}>
-                    <Mic size={22} color={Colors.textMuted} />
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          )}
+                <TouchableOpacity onPress={handleMicPress} style={{ padding: 4 }} disabled={isPosting}>
+                  <Mic size={22} color={Colors.textMuted} />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
       )}
 
@@ -888,6 +847,175 @@ export default function ChannelFeedScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Interactive Post Modal (Poll, Quiz, Question) */}
+      <Modal
+        visible={interactiveModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInteractiveModalOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 420,
+              backgroundColor: Colors.white,
+              borderRadius: 20,
+              padding: 20,
+              ...Shadow.searchBar,
+            }}
+          >
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor:
+                      interactiveKind === 'Poll' ? '#ECFDF5' : interactiveKind === 'Quiz' ? '#FEF3C7' : '#EFF6FF',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {interactiveKind === 'Poll' && <BarChart3 size={20} color="#10B981" />}
+                  {interactiveKind === 'Quiz' && <ClipboardList size={20} color="#F59E0B" />}
+                  {interactiveKind === 'Question' && <HelpCircle size={20} color="#3B82F6" />}
+                </View>
+                <Text style={{ fontSize: 17, fontWeight: '700', color: Colors.textHeading }} className="font-sans">
+                  Create {interactiveKind}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setInteractiveModalOpen(false)}
+                disabled={isPosting}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: Colors.bgScreen,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <X size={16} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Optional Title / Topic */}
+            <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textMuted, marginBottom: 6 }} className="font-sans">
+              Topic or Headline (optional)
+            </Text>
+            <TextInput
+              placeholder={`e.g. Weekly ${interactiveKind}`}
+              placeholderTextColor={Colors.textPlaceholder}
+              value={interactiveTitle}
+              onChangeText={setInteractiveTitle}
+              editable={!isPosting}
+              style={{
+                backgroundColor: Colors.bgScreen,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                fontSize: 14,
+                color: Colors.textHeading,
+                marginBottom: 14,
+              }}
+              className="font-sans"
+            />
+
+            {/* Body / Content */}
+            <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.textMuted, marginBottom: 6 }} className="font-sans">
+              {interactiveKind === 'Poll'
+                ? 'Poll Question & Options'
+                : interactiveKind === 'Quiz'
+                ? 'Quiz Prompt & Choices'
+                : 'Question Details'}
+            </Text>
+            <TextInput
+              placeholder={
+                interactiveKind === 'Poll'
+                  ? 'Ask a question and list options for members to respond...'
+                  : interactiveKind === 'Quiz'
+                  ? 'Enter the question, scenarios, and choices...'
+                  : 'Ask a question for channel members to discuss...'
+              }
+              placeholderTextColor={Colors.textPlaceholder}
+              value={interactiveBody}
+              onChangeText={setInteractiveBody}
+              multiline
+              numberOfLines={4}
+              editable={!isPosting}
+              textAlignVertical="top"
+              style={{
+                backgroundColor: Colors.bgScreen,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                fontSize: 14,
+                color: Colors.textHeading,
+                minHeight: 100,
+                marginBottom: 20,
+              }}
+              className="font-sans"
+            />
+
+            {/* Actions */}
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setInteractiveModalOpen(false)}
+                disabled={isPosting}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  borderRadius: 10,
+                  backgroundColor: Colors.bgScreen,
+                }}
+              >
+                <Text style={{ fontSize: 14, color: Colors.textMuted, fontWeight: '600' }} className="font-sans">
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleCreateInteractivePost}
+                disabled={!interactiveBody.trim() || isPosting}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingVertical: 10,
+                  paddingHorizontal: 20,
+                  borderRadius: 10,
+                  backgroundColor: interactiveBody.trim() && !isPosting ? Colors.primary : '#E5E7EB',
+                }}
+              >
+                {isPosting && <ActivityIndicator size="small" color={Colors.white} />}
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: interactiveBody.trim() && !isPosting ? Colors.white : Colors.textPlaceholder,
+                    fontWeight: '700',
+                  }}
+                  className="font-sans"
+                >
+                  {isPosting ? 'Posting...' : 'Post'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

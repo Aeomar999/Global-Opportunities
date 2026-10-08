@@ -1,6 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { pickDocument, pickImage } from '../src/lib/file-picker';
+import { pickDocument, pickImage, pickCameraImage } from '../src/lib/file-picker';
 import { uploadFile } from '../src/lib/api';
 import * as SecureStore from 'expo-secure-store';
 
@@ -13,6 +13,8 @@ jest.mock('expo-document-picker', () => ({
 jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: jest.fn(),
   launchImageLibraryAsync: jest.fn(),
+  requestCameraPermissionsAsync: jest.fn(),
+  launchCameraAsync: jest.fn(),
   MediaTypeOptions: {
     Images: 'Images',
   },
@@ -171,6 +173,45 @@ describe('file-picker', () => {
         mimeType: 'image/png',
         size: 204800,
       });
+    });
+
+    test('launches camera when useCamera: true and returns captured photo', async () => {
+      (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValueOnce({
+        granted: true,
+      });
+      (ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValueOnce({
+        canceled: false,
+        assets: [
+          {
+            uri: 'file:///path/to/camera-photo.jpg',
+            fileName: 'camera-photo.jpg',
+            mimeType: 'image/jpeg',
+            fileSize: 350000,
+          },
+        ],
+      });
+
+      const file = await pickCameraImage({ aspect: [16, 9] });
+      expect(file).toEqual({
+        uri: 'file:///path/to/camera-photo.jpg',
+        name: 'camera-photo.jpg',
+        mimeType: 'image/jpeg',
+        size: 350000,
+      });
+      expect(ImagePicker.launchCameraAsync).toHaveBeenCalledWith({
+        mediaTypes: 'Images',
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.85,
+      });
+    });
+
+    test('throws error if camera permission is rejected', async () => {
+      (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValueOnce({
+        granted: false,
+      });
+
+      await expect(pickCameraImage()).rejects.toThrow('Permission to access camera is required.');
     });
   });
 

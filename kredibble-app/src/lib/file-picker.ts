@@ -18,6 +18,7 @@ export interface PickImageOptions {
   aspect?: [number, number];
   quality?: number;
   maxBytes?: number;
+  useCamera?: boolean;
 }
 
 const DEFAULT_DOC_TYPES = [
@@ -63,22 +64,36 @@ export async function pickDocument(options: PickDocumentOptions = {}): Promise<P
 
 /**
  * Native and cross-platform image picker.
- * Uses expo-image-picker to let users pick photos/logos on iOS, Android, and Web.
+ * Uses expo-image-picker to let users pick photos/logos or take camera photos on iOS, Android, and Web.
  */
 export async function pickImage(options: PickImageOptions = {}): Promise<PickedFile | null> {
   const maxBytes = options.maxBytes || DEFAULT_MAX_SIZE_BYTES;
 
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) {
-    throw new Error('Permission to access photos is required.');
-  }
+  let result: ImagePicker.ImagePickerResult;
 
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: options.allowsEditing ?? true,
-    aspect: options.aspect ?? [1, 1],
-    quality: options.quality ?? 0.85,
-  });
+  if (options.useCamera) {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      throw new Error('Permission to access camera is required.');
+    }
+    result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: options.allowsEditing ?? true,
+      aspect: options.aspect ?? [1, 1],
+      quality: options.quality ?? 0.85,
+    });
+  } else {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      throw new Error('Permission to access photos is required.');
+    }
+    result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: options.allowsEditing ?? true,
+      aspect: options.aspect ?? [1, 1],
+      quality: options.quality ?? 0.85,
+    });
+  }
 
   if (result.canceled || !result.assets || result.assets.length === 0) {
     return null;
@@ -98,4 +113,12 @@ export async function pickImage(options: PickImageOptions = {}): Promise<PickedF
     mimeType: asset.mimeType || 'image/jpeg',
     size: asset.fileSize,
   };
+}
+
+/**
+ * Native camera capture helper.
+ * Convenience wrapper for pickImage with useCamera: true.
+ */
+export async function pickCameraImage(options: Omit<PickImageOptions, 'useCamera'> = {}): Promise<PickedFile | null> {
+  return pickImage({ ...options, useCamera: true });
 }
