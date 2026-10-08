@@ -9,6 +9,8 @@
     "build:admin": "npm run build --prefix kredibble-admin",
     "check:encoding": "node scripts/check-encoding.mjs",
     "test:scripts": "node --test scripts/check-encoding.test.mjs",
-    "test:deploy": "node --test deploy/bin/god-deploy-gate.test.mjs"
+    "test:deploy": "node --test deploy/bin/god-deploy-gate.test.mjs deploy/bin/god-backup.test.mjs deploy/bin/god-restore.test.mjs",
+    "test:smoke": "node --test scripts/smoke.test.mjs",
+    "smoke": "node scripts/smoke.mjs"
   }
 }

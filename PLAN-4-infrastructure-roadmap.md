@@ -117,9 +117,9 @@ rollback any time: run the deploy workflow with an older sha
 |---|---|---|---|---|
 | 4a | [Disarm SEC-090's live config and add repo guardrails](PLAN-4a-repair-sec-090.md): **PR 1 is urgent** | SEC-111 (disarm), SEC-112 (Render CD back, health reports environment and release), SEC-113, SEC-116; records SEC-110–118 | — | **Done (PR #34, PR #35)** |
 | 4b | [GOD API on the VPS, staging first](PLAN-4b-api-on-vps.md) | SEC-112, SEC-089 (always-on host) | 4a; M1–M4; D1, D3, D5, D6 | 🟡 **Scaffolding implemented** (feature branch) |
-| 4c | Build-once promotion pipeline | SEC-115, SEC-112 (rollback), SEC-118 (OTA publishing) | 4b; M1, M6, M7; D2, D9 | Not written |
-| 4d | Observability | SEC-090, SEC-095 | 4a (Sentry can start right away); 4b for logs; M8 | Not written |
-| 4e | Backups and disaster recovery | SEC-089 (backups, restore drill) | 4b; M5, M9; D7, D8 | Not written |
+| 4c | [Build-once promotion pipeline](PLAN-4c-build-once-promotion.md) | SEC-115, SEC-112 (rollback), SEC-118 (OTA publishing) | 4b; M1, M6, M7; D2, D9 | **Done (PR #51, main)** |
+| 4d | [Observability](PLAN-4d-observability.md) | SEC-090, SEC-095 | 4a (Sentry can start right away); 4b for logs; M8 | **Done (PR #54, main)** |
+| 4e | [Backups and disaster recovery](PLAN-4e-backups-dr.md) | SEC-089 (backups, restore drill) | 4b; M5, M9; D7, D8 | **Done (PR #56, main)** |
 | 4f | Cutover from Render, domain and decommission | SEC-111 (re-point), SEC-091, SEC-094, SEC-117 | 4b–4e; M10, M11 | Not written |
 | 4g | Ownership, access and the reusable app standard | SEC-114 | track M; written alongside 4b, finished after 4f | Not written |
 
@@ -137,7 +137,7 @@ Plans 4d and 4g can run in parallel with 4b/4c. Plan 4f must come last: monitori
 - Two client IPs get independent rate-limit buckets on staging.
 - Deploying an image with a broken env file rolls back automatically and fails the job.
 
-### 4c — Build-once promotion pipeline
+### 4c — Build-once promotion pipeline ([Implementation Plan](PLAN-4c-build-once-promotion.md) · *✅ Done*)
 **Files:** rewrite `cd-backend.yml` (build `:<sha>` once → `deploy-staging` → smoke → `deploy-production` with `environment: production`; `workflow_dispatch` input `sha` for rollback; plain `ssh` with `known_hosts` from a secret; the env file piped over stdin to the gate); rewrite `cd-admin.yml` (Vercel custom environment `staging`: `vercel pull --environment=staging`, `vercel build --target=staging`, `vercel deploy --prebuilt --target=staging`; production after approval, from the same commit); rewrite `cd-app.yml` (`eas update --channel staging` on merge, `--channel production` after approval; `eas.json` profiles `development` / `staging` / `production` with single-level hostnames, **production stays on Render until 4f**). Fix SEC-118 here, by publishing native platforms only or fixing NativeWind's web cache, and prove it on the staging channel first; `scripts/smoke.mjs <baseUrl> <sha>` (health, one public read, CORS preflight from the admin origin); `kredibble-backend/scripts/migrate.js` + `kredibble-backend/migrations/` (ordered, idempotent, recorded in a `migrations` collection; run by `god-deploy` before switching containers; expand/contract rule in `DEPLOYMENT.md`, because old and new API versions and old mobile builds run side by side); `docs/infrastructure/DEPLOYMENT.md`.
 **Done when:**
 - A merged PR reaches staging with no manual step, and production waits for approval.
@@ -145,7 +145,7 @@ Plans 4d and 4g can run in parallel with 4b/4c. Plan 4f must come last: monitori
 - Rolling back to the previous SHA takes under 5 minutes.
 - Migrations run once and are skipped on re-run (test).
 
-### 4d — Observability (SEC-090's real scope)
+### 4d — Observability ([Implementation Plan](PLAN-4d-observability.md) · *✅ Done*)
 **Files:**
 - **Backend:** `@sentry/node` loaded with `node --import ./src/instrument.js`. `src/lib/error-tracking.js` sets environment = `APP_ENV`, release = `RELEASE_SHA` and `sendDefaultPii: false`, and its `beforeSend` strips cookies, `Authorization` and request bodies. The error handler reports 5xx errors tagged with `requestId`.
 - **Admin:** `@sentry/nextjs` with `tunnelRoute`, so CSP `connect-src 'self'` stays as it is. Source maps are uploaded in CI.
@@ -160,7 +160,7 @@ Plans 4d and 4g can run in parallel with 4b/4c. Plan 4f must come last: monitori
 - Logs are searchable by request id for 14 days.
 - No cookie or token appears in any captured event (test).
 
-### 4e — Backups and disaster recovery
+### 4e — Backups and disaster recovery ([Implementation Plan](PLAN-4e-backups-dr.md) · *✅ Done*)
 **Files:**
 - `deploy/bin/god-backup`: `mongodump --archive --gzip`, with credentials read from a mounted `--config` file, never from argv. Output goes through `age -r <public key>` and is uploaded to R2. It pings a heartbeat on success and also writes a `monthly/` copy on the 1st.
 - `platform/vps/systemd/god-backup-production.{service,timer}`.

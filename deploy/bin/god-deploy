@@ -56,6 +56,22 @@ run_compose() {
   docker compose -f "$COMPOSE_FILE" --project-name "god-${TARGET_ENV}" up -d --remove-orphans
 }
 
+run_migrations() {
+  local sha="$1"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    echo "DRY_RUN: Running database migrations for release ${sha}"
+    return 0
+  fi
+
+  echo "god-deploy: Executing database migrations via one-off container..."
+  APP_ENV="$TARGET_ENV" \
+  API_IMAGE="$API_IMAGE" \
+  IMAGE_TAG="$sha" \
+  RELEASE_SHA="$sha" \
+  ENV_FILE="$ENV_FILE" \
+  docker compose -f "$COMPOSE_FILE" --project-name "god-${TARGET_ENV}" run --rm --no-deps api node scripts/migrate.js
+}
+
 wait_for_health() {
   local expected_sha="$1"
   local elapsed=0
@@ -110,6 +126,7 @@ deploy_action() {
 
   if [[ "$DRY_RUN" == "1" ]]; then
     echo "DRY_RUN: Pulling ${API_IMAGE}:${TARGET_SHA}"
+    echo "DRY_RUN: Running database migrations for release ${TARGET_SHA}"
     echo "DRY_RUN: Deploying compose project god-${TARGET_ENV}"
     echo "DRY_RUN: Verified health check for ${TARGET_SHA}"
     if [[ -d "$ENV_DIR" || -w "$(dirname "$ENV_DIR")" ]]; then
@@ -126,6 +143,12 @@ deploy_action() {
   mkdir -p "$ENV_DIR"
   echo "god-deploy: Pulling image ${API_IMAGE}:${TARGET_SHA}..."
   docker pull "${API_IMAGE}:${TARGET_SHA}"
+
+  echo "god-deploy: Running database migrations for ${TARGET_ENV}..."
+  if ! run_migrations "$TARGET_SHA"; then
+    echo "god-deploy: Error: Database migrations failed for release ${TARGET_SHA}!" >&2
+    exit 1
+  fi
 
   echo "god-deploy: Applying containers via Docker Compose..."
   run_compose "$TARGET_SHA" "$TARGET_SHA"

@@ -1,0 +1,29 @@
+[Unit]
+Description=Global Opportunity Desk (GOD) Production Database Backup (SEC-089)
+Documentation=https://github.com/Aeomar999/Global-Opportunities/blob/main/docs/infrastructure/DISASTER_RECOVERY.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+EnvironmentFile=-/opt/god/backup/backup.env
+EnvironmentFile=-/opt/god/production/api.env
+ExecStart=/opt/god/bin/god-backup --env production
+
+# Process sandboxing & least-privilege security hardening
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/tmp /opt/god/backup
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+StandardOutput=journal
+StandardError=journal

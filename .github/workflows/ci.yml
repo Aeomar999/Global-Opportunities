@@ -39,7 +39,7 @@ jobs:
         with:
           path: .mongodb-binaries
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('kredibble-backend/package-lock.json') }}
-      - run: npm ci
+      - run: npm ci --legacy-peer-deps
       - run: npm run lint
       - run: npm test -- --ci
       - name: Production boot smoke test (SEC-068)
@@ -113,7 +113,7 @@ jobs:
           path: .mongodb-binaries
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('kredibble-backend/package-lock.json') }}
       - name: Install backend (serves the API for the suite)
-        run: npm ci
+        run: npm ci --legacy-peer-deps
         working-directory: kredibble-backend
       - name: Install admin
         run: npm ci
@@ -165,7 +165,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: kredibble-app/package-lock.json
-      - run: npm ci
+      - run: npm ci --legacy-peer-deps
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test -- --ci
@@ -188,6 +188,8 @@ jobs:
         run: node --test scripts/check-encoding.test.mjs
       - name: Deploy gate tests
         run: node --test deploy/bin/god-deploy-gate.test.mjs
+      - name: Smoke test suite
+        run: node --test scripts/smoke.test.mjs
       # SEC-110: UTF-16 workflow files are rejected by GitHub; Windows-1252 destroys task.md.
       - name: Text files are UTF-8
         run: node scripts/check-encoding.mjs

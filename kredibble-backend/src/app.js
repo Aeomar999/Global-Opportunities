@@ -2,7 +2,6 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import express from 'express';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import fs from 'fs';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
@@ -13,6 +12,8 @@ import { globalApiLimiter } from './lib/rate-limiters.js';
 import { ApiError } from './utils/http.js';
 import { auditContext } from './lib/audit.js';
 import logger from './lib/logger.js';
+import { createHttpLogger } from './lib/http-logger.js';
+import { setupSentryErrorHandler, captureException } from './lib/error-tracking.js';
 
 const swaggerDocument = JSON.parse(fs.readFileSync(new URL('./swagger.json', import.meta.url)));
 
@@ -57,7 +58,8 @@ app.use(async (req, res, next) => {
 });
 
 app.use(express.json({ limit: '1mb' }));
-app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+// SEC-095: structured HTTP access logging via pino-http
+app.use(createHttpLogger());
 
 // SEC-017 + SEC-039: audit context with request ID propagation
 app.use(auditContext);
@@ -113,6 +115,9 @@ app.use((req, res) => {
   res.status(404).json({ error: { message: 'Route not found' } });
 });
 
+// Sentry error handler captures unhandled exceptions when initialized
+setupSentryErrorHandler(app);
+
 app.use((err, req, res, next) => {
   if (err.code === 'LIMIT_FILE_SIZE') {
     res.status(413).json({ error: { message: 'Uploaded file must be 5MB or smaller' } });
@@ -139,6 +144,13 @@ app.use((err, req, res, next) => {
     err.name === 'StrictModeError';
 
   const status = isBadRequest ? 400 : err.status || 500;
+  const requestId = req.auditContext?.requestId || req.id || req.get?.('x-request-id');
+
+  // SEC-090: Report 5xx server errors to Sentry tagged with requestId
+  if (status >= 500) {
+    captureException(err, { req, requestId });
+  }
+
   // SEC-064: Hide internal error messages for 5xx responses in production
   const message = (status >= 500 && !env.isDevelopment)
     ? 'Internal server error'

@@ -1,5 +1,6 @@
 import path from "path";
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs/config";
 import { ACTIVE_REDIRECTS } from "./src/config/redirects";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
@@ -88,4 +89,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Routes Sentry events through Next.js server rewrite to keep CSP connect-src 'self' intact
+  tunnelRoute: "/monitoring-tunnel",
+  silent: !process.env.CI,
+});

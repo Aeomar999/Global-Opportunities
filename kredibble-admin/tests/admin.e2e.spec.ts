@@ -2643,8 +2643,7 @@ test.describe('Roles: gated navigation (dev role cookie, mock mode)', () => {
   test('the command palette and the breadcrumb menu list only visible pages', async ({ page, context }) => {
     await asRoles(context, 'support');
     await page.goto(`${BASE_URL}/seekers`, { timeout: 30_000 });
-    await page.getByTestId('sidebar-toggle').waitFor();
-    await page.waitForTimeout(500); // hydration
+    await expect(page.getByTestId('page-title')).toBeVisible();
     await page.keyboard.press('Control+k');
     const palette = page.getByRole('dialog');
     await expect(palette.getByRole('option', { name: /Seekers/ })).toBeVisible();

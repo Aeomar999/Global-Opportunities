@@ -1,0 +1,62 @@
+# Vector configuration for Global Opportunities VPS observability (SEC-095)
+# Ingests Docker container stdout/stderr for GOD API services, parses structured
+# pino-http JSON logs, and ships to Better Stack Logtail with disk buffering.
+
+data_dir: /var/lib/vector
+
+sources:
+  docker_logs:
+    type: docker_logs
+    include_containers:
+      - "god-.*-api"
+      - "god-.*-redis"
+      - "edge-caddy"
+
+  host_metrics:
+    type: host_metrics
+    scrape_interval_secs: 30
+    collectors:
+      - cpu
+      - memory
+      - disk
+      - filesystem
+      - load
+      - network
+
+transforms:
+  parse_json_logs:
+    type: remap
+    inputs:
+      - docker_logs
+    source: |
+      # Parse pino-http JSON log payload
+      parsed, err = parse_json(.message)
+      if err == null {
+        . = merge(., parsed)
+        if exists(.time) {
+          .timestamp = to_timestamp!(.time) ?? now()
+        }
+      } else {
+        .level = "info"
+      }
+      .host = get_hostname() ?? "vps-god"
+
+sinks:
+  betterstack_logs:
+    type: http
+    inputs:
+      - parse_json_logs
+    uri: https://in.logs.betterstack.com
+    method: post
+    encoding:
+      codec: json
+    auth:
+      strategy: bearer
+      token: "${BETTERSTACK_LOG_TOKEN:-token_placeholder}"
+    buffer:
+      type: disk
+      max_size: 536870912 # 512 MB disk buffer for offline resilience
+      when_full: block
+    request:
+      retry_attempts: 5
+      timeout_secs: 30
