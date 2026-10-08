@@ -45,6 +45,7 @@ export type EventItem = {
   eventType?: string;
   logoColor?: string;
   virtualUrl?: string;
+  ticketUrl?: string;
 };
 
 export type Grant = {
