@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 
 const BACKUP_SCRIPT = 'deploy/bin/god-backup';
-const VALID_AGE_KEY = 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p';
+const VALID_AGE_KEY = 'age1testrecipientkeyforvalidationonly000000000000'; // gitleaks:allow
 
 const runBackup = (args, extraEnv = {}) => {
   return new Promise((resolveResult) => {
