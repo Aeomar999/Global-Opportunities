@@ -918,6 +918,266 @@ export const deleteProgramApi = async (id: string) => {
   });
 };
 
+// BE-006: Partners & Pipeline API
+export interface PartnerStageEntryApi {
+  stage: string;
+  at: string;
+  from?: string;
+  by?: string;
+  byName?: string;
+}
+
+export interface PartnerApiRecord {
+  id: string;
+  name: string;
+  organizationName: string;
+  type: string;
+  partnerType: string;
+  country?: string;
+  sector?: string;
+  ownerId?: string;
+  assignedOwnerId?: string;
+  ownerName?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  provides?: string;
+  sourcedVia?: string;
+  sourcedBy?: string;
+  notes?: string;
+  stage: string;
+  stageHistory: PartnerStageEntryApi[];
+  closed: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MovePartnerApiResult {
+  partner: PartnerApiRecord;
+  from: string;
+  to: string;
+  closedChange: "closed" | "reopened" | null;
+}
+
+export interface PipelineHealthApiRecord {
+  openDeals: number;
+  needed: number | null;
+  ratio: number | null;
+  status: "healthy" | "thin" | "critical" | "unknown";
+  closeRate: number | null;
+  closedInWindow: number;
+  reachedOutreachInWindow: number;
+  target?: number;
+  month?: string;
+}
+
+export interface PipelineStageLabelsApi {
+  prospect: string;
+  outreach: string;
+  proposal: string;
+  mou: string;
+  onboard: string;
+  renew: string;
+}
+
+export const getPartners = async (params?: { page?: number; limit?: number; stage?: string; country?: string; partnerType?: string; closed?: boolean; q?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.stage) query.set("stage", params.stage);
+  if (params?.country) query.set("country", params.country);
+  if (params?.partnerType) query.set("partnerType", params.partnerType);
+  if (params?.closed !== undefined) query.set("closed", String(params.closed));
+  if (params?.q) query.set("q", params.q);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<PartnerApiRecord>(`/admin/partners${queryString}`);
+};
+
+export const getPartnerById = async (id: string) => {
+  return request<PartnerApiRecord>(`/admin/partners/${id}`);
+};
+
+export const createPartnerApi = async (data: Partial<PartnerApiRecord>) => {
+  return request<PartnerApiRecord>("/admin/partners", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const updatePartnerApi = async (id: string, data: Partial<PartnerApiRecord>) => {
+  return request<PartnerApiRecord>(`/admin/partners/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+export const movePartnerApi = async (id: string, to: string) => {
+  return request<MovePartnerApiResult>(`/admin/partners/${id}/move`, {
+    method: "POST",
+    body: JSON.stringify({ to }),
+  });
+};
+
+export const deletePartnerApi = async (id: string) => {
+  return request<{ id: string }>(`/admin/partners/${id}`, {
+    method: "DELETE",
+  });
+};
+
+export const getPipelineHealthApi = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<PipelineHealthApiRecord>(`/admin/partners/pipeline-health${query}`);
+};
+
+export const getPipelineStagesApi = async () => {
+  return request<PipelineStageLabelsApi>("/admin/settings/pipeline-stages");
+};
+
+export const updatePipelineStagesApi = async (stages?: Partial<PipelineStageLabelsApi>, reset?: boolean) => {
+  const body = reset ? { reset: true } : { ...stages };
+  return request<PipelineStageLabelsApi>("/admin/settings/pipeline-stages", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+};
+
+export interface AmbassadorApiRecord {
+  id: string;
+  name: string;
+  fullName?: string;
+  email: string;
+  phone?: string;
+  country: string;
+  city: string;
+  campus: string;
+  memberType: "student" | "graduate" | "staff" | "volunteer";
+  description?: string;
+  roleTitle?: string;
+  profilePhoto?: string;
+  photoUrl?: string;
+  tier: "ambassador" | "senior" | "lead";
+  status: "applicant" | "onboarding" | "active" | "dormant";
+  assignedLeadId?: string;
+  leadName?: string;
+  trained: boolean;
+  linkedUserId?: string;
+  linkedSeekerId?: string;
+  referralCode: string;
+  joinedAt: string;
+  dormantSince?: string;
+}
+
+export interface AmplificationLogApiRecord {
+  id: string;
+  ambassadorId: string;
+  channel: string;
+  at: string;
+  clicks: number;
+  applications?: number;
+  listingId?: string;
+  note?: string;
+}
+
+export interface NetworkSummaryApiRecord {
+  size: number;
+  active: number;
+  sharedActive: number;
+  activityRate: number | null;
+  month: string;
+}
+
+export interface LeaderboardRowApiRecord {
+  rank: number;
+  shares: number;
+  clicks: number;
+  signups: number;
+  ambassador: AmbassadorApiRecord;
+  sharesLogged?: number;
+  distinctReferredClicks?: number;
+  verifiedSignups?: number;
+  name?: string;
+  country?: string;
+  campus?: string;
+  tier?: string;
+}
+
+export const getAmbassadors = async (params?: {
+  status?: string;
+  tier?: string;
+  country?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.status) query.set("status", params.status);
+  if (params?.tier) query.set("tier", params.tier);
+  if (params?.country) query.set("country", params.country);
+  if (params?.q) query.set("q", params.q);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<AmbassadorApiRecord>(`/admin/ambassadors${queryString}`);
+};
+
+export const getAmbassadorById = async (id: string) => {
+  return request<AmbassadorApiRecord>(`/admin/ambassadors/${id}`);
+};
+
+export const getAmbassadorDetailApi = async (id: string, month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<{
+    ambassador: AmbassadorApiRecord;
+    leadName?: string;
+    logs: AmplificationLogApiRecord[];
+    stats: { shares: number; clicks: number; signups: number };
+  }>(`/admin/ambassadors/${id}/detail${query}`);
+};
+
+export const createAmbassadorApi = async (data: Partial<AmbassadorApiRecord>) => {
+  return request<AmbassadorApiRecord>("/admin/ambassadors", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateAmbassadorApi = async (id: string, data: Partial<AmbassadorApiRecord>) => {
+  return request<AmbassadorApiRecord>(`/admin/ambassadors/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteAmbassadorApi = async (id: string) => {
+  return request<{ id: string }>(`/admin/ambassadors/${id}`, {
+    method: "DELETE",
+  });
+};
+
+export const logAmplificationApi = async (
+  ambassadorId: string,
+  data: { channel: string; note?: string; clicks?: number; at?: string }
+) => {
+  return request<AmplificationLogApiRecord>(`/admin/ambassadors/${ambassadorId}/amplifications`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const getAmbassadorAmplificationsApi = async (ambassadorId: string) => {
+  return requestPage<AmplificationLogApiRecord>(`/admin/ambassadors/${ambassadorId}/amplifications`);
+};
+
+export const getNetworkSummaryApi = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<NetworkSummaryApiRecord>(`/admin/network/summary${query}`);
+};
+
+export const getLeaderboardApi = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<LeaderboardRowApiRecord[]>(`/admin/leaderboard${query}`);
+};
+
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with
 // `npm run user:create-admin -- --email ... --name ...` in kredibble-backend.

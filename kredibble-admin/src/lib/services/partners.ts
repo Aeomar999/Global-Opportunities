@@ -16,6 +16,14 @@ import { isPartnerClosed, partnerClosedAt, type Partner, type PartnerStage, type
 import { OPEN_STAGES, type StageMove } from "@/lib/pipeline-health";
 import { kpiTarget } from "@/lib/kpi";
 import { todayIsoDate } from "@/lib/services/listings";
+import {
+  createPartnerApi,
+  updatePartnerApi,
+  movePartnerApi,
+  deletePartnerApi,
+  hasAdminSession,
+} from "@/lib/api";
+import { isMockMode } from "@/lib/services/mock-mode";
 
 const MOCK_DELAY_MS = 300;
 // The first load of a page takes a moment (a skeleton shows). Every later read is instant: a card that was just moved
@@ -104,6 +112,30 @@ export function createPartner(fields: PartnerFields): Partner {
   const entry: PartnerStageEntry = { stage: "prospect", at: todayIsoDate() };
   const partner: Partner = { ...fields, id: `ptn-new-${Date.now()}`, stage: "prospect", stageHistory: [entry] };
   write([partner, ...getMockCollection("partners")]);
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    createPartnerApi({
+      name: partner.name,
+      organizationName: partner.name,
+      type: partner.type,
+      partnerType: partner.type,
+      country: partner.country,
+      sector: partner.sector,
+      ownerId: partner.ownerId,
+      assignedOwnerId: partner.ownerId,
+      contactName: partner.contactName,
+      contactEmail: partner.contactEmail,
+      contactPhone: partner.contactPhone,
+      provides: partner.provides,
+      sourcedVia: partner.sourcedVia,
+      sourcedBy: partner.sourcedVia,
+      notes: partner.notes,
+      stage: partner.stage,
+    }).catch((err) => {
+      console.warn("Could not persist partner to backend API", err);
+    });
+  }
+
   return partner;
 }
 
@@ -113,6 +145,29 @@ export function updatePartner(id: string, fields: PartnerFields): Partner | unde
   if (!current) return undefined;
   const next: Partner = { ...current, ...fields };
   write(getMockCollection("partners").map((partner) => (partner.id === id ? next : partner)));
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updatePartnerApi(id, {
+      name: next.name,
+      organizationName: next.name,
+      type: next.type,
+      partnerType: next.type,
+      country: next.country,
+      sector: next.sector,
+      ownerId: next.ownerId,
+      assignedOwnerId: next.ownerId,
+      contactName: next.contactName,
+      contactEmail: next.contactEmail,
+      contactPhone: next.contactPhone,
+      provides: next.provides,
+      sourcedVia: next.sourcedVia,
+      sourcedBy: next.sourcedVia,
+      notes: next.notes,
+    }).catch((err) => {
+      console.warn("Could not persist partner update to backend API", err);
+    });
+  }
+
   return next;
 }
 
@@ -134,6 +189,13 @@ export function movePartner(id: string, to: PartnerStage): MoveResult | undefine
   const next: Partner = { ...current, stage: to, stageHistory: [...current.stageHistory, { stage: to, at: todayIsoDate(), from: current.stage }] };
   write(getMockCollection("partners").map((partner) => (partner.id === id ? next : partner)));
   const nowClosed = isPartnerClosed(next);
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    movePartnerApi(id, to).catch((err) => {
+      console.warn("Could not persist partner move to backend API", err);
+    });
+  }
+
   return { partner: next, from: current.stage, to, closedChange: wasClosed === nowClosed ? null : nowClosed ? "closed" : "reopened" };
 }
 
@@ -143,5 +205,11 @@ export function removePartner(id: string) {
   const programs = getMockCollection("programs");
   if (programs.some((program) => program.partnerId === id)) {
     setMockCollection("programs", programs.map((program) => (program.partnerId === id ? { ...program, partnerId: undefined } : program)), { always: true });
+  }
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    deletePartnerApi(id).catch((err) => {
+      console.warn("Could not persist partner deletion to backend API", err);
+    });
   }
 }

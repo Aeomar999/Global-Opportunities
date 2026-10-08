@@ -26,6 +26,12 @@ export const AUDIT_ACTIONS = {
   ROLES_PERMISSIONS_UPDATE: 'ROLES_PERMISSIONS_UPDATE',
   TARGETS_UPDATE: 'targets.update',
   THRESHOLDS_UPDATE: 'thresholds.update',
+  PARTNER_MOVE: 'partner.move',
+  PIPELINE_STAGES_UPDATE: 'pipeline_stages.update',
+  AMBASSADOR_CREATE: 'ambassador.create',
+  AMBASSADOR_UPDATE: 'ambassador.update',
+  AMBASSADOR_DELETE: 'ambassador.delete',
+  AMBASSADOR_AMPLIFICATION: 'ambassador.amplification',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',
@@ -42,6 +48,8 @@ export const AUDIT_ACTIONS = {
 export const AUDIT_RESOURCE_TYPES = {
   USER: 'user',
   SETTINGS: 'settings',
+  PARTNER: 'partner',
+  AMBASSADOR: 'ambassador',
   SEEKER_PROFILE: 'seeker_profile',
   HIRER_ACCOUNT: 'hirer_account',
   OPPORTUNITY: 'opportunity',

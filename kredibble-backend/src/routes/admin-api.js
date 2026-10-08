@@ -17,6 +17,8 @@ import {
   SocialPost,
   Testimonial,
   RolePermissionConfig,
+  PipelineStageConfig,
+  DEFAULT_PIPELINE_STAGE_LABELS,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
@@ -30,7 +32,19 @@ import {
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 import { getTargetsForMonth, getTargetHistory, saveTargetBatch, KPI_KEYS } from '../lib/targets.js';
 import { getThresholdsInForce, getThresholdHistory, saveThresholdChange, getCombinedChangeHistory } from '../lib/thresholds.js';
-import { targetsBatchSchema, thresholdsSchema, programSchema, programUpdateSchema } from '../schemas/admin.js';
+import {
+  targetsBatchSchema,
+  thresholdsSchema,
+  programSchema,
+  programUpdateSchema,
+  partnerCreateSchema,
+  partnerUpdateSchema,
+  partnerMoveSchema,
+  pipelineStagesSchema,
+  ambassadorCreateSchema,
+  ambassadorUpdateSchema,
+  amplificationCreateSchema,
+} from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
 
 export const adminApiRouter = Router();
@@ -75,12 +89,78 @@ const monthBounds = (month) => {
 const logActivity = (actorId, action, entityType, document) =>
   AdminActivity.create({ actorId, action, entityType, entityId: document._id, summary: document.title || document.name || document.fullName || document.organizationName });
 
-const preparePartner = (data) => {
-  const next = { ...data };
-  if (String(next.stage || '').toLowerCase() === 'mou') next.stage = 'MOU';
-  if (next.stage) next.closed = ['onboard', 'renew'].includes(next.stage);
-  else delete next.closed;
-  return next;
+export const toPartnerClientObject = (document) => {
+  if (!document) return null;
+  const value = document.toJSON ? document.toJSON({ virtuals: true }) : document;
+  const ownerDoc = value.assignedOwnerId;
+  const ownerName = ownerDoc && typeof ownerDoc === 'object'
+    ? (ownerDoc.name || undefined)
+    : undefined;
+  const ownerIdStr = ownerDoc && typeof ownerDoc === 'object'
+    ? (ownerDoc._id?.toString() || ownerDoc.id)
+    : (ownerDoc ? ownerDoc.toString() : undefined);
+
+  const stage = value.stage || 'prospect';
+  const isClosed = ['onboard', 'renew'].includes(String(stage).toLowerCase());
+
+  return {
+    id: value.id || value._id?.toString(),
+    ...value,
+    _id: undefined,
+    __v: undefined,
+    name: value.name || value.organizationName,
+    organizationName: value.organizationName || value.name,
+    type: value.type || value.partnerType,
+    partnerType: value.partnerType || value.type,
+    ownerId: ownerIdStr,
+    assignedOwnerId: ownerIdStr,
+    ownerName,
+    stage,
+    stageHistory: (value.stageHistory || []).map((entry) => ({
+      stage: entry.stage,
+      at: entry.at,
+      from: entry.from,
+      by: entry.by?._id?.toString() || entry.by?.toString() || entry.by,
+      byName: entry.byName,
+    })),
+    closed: isClosed,
+    sourcedVia: value.sourcedVia || value.sourcedBy,
+    sourcedBy: value.sourcedBy || value.sourcedVia,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
+};
+
+export const preparePartner = (data = {}, actorId, existing = {}) => {
+  const organizationName = (data.organizationName || data.name || existing.organizationName || '').trim();
+  const partnerType = data.partnerType || data.type || existing.partnerType || 'corporate';
+  let stage = data.stage || existing.stage || 'prospect';
+  if (String(stage).toLowerCase() === 'mou') stage = 'mou';
+
+  const assignedOwnerId = data.assignedOwnerId !== undefined
+    ? (data.assignedOwnerId || null)
+    : (data.ownerId !== undefined ? (data.ownerId || null) : existing.assignedOwnerId);
+
+  const prepared = {
+    organizationName,
+    partnerType,
+    stage,
+    assignedOwnerId,
+    country: data.country ?? existing.country,
+    sector: data.sector ?? existing.sector,
+    contactName: data.contactName ?? existing.contactName,
+    contactEmail: data.contactEmail ?? existing.contactEmail,
+    contactPhone: data.contactPhone ?? existing.contactPhone,
+    provides: data.provides ?? existing.provides,
+    sourcedBy: data.sourcedBy ?? data.sourcedVia ?? existing.sourcedBy,
+    notes: data.notes ?? existing.notes,
+  };
+
+  if (Array.isArray(data.stageHistory) && data.stageHistory.length > 0) {
+    prepared.stageHistory = data.stageHistory;
+  }
+
+  return prepared;
 };
 
 const syncManagedRecord = async (resource, document) => {
@@ -152,6 +232,15 @@ const addManagedRoutes = ({
     if (populate) await record.populate(populate);
     const sync = await syncManagedRecord(resource, record);
     await logActivity(req.auth.sub, 'created', resource, record);
+    if (resource === 'ambassadors') {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.AMBASSADOR_CREATE,
+        resourceType: AUDIT_RESOURCE_TYPES.AMBASSADOR,
+        resourceId: record._id,
+        outcome: 'success',
+        metadata: { name: record.fullName, referralCode: record.referralCode },
+      });
+    }
     res.status(201).json({ data: { ...transform(record), sync } });
   }));
 
@@ -166,6 +255,15 @@ const addManagedRoutes = ({
     if (populate) await record.populate(populate);
     const sync = await syncManagedRecord(resource, record);
     await logActivity(req.auth.sub, 'updated', resource, record);
+    if (resource === 'ambassadors') {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.AMBASSADOR_UPDATE,
+        resourceType: AUDIT_RESOURCE_TYPES.AMBASSADOR,
+        resourceId: record._id,
+        outcome: 'success',
+        metadata: { name: record.fullName, status: record.status, tier: record.tier },
+      });
+    }
     itemResponse(res, { ...transform(record), sync });
   }));
 
@@ -188,6 +286,15 @@ const addManagedRoutes = ({
     }
     await record.deleteOne();
     await logActivity(req.auth.sub, 'deleted', resource, record);
+    if (resource === 'ambassadors') {
+      await auditReq(req, {
+        action: AUDIT_ACTIONS.AMBASSADOR_DELETE,
+        resourceType: AUDIT_RESOURCE_TYPES.AMBASSADOR,
+        resourceId: record._id,
+        outcome: 'success',
+        metadata: { name: record.fullName },
+      });
+    }
     res.json({ data: { id: req.params.id, sync } });
   }));
 };
@@ -409,19 +516,582 @@ addManagedRoutes({
   validateUpdate: validate(programUpdateSchema),
   filters: ['status', 'country', 'programType'],
 });
-addManagedRoutes({ path: '/partners', Model: Partner, resource: 'partners', roles: PARTNER_ROLES, screen: 'partners', prepare: preparePartner, filters: ['stage', 'country', 'partnerType', 'closed'] });
-addManagedRoutes({ path: '/ambassadors', Model: Ambassador, resource: 'ambassadors', roles: AMBASSADOR_ROLES, screen: 'network', filters: ['status', 'tier', 'country'] });
-addManagedRoutes({ path: '/social-posts', Model: SocialPost, resource: 'social-posts', roles: SOCIAL_ROLES, screen: 'social', filters: ['platform'] });
+export const calculatePipelineHealth = async (monthQuery) => {
+  const month = typeof monthQuery === 'string' && /^\d{4}-\d{2}$/.test(monthQuery)
+    ? monthQuery
+    : new Date().toISOString().slice(0, 7);
 
-adminApiRouter.post('/ambassadors/:id/amplifications', requireAdminOrStaffAuth, requirePortalRoles(...AMBASSADOR_ROLES), asyncHandler(async (req, res) => {
+  const nowIso = new Date().toISOString().slice(0, 7);
+  let todayDate;
+  if (month === nowIso) {
+    todayDate = new Date();
+  } else {
+    const [yearStr, monthStr] = month.split('-');
+    todayDate = new Date(Date.UTC(Number(yearStr), Number(monthStr), 0, 23, 59, 59));
+  }
+
+  const windowStartDate = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth() - 6, todayDate.getUTCDate()));
+  const windowStart = windowStartDate.toISOString().slice(0, 10);
+  const windowEnd = todayDate.toISOString().slice(0, 10);
+
+  const nextMonthDate = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth() + 1, 1));
+  const nextMonth = nextMonthDate.toISOString().slice(0, 7);
+
+  const nextMonthTargets = await getTargetsForMonth(nextMonth);
+  const targetItem = nextMonthTargets.find((t) => t.kpi === 'partners_onboarded' || t.metric === 'partners_onboarded')
+    || nextMonthTargets.find((t) => t.kpi === 'partnersClosed' || t.metric === 'partnersClosed');
+  const target = targetItem?.value ?? targetItem?.target ?? 2;
+
+  const allPartners = await Partner.find().lean();
+  const openStages = ['prospect', 'outreach', 'proposal', 'mou', 'MOU'];
+  const closedStages = ['onboard', 'renew', 'Onboard', 'Renew'];
+
+  const openDeals = allPartners.filter((p) => openStages.includes(p.stage)).length;
+
+  const reachedOutreach = new Set();
+  const closedInWindow = new Set();
+
+  for (const p of allPartners) {
+    const partnerId = p._id.toString();
+    const history = p.stageHistory || [];
+    for (const move of history) {
+      const moveAt = String(move.at || '').slice(0, 10);
+      if (!moveAt || moveAt < windowStart || moveAt > windowEnd) continue;
+
+      if (String(move.stage).toLowerCase() === 'outreach') {
+        reachedOutreach.add(partnerId);
+      }
+
+      const isToClosed = closedStages.includes(move.stage);
+      const isFromClosed = move.from && closedStages.includes(move.from);
+      if (isToClosed && !isFromClosed) {
+        closedInWindow.add(partnerId);
+      }
+    }
+  }
+
+  const reachedCount = reachedOutreach.size;
+  const closedCount = closedInWindow.size;
+  const closeRate = reachedCount > 0 ? (closedCount / reachedCount) : null;
+
+  let needed = null;
+  let ratio = null;
+  let status = 'unknown';
+
+  if (target <= 0) {
+    needed = 0;
+    ratio = null;
+    status = 'healthy';
+  } else if (closeRate === null) {
+    needed = null;
+    ratio = null;
+    status = 'unknown';
+  } else if (closeRate === 0) {
+    needed = null;
+    ratio = null;
+    status = 'critical';
+  } else {
+    needed = Math.ceil((target * reachedCount) / closedCount);
+    ratio = openDeals / needed;
+    if (ratio >= 1.0) status = 'healthy';
+    else if (ratio >= 0.6) status = 'thin';
+    else status = 'critical';
+  }
+
+  return {
+    openDeals,
+    needed,
+    ratio,
+    status,
+    closeRate,
+    closedInWindow: closedCount,
+    reachedOutreachInWindow: reachedCount,
+    target,
+    month,
+    historicalCloseRate: closeRate ?? 0,
+    requiredOpenDeals: needed ?? 0,
+  };
+};
+
+adminApiRouter.get('/partners/pipeline-health', requireAdminOrStaffAuth, requireScreen('partners', 'view'), asyncHandler(async (req, res) => {
+  const health = await calculatePipelineHealth(req.query.month);
+  itemResponse(res, health);
+}));
+
+adminApiRouter.post('/partners/:id/move', requireAdminOrStaffAuth, requireScreen('partners', 'edit'), validate(partnerMoveSchema), asyncHandler(async (req, res) => {
+  const partner = await Partner.findById(validId(req.params.id, 'Partner'));
+  if (!partner) throw notFound('Partner');
+
+  let to = req.body.to;
+  if (String(to).toLowerCase() === 'mou') to = 'mou';
+  const from = partner.stage;
+
+  if (String(from).toLowerCase() === String(to).toLowerCase()) {
+    await partner.populate('assignedOwnerId', 'name email');
+    return itemResponse(res, { partner: toPartnerClientObject(partner), from, to, closedChange: null });
+  }
+
+  const wasClosed = ['onboard', 'renew'].includes(String(from).toLowerCase());
+  const nowClosed = ['onboard', 'renew'].includes(String(to).toLowerCase());
+  const closedChange = wasClosed === nowClosed ? null : (nowClosed ? 'closed' : 'reopened');
+
+  const callerUser = await User.findById(req.auth.sub).select('name email').lean();
+  const callerName = callerUser?.name || req.auth.email || 'Staff';
+
+  const entry = {
+    stage: to,
+    from,
+    at: new Date().toISOString().slice(0, 10),
+    by: req.auth.sub,
+    byName: callerName,
+  };
+
+  partner.stage = to;
+  partner.stageHistory.push(entry);
+  await partner.save();
+  await partner.populate('assignedOwnerId', 'name email');
+
+  await logActivity(req.auth.sub, `moved to ${to}`, 'partners', partner);
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.PARTNER_MOVE,
+    resourceType: AUDIT_RESOURCE_TYPES.PARTNER,
+    resourceId: partner._id,
+    outcome: 'success',
+    metadata: { from, to, closedChange },
+  });
+
+  itemResponse(res, {
+    partner: toPartnerClientObject(partner),
+    from,
+    to,
+    closedChange,
+  });
+}));
+
+addManagedRoutes({
+  path: '/partners',
+  Model: Partner,
+  resource: 'partners',
+  roles: PARTNER_ROLES,
+  screen: 'partners',
+  prepare: preparePartner,
+  transform: toPartnerClientObject,
+  populate: { path: 'assignedOwnerId', select: 'name email' },
+  validateCreate: validate(partnerCreateSchema),
+  validateUpdate: validate(partnerUpdateSchema),
+  filters: ['stage', 'country', 'partnerType', 'closed'],
+});
+export const toAmbassadorClientObject = (doc) => {
+  if (!doc) return doc;
+  const raw = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+  const id = raw._id ? raw._id.toString() : (raw.id ? String(raw.id) : '');
+  const fullName = raw.fullName || raw.name || '';
+  const profilePhoto = raw.profilePhoto || raw.photoUrl || undefined;
+  const linkedUserId = raw.linkedUserId ? raw.linkedUserId.toString() : (raw.linkedSeekerId || undefined);
+  const assignedLeadId = raw.assignedLeadId?._id
+    ? raw.assignedLeadId._id.toString()
+    : (raw.assignedLeadId ? raw.assignedLeadId.toString() : undefined);
+  const leadName = raw.assignedLeadId?.name
+    || (raw.assignedLeadId?.fullName
+      || (raw.assignedLeadId?.firstName ? `${raw.assignedLeadId.firstName} ${raw.assignedLeadId.lastName || ''}`.trim() : undefined));
+
+  let tier = String(raw.tier || 'ambassador').toLowerCase();
+  if (tier.includes('senior')) tier = 'senior';
+  else if (tier.includes('lead')) tier = 'lead';
+  else if (!['ambassador', 'senior', 'lead'].includes(tier)) tier = 'ambassador';
+
+  const joinedAt = raw.joinedAt || (raw.createdAt ? new Date(raw.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const dormantSince = raw.dormantSince || undefined;
+
+  return {
+    ...raw,
+    id,
+    _id: id,
+    name: fullName,
+    fullName,
+    email: raw.email || '',
+    phone: raw.phone || undefined,
+    country: raw.country || '',
+    city: raw.city || '',
+    campus: raw.campus || '',
+    memberType: raw.memberType || 'student',
+    description: raw.description || undefined,
+    roleTitle: raw.roleTitle || undefined,
+    profilePhoto,
+    photoUrl: profilePhoto,
+    tier,
+    status: raw.status || 'applicant',
+    assignedLeadId,
+    leadName,
+    trained: Boolean(raw.trained),
+    linkedUserId,
+    linkedSeekerId: linkedUserId,
+    referralCode: raw.referralCode || '',
+    joinedAt,
+    dormantSince,
+  };
+};
+
+export const toAmplificationClientObject = (doc) => {
+  if (!doc) return doc;
+  const raw = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+  const id = raw._id ? raw._id.toString() : (raw.id ? String(raw.id) : '');
+  const at = raw.at || (raw.createdAt ? new Date(raw.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+  return {
+    ...raw,
+    id,
+    _id: id,
+    ambassadorId: raw.ambassadorId ? raw.ambassadorId.toString() : '',
+    channel: raw.channel || '',
+    at,
+    clicks: Number(raw.clicks) || 0,
+    applications: Number(raw.applications) || 0,
+    listingId: raw.listingId ? raw.listingId.toString() : undefined,
+    note: raw.note || undefined,
+  };
+};
+
+const prepareAmbassador = (body, authSub, existing = {}) => {
+  const isUpdate = Boolean(existing && existing._id);
+  const fullName = String(body.fullName ?? body.name ?? existing.fullName ?? '').trim();
+  const email = String(body.email ?? existing.email ?? '').trim().toLowerCase();
+  const phone = body.phone !== undefined ? String(body.phone || '').trim() : existing.phone;
+  const country = body.country !== undefined ? String(body.country || '').trim() : existing.country;
+  const city = body.city !== undefined ? String(body.city || '').trim() : existing.city;
+  const campus = body.campus !== undefined ? String(body.campus || '').trim() : existing.campus;
+  const memberType = body.memberType ?? existing.memberType ?? 'student';
+  const description = body.description !== undefined ? String(body.description || '').trim() : existing.description;
+  const roleTitle = body.roleTitle !== undefined ? String(body.roleTitle || '').trim() : existing.roleTitle;
+  const profilePhoto = body.profilePhoto ?? body.photoUrl ?? existing.profilePhoto;
+
+  let tier = String(body.tier ?? existing.tier ?? 'ambassador').toLowerCase();
+  if (tier.includes('senior')) tier = 'senior';
+  else if (tier.includes('lead')) tier = 'lead';
+  else if (!['ambassador', 'senior', 'lead'].includes(tier)) tier = 'ambassador';
+
+  const status = body.status ?? existing.status ?? 'applicant';
+  const assignedLeadId = body.assignedLeadId !== undefined
+    ? (body.assignedLeadId ? validId(body.assignedLeadId, 'User') : null)
+    : existing.assignedLeadId;
+  const linkedUserId = (body.linkedUserId ?? body.linkedSeekerId) !== undefined
+    ? ((body.linkedUserId ?? body.linkedSeekerId) ? validId(body.linkedUserId ?? body.linkedSeekerId, 'User') : null)
+    : existing.linkedUserId;
+  const trained = body.trained !== undefined ? Boolean(body.trained) : Boolean(existing.trained);
+
+  let joinedAt = existing.joinedAt;
+  if (!isUpdate) {
+    joinedAt = body.joinedAt || new Date().toISOString().slice(0, 10);
+  }
+
+  let dormantSince = existing.dormantSince;
+  if (status === 'dormant') {
+    dormantSince = body.dormantSince || existing.dormantSince || new Date().toISOString().slice(0, 10);
+  } else {
+    dormantSince = undefined;
+  }
+
+  const result = {
+    fullName,
+    email,
+    phone,
+    country,
+    city,
+    campus,
+    memberType,
+    description,
+    roleTitle,
+    profilePhoto,
+    tier,
+    status,
+    assignedLeadId,
+    linkedUserId,
+    trained,
+    joinedAt,
+    dormantSince,
+  };
+
+  if (!isUpdate && body.referralCode) {
+    result.referralCode = String(body.referralCode).trim().toUpperCase();
+  }
+
+  return result;
+};
+
+export const calculateNetworkSummary = async (monthQuery) => {
+  const current = new Date().toISOString().slice(0, 7);
+  const month = typeof monthQuery === 'string' && /^\d{4}-\d{2}$/.test(monthQuery) ? monthQuery : current;
+  const [yearStr, monthStr] = month.split('-');
+  const year = parseInt(yearStr, 10);
+  const m = parseInt(monthStr, 10);
+  const lastDay = new Date(Date.UTC(year, m, 0)).getUTCDate();
+  const endOfMonth = `${month}-${String(lastDay).padStart(2, '0')}`;
+
+  const allAmbassadors = await Ambassador.find({});
+
+  const networkAmbassadors = allAmbassadors.filter((a) => {
+    const joined = a.joinedAt || (a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '9999-99-99');
+    return joined <= endOfMonth;
+  });
+
+  const activeAmbassadors = networkAmbassadors.filter((a) => {
+    if (a.status === 'applicant') return false;
+    const joined = a.joinedAt || (a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '9999-99-99');
+    if (joined > endOfMonth) return false;
+    if (a.status === 'dormant') {
+      return Boolean(a.dormantSince && a.dormantSince > endOfMonth);
+    }
+    if (a.status === 'active') {
+      return !a.dormantSince || a.dormantSince > endOfMonth;
+    }
+    return false;
+  });
+
+  const activeIds = new Set(activeAmbassadors.map((a) => a._id.toString()));
+
+  const logs = await AmbassadorAmplification.find({
+    $or: [
+      { at: { $regex: `^${month}` } },
+      { createdAt: { $gte: new Date(`${month}-01T00:00:00.000Z`), $lte: new Date(`${endOfMonth}T23:59:59.999Z`) } },
+    ],
+  });
+
+  const sharedAmbassadorIds = new Set();
+  for (const log of logs) {
+    const logDate = log.at || (log.createdAt ? new Date(log.createdAt).toISOString().slice(0, 10) : '');
+    if (logDate.slice(0, 7) === month) {
+      sharedAmbassadorIds.add(log.ambassadorId.toString());
+    }
+  }
+
+  let sharedActive = 0;
+  for (const activeId of activeIds) {
+    if (sharedAmbassadorIds.has(activeId)) {
+      sharedActive++;
+    }
+  }
+
+  const activeCount = activeAmbassadors.length;
+  const activityRate = activeCount > 0 ? sharedActive / activeCount : null;
+
+  return {
+    size: networkAmbassadors.length,
+    active: activeCount,
+    sharedActive,
+    activityRate,
+    month,
+  };
+};
+
+export const calculateLeaderboard = async (monthQuery) => {
+  const current = new Date().toISOString().slice(0, 7);
+  const month = typeof monthQuery === 'string' && /^\d{4}-\d{2}$/.test(monthQuery) ? monthQuery : current;
+  const [yearStr, monthStr] = month.split('-');
+  const year = parseInt(yearStr, 10);
+  const m = parseInt(monthStr, 10);
+  const lastDay = new Date(Date.UTC(year, m, 0)).getUTCDate();
+  const endOfMonth = `${month}-${String(lastDay).padStart(2, '0')}`;
+
+  const allAmbassadors = await Ambassador.find({
+    status: { $ne: 'applicant' },
+  }).populate('assignedLeadId', 'name fullName firstName lastName email');
+
+  const eligible = allAmbassadors.filter((a) => {
+    const joined = a.joinedAt || (a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 10) : '9999-99-99');
+    return joined.slice(0, 7) <= month;
+  });
+
+  const eligibleIds = eligible.map((a) => a._id);
+
+  const logs = await AmbassadorAmplification.find({
+    ambassadorId: { $in: eligibleIds },
+    $or: [
+      { at: { $regex: `^${month}` } },
+      { createdAt: { $gte: new Date(`${month}-01T00:00:00.000Z`), $lte: new Date(`${endOfMonth}T23:59:59.999Z`) } },
+    ],
+  });
+
+  const sharesMap = new Map();
+  const clicksMap = new Map();
+
+  for (const log of logs) {
+    const logDate = log.at || (log.createdAt ? new Date(log.createdAt).toISOString().slice(0, 10) : '');
+    if (logDate.slice(0, 7) === month) {
+      const aid = log.ambassadorId.toString();
+      sharesMap.set(aid, (sharesMap.get(aid) || 0) + 1);
+      clicksMap.set(aid, (clicksMap.get(aid) || 0) + (log.clicks || 0));
+    }
+  }
+
+  const engagements = await OpportunityEngagement.find({
+    ambassadorId: { $in: eligibleIds },
+    event: 'view',
+    createdAt: { $gte: new Date(`${month}-01T00:00:00.000Z`), $lte: new Date(`${endOfMonth}T23:59:59.999Z`) },
+  });
+  const engagementClickMap = new Map();
+  for (const eng of engagements) {
+    const aid = eng.ambassadorId.toString();
+    engagementClickMap.set(aid, (engagementClickMap.get(aid) || 0) + 1);
+  }
+
+  const beneficiaries = await Beneficiary.find({
+    ambassadorId: { $in: eligibleIds },
+    verified: true,
+  });
+
+  const signupsMap = new Map();
+  for (const b of beneficiaries) {
+    const vDate = b.verifiedAt || (b.createdAt ? new Date(b.createdAt).toISOString().slice(0, 10) : '');
+    if (vDate.slice(0, 7) === month) {
+      const aid = b.ambassadorId.toString();
+      signupsMap.set(aid, (signupsMap.get(aid) || 0) + 1);
+    }
+  }
+
+  const entries = eligible.map((amb) => {
+    const aid = amb._id.toString();
+    const clientAmb = toAmbassadorClientObject(amb);
+    const shares = sharesMap.get(aid) || 0;
+    const logClicks = clicksMap.get(aid) || 0;
+    const engClicks = engagementClickMap.get(aid) || 0;
+    const clicks = logClicks + engClicks;
+    const signups = signupsMap.get(aid) || 0;
+
+    return {
+      ambassador: clientAmb,
+      shares,
+      clicks,
+      signups,
+      sharesLogged: shares,
+      distinctReferredClicks: clicks,
+      verifiedSignups: signups,
+      name: clientAmb.name,
+      country: clientAmb.country,
+      campus: clientAmb.campus,
+      tier: clientAmb.tier,
+    };
+  });
+
+  entries.sort((a, b) => (
+    b.signups - a.signups ||
+    b.clicks - a.clicks ||
+    b.shares - a.shares ||
+    a.ambassador.name.localeCompare(b.ambassador.name)
+  ));
+
+  return entries.map((entry, index) => ({
+    ...entry,
+    rank: index + 1,
+  }));
+};
+
+adminApiRouter.get('/network/summary', requireAdminOrStaffAuth, requireScreen('network', 'view'), asyncHandler(async (req, res) => {
+  const summary = await calculateNetworkSummary(req.query.month);
+  itemResponse(res, summary);
+}));
+
+adminApiRouter.get('/leaderboard', requireAdminOrStaffAuth, (req, res, next) => {
+  if (req.user?.role === 'admin') return next();
+  const screens = req.user?.screens || {};
+  if (screens.leaderboard === 'view' || screens.leaderboard === 'edit' || screens.network === 'view' || screens.network === 'edit') {
+    return next();
+  }
+  return requireScreen('leaderboard', 'view')(req, res, next);
+}, asyncHandler(async (req, res) => {
+  const leaderboard = await calculateLeaderboard(req.query.month);
+  listResponse(res, leaderboard);
+}));
+
+adminApiRouter.get('/ambassadors/:id/detail', requireAdminOrStaffAuth, requireScreen('network', 'view'), asyncHandler(async (req, res) => {
+  const ambassador = await Ambassador.findById(validId(req.params.id, 'Ambassador')).populate('assignedLeadId', 'name fullName firstName lastName email');
+  if (!ambassador) throw notFound('Ambassador');
+  const clientAmb = toAmbassadorClientObject(ambassador);
+  const logs = await AmbassadorAmplification.find({ ambassadorId: ambassador._id }).sort({ at: -1, createdAt: -1 });
+
+  const current = new Date().toISOString().slice(0, 7);
+  const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : current;
+
+  const thisMonthLogs = logs.filter((log) => {
+    const logDate = log.at || (log.createdAt ? new Date(log.createdAt).toISOString().slice(0, 10) : '');
+    return logDate.slice(0, 7) === month;
+  });
+
+  const verifiedBeneficiaries = await Beneficiary.countDocuments({
+    ambassadorId: ambassador._id,
+    verified: true,
+    $or: [
+      { verifiedAt: { $regex: `^${month}` } },
+      { createdAt: { $gte: new Date(`${month}-01T00:00:00.000Z`), $lte: new Date(`${month}-31T23:59:59.999Z`) } },
+    ],
+  });
+
+  const stats = {
+    shares: thisMonthLogs.length,
+    clicks: thisMonthLogs.reduce((sum, l) => sum + (l.clicks || 0), 0),
+    signups: verifiedBeneficiaries,
+  };
+
+  itemResponse(res, {
+    ambassador: clientAmb,
+    leadName: clientAmb.leadName,
+    logs: logs.map(toAmplificationClientObject),
+    stats,
+  });
+}));
+
+adminApiRouter.get('/ambassadors/:id/amplifications', requireAdminOrStaffAuth, requireScreen('network', 'view'), asyncHandler(async (req, res) => {
+  const ambassador = await Ambassador.findById(validId(req.params.id, 'Ambassador'));
+  if (!ambassador) throw notFound('Ambassador');
+  const logs = await AmbassadorAmplification.find({ ambassadorId: ambassador._id }).sort({ at: -1, createdAt: -1 });
+  listResponse(res, logs.map(toAmplificationClientObject));
+}));
+
+adminApiRouter.post('/ambassadors/:id/amplifications', requireAdminOrStaffAuth, requireScreen('network', 'edit'), validate(amplificationCreateSchema), asyncHandler(async (req, res) => {
   const ambassador = await Ambassador.findById(validId(req.params.id, 'Ambassador'));
   if (!ambassador) throw notFound('Ambassador');
   const channel = String(req.body.channel || '').trim();
-  if (!channel) throw new ApiError(400, 'channel is required');
-  const amplification = await AmbassadorAmplification.create({ ambassadorId: ambassador._id, channel, note: req.body.note, loggedBy: req.auth.sub });
+  const at = req.body.at || new Date().toISOString().slice(0, 10);
+  const clicks = typeof req.body.clicks === 'number' ? req.body.clicks : 0;
+  const applications = typeof req.body.applications === 'number' ? req.body.applications : 0;
+  const listingId = req.body.listingId ? validId(req.body.listingId, 'Opportunity') : undefined;
+
+  const amplification = await AmbassadorAmplification.create({
+    ambassadorId: ambassador._id,
+    channel,
+    at,
+    clicks,
+    applications,
+    listingId,
+    note: req.body.note,
+    loggedBy: req.auth.sub,
+  });
+
   await logActivity(req.auth.sub, 'logged amplification', 'ambassadors', ambassador);
-  res.status(201).json({ data: toClientObject(amplification) });
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.AMBASSADOR_AMPLIFICATION,
+    resourceType: AUDIT_RESOURCE_TYPES.AMBASSADOR,
+    resourceId: ambassador._id,
+    outcome: 'success',
+    metadata: { channel, clicks, at },
+  });
+
+  res.status(201).json({ data: toAmplificationClientObject(amplification) });
 }));
+
+addManagedRoutes({
+  path: '/ambassadors',
+  Model: Ambassador,
+  resource: 'ambassadors',
+  roles: AMBASSADOR_ROLES,
+  screen: 'network',
+  prepare: prepareAmbassador,
+  transform: toAmbassadorClientObject,
+  populate: { path: 'assignedLeadId', select: 'name fullName firstName lastName email' },
+  validateCreate: validate(ambassadorCreateSchema),
+  validateUpdate: validate(ambassadorUpdateSchema),
+  filters: ['status', 'tier', 'country'],
+});
+
+addManagedRoutes({ path: '/social-posts', Model: SocialPost, resource: 'social-posts', roles: SOCIAL_ROLES, screen: 'social', filters: ['platform'] });
 
 adminApiRouter.get('/beneficiaries', requireAdminOrStaffAuth, requirePortalRoles(...BENEFICIARY_ROLES), asyncHandler(async (req, res) => {
   const filter = {};
@@ -702,8 +1372,28 @@ const dashboardMetrics = async (month) => {
         { deliveredAt: null, endAt: { $gte: start, $lt: end } },
       ],
     }),
-    Partner.countDocuments({ closed: true, updatedAt: { $gte: start, $lt: end } }),
-    Ambassador.countDocuments({ status: 'active' }),
+    Partner.countDocuments({
+      $or: [
+        {
+          stageHistory: {
+            $elemMatch: {
+              stage: { $in: ['onboard', 'renew', 'Onboard', 'Renew'] },
+              at: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) },
+            },
+          },
+        },
+        {
+          $and: [
+            { stageHistory: { $size: 0 } },
+            { closed: true, updatedAt: { $gte: start, $lt: end } },
+          ],
+        },
+      ],
+    }),
+    (async () => {
+      const summary = await calculateNetworkSummary(month);
+      return summary.active;
+    })(),
     Beneficiary.countDocuments({ verified: true }),
     Beneficiary.countDocuments({ createdAt: { $gte: start, $lt: end } }),
     SocialPost.aggregate([{ $match: { postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } }]),
@@ -715,17 +1405,7 @@ const dashboardMetrics = async (month) => {
   };
 };
 
-const partnerPipelineHealth = async (month) => {
-  const [total, closed, open, target] = await Promise.all([
-    Partner.countDocuments(),
-    Partner.countDocuments({ closed: true }),
-    Partner.countDocuments({ closed: false }),
-    MonthlyTarget.findOne({ month, metric: 'partnersClosed' }),
-  ]);
-  const closeRate = total ? closed / total : 0;
-  const requiredOpenDeals = target?.target && closeRate ? Math.ceil(target.target / closeRate) : 0;
-  return { openDeals: open, historicalCloseRate: closeRate, requiredOpenDeals, status: requiredOpenDeals ? metricStatus(open, requiredOpenDeals, target) : 'green' };
-};
+const partnerPipelineHealth = (month) => calculatePipelineHealth(month);
 
 const targetProgress = (values, targets) => {
   const targetsByMetric = new Map(targets.map((target) => [target.metric, target]));
@@ -768,30 +1448,7 @@ const databasePace = async (month, targetsByMetric) => {
 };
 
 const leaderboardEntries = async (month, limit) => {
-  const { start, end } = monthBounds(month);
-  const [shares, signups, clicks] = await Promise.all([
-    AmbassadorAmplification.aggregate([{ $match: { createdAt: { $gte: start, $lt: end } } }, { $group: { _id: '$ambassadorId', sharesLogged: { $sum: 1 } } }]),
-    Beneficiary.aggregate([{ $match: { createdAt: { $gte: start, $lt: end }, verified: true, ambassadorId: { $ne: null } } }, { $group: { _id: '$ambassadorId', verifiedSignups: { $sum: 1 } } }]),
-    OpportunityEngagement.aggregate([
-      { $match: { event: 'view', ambassadorId: { $ne: null }, createdAt: { $gte: start, $lt: end } } },
-      { $project: { ambassadorId: 1, identity: { $ifNull: ['$userId', '$visitorId'] } } },
-      { $match: { identity: { $ne: null } } },
-      { $group: { _id: { ambassadorId: '$ambassadorId', identity: '$identity' } } },
-      { $group: { _id: '$_id.ambassadorId', distinctReferredClicks: { $sum: 1 } } },
-    ]),
-  ]);
-  const shareMap = new Map(shares.map((item) => [String(item._id), item.sharesLogged]));
-  const signupMap = new Map(signups.map((item) => [String(item._id), item.verifiedSignups]));
-  const clickMap = new Map(clicks.map((item) => [String(item._id), item.distinctReferredClicks]));
-  const ambassadors = await Ambassador.find({ status: 'active' });
-  const entries = ambassadors.map((ambassador) => ({
-    ambassador,
-    sharesLogged: shareMap.get(String(ambassador._id)) || 0,
-    distinctReferredClicks: clickMap.get(String(ambassador._id)) || 0,
-    verifiedSignups: signupMap.get(String(ambassador._id)) || 0,
-  }))
-    .sort((a, b) => b.verifiedSignups - a.verifiedSignups || b.distinctReferredClicks - a.distinctReferredClicks || b.sharesLogged - a.sharesLogged)
-    .map((entry, index) => ({ rank: index + 1, name: entry.ambassador.fullName, country: entry.ambassador.country, campus: entry.ambassador.campus, tier: entry.ambassador.tier, sharesLogged: entry.sharesLogged, distinctReferredClicks: entry.distinctReferredClicks, verifiedSignups: entry.verifiedSignups }));
+  const entries = await calculateLeaderboard(month);
   return limit ? entries.slice(0, limit) : entries;
 };
 
@@ -820,7 +1477,28 @@ const scorecardForStaff = async (staff, month, targetsByMetric) => {
     });
   }
   if (roles.includes('partnerships officer')) {
-    metrics.push({ metric: 'partnersClosed', value: await Partner.countDocuments({ assignedOwnerId: userId, closed: true, updatedAt: { $gte: start, $lt: end } }) });
+    metrics.push({
+      metric: 'partnersClosed',
+      value: await Partner.countDocuments({
+        assignedOwnerId: userId,
+        $or: [
+          {
+            stageHistory: {
+              $elemMatch: {
+                stage: { $in: ['onboard', 'renew', 'Onboard', 'Renew'] },
+                at: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) },
+              },
+            },
+          },
+          {
+            $and: [
+              { stageHistory: { $size: 0 } },
+              { closed: true, updatedAt: { $gte: start, $lt: end } },
+            ],
+          },
+        ],
+      }),
+    });
   }
   if (roles.some((role) => ['database officer', 'country lead'].includes(role))) {
     metrics.push({ metric: 'beneficiariesAdded', value: await Beneficiary.countDocuments({ addedBy: userId, createdAt: { $gte: start, $lt: end } }) });
@@ -868,9 +1546,55 @@ adminApiRouter.get('/dashboard', requireAdminOrStaffAuth, requirePortalRoles(...
   itemResponse(res, { month, kpis, priorities: kpis.filter((kpi) => kpi.target > 0), trend, pipeline, upcomingPrograms: upcomingPrograms.map(toClientObject), recentActivity: activities.map(toClientObject) });
 }));
 
-adminApiRouter.get('/settings/pipeline-stages', requireAdminOrStaffAuth, requirePortalRoles(...ALL_PORTAL_ROLES), (req, res) => {
-  itemResponse(res, ['prospect', 'outreach', 'proposal', 'MOU', 'onboard', 'renew']);
-});
+adminApiRouter.get('/settings/pipeline-stages', requireAdminOrStaffAuth, requireScreen('settings_admin', 'view'), asyncHandler(async (req, res) => {
+  const config = await PipelineStageConfig.findOne({ key: 'global' });
+  const stages = config?.stages
+    ? (config.stages.toJSON ? config.stages.toJSON() : { ...config.stages })
+    : { ...DEFAULT_PIPELINE_STAGE_LABELS };
+  itemResponse(res, stages);
+}));
+
+adminApiRouter.put('/settings/pipeline-stages', requireAdminOrStaffAuth, requireScreen('settings_admin', 'edit'), validate(pipelineStagesSchema), asyncHandler(async (req, res) => {
+  const body = req.body;
+  let stagesToSave;
+  if (body.reset === true) {
+    stagesToSave = { ...DEFAULT_PIPELINE_STAGE_LABELS };
+  } else {
+    const incoming = body.stages || body;
+    stagesToSave = {
+      prospect: incoming.prospect.trim(),
+      outreach: incoming.outreach.trim(),
+      proposal: incoming.proposal.trim(),
+      mou: incoming.mou.trim(),
+      onboard: incoming.onboard.trim(),
+      renew: incoming.renew.trim(),
+    };
+  }
+
+  let config = await PipelineStageConfig.findOne({ key: 'global' });
+  const previous = config?.stages
+    ? (config.stages.toJSON ? config.stages.toJSON() : { ...config.stages })
+    : { ...DEFAULT_PIPELINE_STAGE_LABELS };
+
+  if (!config) {
+    config = new PipelineStageConfig({ key: 'global', stages: stagesToSave });
+  } else {
+    config.stages = stagesToSave;
+  }
+  config.updatedBy = req.auth.sub;
+  await config.save();
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.PIPELINE_STAGES_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.SETTINGS,
+    resourceId: config._id,
+    outcome: 'success',
+    metadata: { setting: 'pipeline_stages', previous, updated: stagesToSave, reset: Boolean(body.reset) },
+  });
+
+  const responseStages = config.stages.toJSON ? config.stages.toJSON() : config.stages;
+  itemResponse(res, responseStages);
+}));
 
 adminApiRouter.get('/settings/integrations', requireAdminOrStaffAuth, requirePortalRoles('Desk Lead', 'Admin Support'), (req, res) => {
   itemResponse(res, {
