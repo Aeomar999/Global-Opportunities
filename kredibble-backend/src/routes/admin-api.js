@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { requireAdminOrStaffAuth } from '../middleware/auth.js';
-import { requirePortalRoles } from '../middleware/portal-auth.js';
+import { requirePortalRoles, requireScreen } from '../middleware/portal-auth.js';
 import { ApiError, asyncHandler, itemResponse, listResponse, notFound } from '../utils/http.js';
 import { Opportunity } from '../models/Platform.js';
 import { StaffMember } from '../models/User.js';
@@ -16,9 +16,18 @@ import {
   Program,
   SocialPost,
   Testimonial,
+  RolePermissionConfig,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
+import {
+  ROLE_IDS,
+  SCREENS,
+  getEffectiveToggles,
+  computeFullMatrix,
+  invalidateTogglesCache,
+} from '../lib/permissions.js';
+import { auditReq, AUDIT_ACTIONS } from '../lib/audit.js';
 
 export const adminApiRouter = Router();
 
@@ -89,8 +98,15 @@ const syncManagedRecord = async (resource, document) => {
   return result;
 };
 
-const addManagedRoutes = ({ path, Model, resource, roles, prepare = (data) => data, filters = [] }) => {
-  adminApiRouter.get(path, requireAdminOrStaffAuth, requirePortalRoles(...roles), asyncHandler(async (req, res) => {
+const addManagedRoutes = ({ path, Model, resource, roles, screen, prepare = (data) => data, filters = [] }) => {
+  const viewAuth = screen
+    ? [requireAdminOrStaffAuth, requireScreen(screen, 'view')]
+    : [requireAdminOrStaffAuth, requirePortalRoles(...roles)];
+  const editAuth = screen
+    ? [requireAdminOrStaffAuth, requireScreen(screen, 'edit')]
+    : [requireAdminOrStaffAuth, requirePortalRoles(...roles)];
+
+  adminApiRouter.get(path, ...viewAuth, asyncHandler(async (req, res) => {
     const filter = {};
     for (const key of filters) if (req.query[key]) filter[key] = req.query[key];
     if (req.query.q) {
@@ -101,13 +117,13 @@ const addManagedRoutes = ({ path, Model, resource, roles, prepare = (data) => da
     listResponse(res, records.map(toClientObject));
   }));
 
-  adminApiRouter.get(`${path}/:id`, requireAdminOrStaffAuth, requirePortalRoles(...roles), asyncHandler(async (req, res) => {
+  adminApiRouter.get(`${path}/:id`, ...viewAuth, asyncHandler(async (req, res) => {
     const record = await Model.findById(validId(req.params.id, resource));
     if (!record) throw notFound(resource);
     itemResponse(res, toClientObject(record));
   }));
 
-  adminApiRouter.post(path, requireAdminOrStaffAuth, requirePortalRoles(...roles), asyncHandler(async (req, res) => {
+  adminApiRouter.post(path, ...editAuth, asyncHandler(async (req, res) => {
     const record = new Model({ ...prepare(req.body), createdBy: req.auth.sub });
     await record.save();
     const sync = await syncManagedRecord(resource, record);
@@ -115,7 +131,7 @@ const addManagedRoutes = ({ path, Model, resource, roles, prepare = (data) => da
     res.status(201).json({ data: { ...toClientObject(record), sync } });
   }));
 
-  adminApiRouter.patch(`${path}/:id`, requireAdminOrStaffAuth, requirePortalRoles(...roles), asyncHandler(async (req, res) => {
+  adminApiRouter.patch(`${path}/:id`, ...editAuth, asyncHandler(async (req, res) => {
     const record = await Model.findById(validId(req.params.id, resource));
     if (!record) throw notFound(resource);
     Object.assign(record, prepare(req.body));
@@ -125,13 +141,13 @@ const addManagedRoutes = ({ path, Model, resource, roles, prepare = (data) => da
     itemResponse(res, { ...toClientObject(record), sync });
   }));
 
-  adminApiRouter.post(`${path}/:id/retry-wordpress-sync`, requireAdminOrStaffAuth, requirePortalRoles(...roles), asyncHandler(async (req, res) => {
+  adminApiRouter.post(`${path}/:id/retry-wordpress-sync`, ...editAuth, asyncHandler(async (req, res) => {
     const record = await Model.findById(validId(req.params.id, resource));
     if (!record) throw notFound(resource);
     itemResponse(res, { ...toClientObject(record), sync: await syncManagedRecord(resource, record) });
   }));
 
-  adminApiRouter.delete(`${path}/:id`, requireAdminOrStaffAuth, requirePortalRoles(...roles), asyncHandler(async (req, res) => {
+  adminApiRouter.delete(`${path}/:id`, ...editAuth, asyncHandler(async (req, res) => {
     const record = await Model.findById(validId(req.params.id, resource));
     if (!record) throw notFound(resource);
     let sync = { status: 'pending' };
@@ -252,10 +268,10 @@ adminApiRouter.post('/opportunities/:id/retry-wordpress-sync', requireAdminOrSta
   itemResponse(res, { ...toClientObject(record), sync: await syncManagedRecord('opportunities', record) });
 }));
 
-addManagedRoutes({ path: '/programs', Model: Program, resource: 'programs', roles: PROGRAM_ROLES, filters: ['status', 'country', 'programType'] });
-addManagedRoutes({ path: '/partners', Model: Partner, resource: 'partners', roles: PARTNER_ROLES, prepare: preparePartner, filters: ['stage', 'country', 'partnerType', 'closed'] });
-addManagedRoutes({ path: '/ambassadors', Model: Ambassador, resource: 'ambassadors', roles: AMBASSADOR_ROLES, filters: ['status', 'tier', 'country'] });
-addManagedRoutes({ path: '/social-posts', Model: SocialPost, resource: 'social-posts', roles: SOCIAL_ROLES, filters: ['platform'] });
+addManagedRoutes({ path: '/programs', Model: Program, resource: 'programs', roles: PROGRAM_ROLES, screen: 'programs', filters: ['status', 'country', 'programType'] });
+addManagedRoutes({ path: '/partners', Model: Partner, resource: 'partners', roles: PARTNER_ROLES, screen: 'partners', prepare: preparePartner, filters: ['stage', 'country', 'partnerType', 'closed'] });
+addManagedRoutes({ path: '/ambassadors', Model: Ambassador, resource: 'ambassadors', roles: AMBASSADOR_ROLES, screen: 'network', filters: ['status', 'tier', 'country'] });
+addManagedRoutes({ path: '/social-posts', Model: SocialPost, resource: 'social-posts', roles: SOCIAL_ROLES, screen: 'social', filters: ['platform'] });
 
 adminApiRouter.post('/ambassadors/:id/amplifications', requireAdminOrStaffAuth, requirePortalRoles(...AMBASSADOR_ROLES), asyncHandler(async (req, res) => {
   const ambassador = await Ambassador.findById(validId(req.params.id, 'Ambassador'));
@@ -620,4 +636,50 @@ adminApiRouter.get('/reports/monthly', requireAdminOrStaffAuth, requirePortalRol
     report.teamScorecards = await Promise.all(staffMembers.map((staff) => scorecardForStaff(staff, month, targetsByMetric)));
   }
   itemResponse(res, report);
+}));
+
+adminApiRouter.get('/roles-permissions', requireAdminOrStaffAuth, requireScreen('roles_permissions', 'view'), asyncHandler(async (req, res) => {
+  const toggles = await getEffectiveToggles();
+  const matrix = computeFullMatrix(toggles);
+  itemResponse(res, {
+    roleIds: ROLE_IDS,
+    screens: SCREENS,
+    toggles,
+    matrix,
+  });
+}));
+
+adminApiRouter.put('/roles-permissions', requireAdminOrStaffAuth, requireScreen('roles_permissions', 'edit'), asyncHandler(async (req, res) => {
+  const { toggles } = req.body;
+  if (!toggles || typeof toggles !== 'object') {
+    throw new ApiError(400, 'toggles object is required');
+  }
+  for (const role of ['Moderator', 'Support']) {
+    if (!toggles[role] || typeof toggles[role] !== 'object') {
+      throw new ApiError(400, `toggles.${role} is required`);
+    }
+  }
+
+  const previous = await getEffectiveToggles();
+
+  let config = await RolePermissionConfig.findOne({ key: 'global' });
+  if (!config) {
+    config = new RolePermissionConfig({ key: 'global' });
+  }
+  config.toggles = toggles;
+  config.updatedBy = req.auth.sub;
+  await config.save();
+
+  invalidateTogglesCache();
+
+  auditReq(req, {
+    action: AUDIT_ACTIONS.ROLES_PERMISSIONS_UPDATE,
+    resourceType: 'roles_permissions',
+    resourceId: config._id,
+    outcome: 'success',
+    metadata: { previous, updated: toggles },
+  });
+
+  const matrix = computeFullMatrix(toggles);
+  itemResponse(res, { toggles, matrix });
 }));

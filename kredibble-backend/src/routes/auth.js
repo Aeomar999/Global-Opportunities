@@ -4,11 +4,12 @@ import bcrypt from 'bcryptjs';
 
 const DUMMY_HASH = '$2a$12$bRWsa/PC32qEk5cFCdQ/n.DrtmNZZeIr7Fc15SfH6SoezqktcAbCO';
 import { Router } from 'express';
-import { requireAuth, requireAdminAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, setAdminRefreshCookie, clearAdminRefreshCookie, generateRefreshToken, hashRefreshToken } from '../middleware/auth.js';
+import { requireAuth, requireAdminOrStaffAuth, signToken, signAdminToken, setAdminCookie, clearAdminCookie, setAdminRefreshCookie, clearAdminRefreshCookie, generateRefreshToken, hashRefreshToken } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema, refreshSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, deleteAccountSchema } from '../schemas/auth.js';
 import { ApiError, asyncHandler, itemResponse } from '../utils/http.js';
-import { User, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode, PasswordResetCode } from '../models/User.js';
+import { User, StaffMember, RefreshToken, hashRefreshToken as hashRefreshTokenUtil, EmailVerificationCode, PasswordResetCode } from '../models/User.js';
+import { computeGrants, getEffectiveToggles, normalizeLegacyRole } from '../lib/permissions.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 import { Applicant, EventAttendee, CompanyVerification, VerificationDoc, Opportunity, GrantApplication } from '../models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership } from '../models/Community.js';
@@ -619,13 +620,41 @@ authRouter.post(
 // Admin session check — validates admin cookie and returns user
 authRouter.get(
   '/admin/me',
-  requireAdminAuth,
+  requireAdminOrStaffAuth,
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.auth.sub).select('-passwordHash -refreshTokenHash -tokenVersion').lean();
-    if (!user || user.role !== 'admin' || user.role === 'deleted') {
+    if (!user || user.role === 'deleted') {
       return res.status(401).json({ error: { message: 'Invalid admin session' } });
     }
-    res.json({ data: publicUser(user) });
+
+    const staff = await StaffMember.findOne({ userId: user._id, status: 'active' }).lean();
+    if (user.role !== 'admin' && !staff) {
+      return res.status(401).json({ error: { message: 'Invalid admin session' } });
+    }
+
+    const roles = staff?.roles?.length
+      ? staff.roles
+      : (user.role === 'admin' ? ['super_admin'] : normalizeLegacyRole(staff?.role));
+
+    const toggles = await getEffectiveToggles();
+    const screens = computeGrants(roles, toggles);
+
+    res.json({
+      data: {
+        ...publicUser(user),
+        staff: staff
+          ? {
+              id: staff._id.toString(),
+              name: staff.name,
+              email: staff.email,
+              roles,
+              status: staff.status,
+            }
+          : null,
+        roles,
+        screens,
+      },
+    });
   }),
 );
 

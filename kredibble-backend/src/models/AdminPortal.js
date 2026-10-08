@@ -149,3 +149,17 @@ export const OpportunityEngagement = mongoose.model('OpportunityEngagement', opp
 export const MonthlyTarget = mongoose.model('MonthlyTarget', monthlyTargetSchema);
 export const Testimonial = mongoose.model('Testimonial', testimonialSchema);
 export const AdminActivity = mongoose.model('AdminActivity', activitySchema);
+
+const rolePermissionConfigSchema = new mongoose.Schema({
+  key: { type: String, default: 'global', unique: true },
+  toggles: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {
+      Moderator: { verifications: true, moderate: true, suspend: true, content: false, broadcast: false, staff: false },
+      Support: { verifications: false, moderate: false, suspend: true, content: false, broadcast: false, staff: false },
+    },
+  },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+}, { timestamps: true });
+
+export const RolePermissionConfig = mongoose.model('RolePermissionConfig', rolePermissionConfigSchema);
