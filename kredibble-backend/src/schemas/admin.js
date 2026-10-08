@@ -51,4 +51,69 @@ export const thresholdsSchema = z.object({
   }),
 });
 
+// BE-005: Program schemas
+export const PROGRAM_TYPES = ['training', 'bootcamp', 'webinar', 'outreach', 'project', 'mentorship', 'event'];
+export const PROGRAM_STATUSES = ['planned', 'running', 'delivered', 'cancelled'];
+export const PROGRAM_FORMATS = ['online', 'in-person', 'hybrid', 'virtual'];
+
+export const programSchema = z.object({
+  body: z.object({
+    title: z.string().trim().min(1, 'Title is required').max(200, 'Title is too long').optional(),
+    name: z.string().trim().min(1, 'Name is required').max(200, 'Name is too long').optional(),
+    programType: z.enum(PROGRAM_TYPES).optional(),
+    type: z.enum(PROGRAM_TYPES).optional(),
+    status: z.enum(PROGRAM_STATUSES).default('planned'),
+    format: z.string().optional(),
+    partnerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid partnerId').nullable().optional(),
+    country: z.string().max(100).optional(),
+    location: z.string().max(200).optional(),
+    participantCount: z.number().int().min(0).optional(),
+    participants: z.number().int().min(0).optional(),
+    participantTarget: z.number().int().min(0).optional(),
+    target: z.number().int().min(0).optional(),
+    facilitators: z.array(z.string()).optional(),
+    notes: z.string().max(2000).optional(),
+    startAt: z.string().or(z.date()).optional(),
+    endAt: z.string().or(z.date()).optional(),
+    deliveredAt: z.string().or(z.date()).optional(),
+  }).refine((data) => Boolean(data.title || data.name), {
+    message: 'Title or name is required',
+    path: ['title'],
+  }).refine((data) => Boolean(data.programType || data.type), {
+    message: 'programType or type is required',
+    path: ['programType'],
+  }).refine((data) => {
+    if (data.status === 'delivered') {
+      return Boolean(data.deliveredAt || data.endAt);
+    }
+    return true;
+  }, {
+    message: 'deliveredAt or endAt is required when status is delivered',
+    path: ['deliveredAt'],
+  }),
+});
+
+export const programUpdateSchema = z.object({
+  body: z.object({
+    title: z.string().trim().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    programType: z.enum(PROGRAM_TYPES).optional(),
+    type: z.enum(PROGRAM_TYPES).optional(),
+    status: z.enum(PROGRAM_STATUSES).optional(),
+    format: z.string().optional(),
+    partnerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid partnerId').nullable().optional(),
+    country: z.string().max(100).optional(),
+    location: z.string().max(200).optional(),
+    participantCount: z.number().int().min(0).optional(),
+    participants: z.number().int().min(0).optional(),
+    participantTarget: z.number().int().min(0).optional(),
+    target: z.number().int().min(0).optional(),
+    facilitators: z.array(z.string()).optional(),
+    notes: z.string().max(2000).optional(),
+    startAt: z.string().or(z.date()).optional(),
+    endAt: z.string().or(z.date()).optional(),
+    deliveredAt: z.string().or(z.date()).optional(),
+  }),
+});
+
 

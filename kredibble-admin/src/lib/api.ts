@@ -851,6 +851,73 @@ export const getCombinedChangeHistory = async () => {
   return request<ChangeHistoryItem[]>("/admin/change-history");
 };
 
+// BE-005: Programs API
+export interface ProgramApiRecord {
+  id: string;
+  title: string;
+  name: string;
+  programType: string;
+  type: string;
+  status: "planned" | "running" | "delivered" | "cancelled";
+  format?: string;
+  country?: string;
+  location?: string;
+  participantCount: number;
+  participants: number;
+  participantTarget: number;
+  target: number;
+  facilitators?: string[];
+  notes?: string;
+  startAt?: string;
+  endAt?: string;
+  deliveredAt?: string;
+  partnerId?: string;
+  partnerName?: string;
+  warning?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const getPrograms = async (params?: { page?: number; limit?: number; status?: string; programType?: string; country?: string; q?: string }) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.status) query.set("status", params.status);
+  if (params?.programType) query.set("programType", params.programType);
+  if (params?.country) query.set("country", params.country);
+  if (params?.q) query.set("q", params.q);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<ProgramApiRecord>(`/admin/programs${queryString}`);
+};
+
+export const getUpcomingPrograms = async () => {
+  return request<ProgramApiRecord[]>("/admin/programs/upcoming");
+};
+
+export const getProgramById = async (id: string) => {
+  return request<ProgramApiRecord>(`/admin/programs/${id}`);
+};
+
+export const createProgramApi = async (data: Partial<ProgramApiRecord>) => {
+  return request<ProgramApiRecord>("/admin/programs", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateProgramApi = async (id: string, data: Partial<ProgramApiRecord>) => {
+  return request<ProgramApiRecord>(`/admin/programs/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteProgramApi = async (id: string) => {
+  return request<{ id: string }>(`/admin/programs/${id}`, {
+    method: "DELETE",
+  });
+};
+
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with
 // `npm run user:create-admin -- --email ... --name ...` in kredibble-backend.

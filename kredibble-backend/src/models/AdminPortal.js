@@ -23,9 +23,25 @@ const programSchema = new mongoose.Schema({
   notes: String,
   startAt: Date,
   endAt: Date,
+  deliveredAt: { type: Date, index: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   wordpressSync: syncField(),
 }, { timestamps: true });
+
+programSchema.virtual('name').get(function() { return this.title; }).set(function(v) { this.title = v; });
+programSchema.virtual('type').get(function() { return this.programType; }).set(function(v) { this.programType = v; });
+programSchema.virtual('participants').get(function() { return this.participantCount; }).set(function(v) { this.participantCount = v; });
+programSchema.virtual('target').get(function() { return this.participantTarget; }).set(function(v) { this.participantTarget = v; });
+
+programSchema.pre('save', function() {
+  if (this.status === 'delivered') {
+    if (!this.deliveredAt) {
+      this.deliveredAt = this.endAt || new Date();
+    }
+  } else if (this.isModified('status') && this.status !== 'delivered') {
+    this.deliveredAt = undefined;
+  }
+});
 
 const partnerSchema = new mongoose.Schema({
   organizationName: { type: String, required: true },

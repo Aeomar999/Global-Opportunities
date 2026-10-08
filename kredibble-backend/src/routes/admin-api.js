@@ -30,7 +30,7 @@ import {
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 import { getTargetsForMonth, getTargetHistory, saveTargetBatch, KPI_KEYS } from '../lib/targets.js';
 import { getThresholdsInForce, getThresholdHistory, saveThresholdChange, getCombinedChangeHistory } from '../lib/thresholds.js';
-import { targetsBatchSchema, thresholdsSchema } from '../schemas/admin.js';
+import { targetsBatchSchema, thresholdsSchema, programSchema, programUpdateSchema } from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
 
 export const adminApiRouter = Router();
@@ -102,7 +102,19 @@ const syncManagedRecord = async (resource, document) => {
   return result;
 };
 
-const addManagedRoutes = ({ path, Model, resource, roles, screen, prepare = (data) => data, filters = [] }) => {
+const addManagedRoutes = ({
+  path,
+  Model,
+  resource,
+  roles,
+  screen,
+  prepare = (data) => data,
+  transform = toClientObject,
+  populate,
+  validateCreate,
+  validateUpdate,
+  filters = [],
+}) => {
   const viewAuth = screen
     ? [requireAdminOrStaffAuth, requireScreen(screen, 'view')]
     : [requireAdminOrStaffAuth, requirePortalRoles(...roles)];
@@ -117,32 +129,44 @@ const addManagedRoutes = ({ path, Model, resource, roles, screen, prepare = (dat
       filter.$or = ['title', 'organizationName', 'fullName', 'email', 'country'].map((field) => ({ [field]: { $regex: escapedRegex(req.query.q), $options: 'i' } }));
     }
     const { skip, limit } = pageOptions(req.query);
-    const records = await Model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
-    listResponse(res, records.map(toClientObject));
+    let query = Model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
+    if (populate) query = query.populate(populate);
+    const records = await query;
+    listResponse(res, records.map(transform));
   }));
 
   adminApiRouter.get(`${path}/:id`, ...viewAuth, asyncHandler(async (req, res) => {
-    const record = await Model.findById(validId(req.params.id, resource));
+    let query = Model.findById(validId(req.params.id, resource));
+    if (populate) query = query.populate(populate);
+    const record = await query;
     if (!record) throw notFound(resource);
-    itemResponse(res, toClientObject(record));
+    itemResponse(res, transform(record));
   }));
 
-  adminApiRouter.post(path, ...editAuth, asyncHandler(async (req, res) => {
-    const record = new Model({ ...prepare(req.body), createdBy: req.auth.sub });
+  const postMiddlewares = [...editAuth];
+  if (validateCreate) postMiddlewares.push(validateCreate);
+  adminApiRouter.post(path, ...postMiddlewares, asyncHandler(async (req, res) => {
+    const prepared = prepare(req.body, req.auth.sub);
+    const record = new Model({ ...prepared, createdBy: req.auth.sub });
     await record.save();
+    if (populate) await record.populate(populate);
     const sync = await syncManagedRecord(resource, record);
     await logActivity(req.auth.sub, 'created', resource, record);
-    res.status(201).json({ data: { ...toClientObject(record), sync } });
+    res.status(201).json({ data: { ...transform(record), sync } });
   }));
 
-  adminApiRouter.patch(`${path}/:id`, ...editAuth, asyncHandler(async (req, res) => {
+  const patchMiddlewares = [...editAuth];
+  if (validateUpdate) patchMiddlewares.push(validateUpdate);
+  adminApiRouter.patch(`${path}/:id`, ...patchMiddlewares, asyncHandler(async (req, res) => {
     const record = await Model.findById(validId(req.params.id, resource));
     if (!record) throw notFound(resource);
-    Object.assign(record, prepare(req.body));
+    const prepared = prepare(req.body, req.auth.sub, record);
+    Object.assign(record, prepared);
     await record.save();
+    if (populate) await record.populate(populate);
     const sync = await syncManagedRecord(resource, record);
     await logActivity(req.auth.sub, 'updated', resource, record);
-    itemResponse(res, { ...toClientObject(record), sync });
+    itemResponse(res, { ...transform(record), sync });
   }));
 
   adminApiRouter.post(`${path}/:id/retry-wordpress-sync`, ...editAuth, asyncHandler(async (req, res) => {
@@ -272,7 +296,119 @@ adminApiRouter.post('/opportunities/:id/retry-wordpress-sync', requireAdminOrSta
   itemResponse(res, { ...toClientObject(record), sync: await syncManagedRecord('opportunities', record) });
 }));
 
-addManagedRoutes({ path: '/programs', Model: Program, resource: 'programs', roles: PROGRAM_ROLES, screen: 'programs', filters: ['status', 'country', 'programType'] });
+export const toProgramClientObject = (document) => {
+  if (!document) return null;
+  const value = document.toJSON ? document.toJSON({ virtuals: true }) : document;
+  const participantCount = value.participantCount ?? value.participants ?? 0;
+  const participantTarget = value.participantTarget ?? value.target ?? 0;
+  const warning = (participantTarget > 0 && participantCount > participantTarget)
+    ? `Participants (${participantCount}) exceed target (${participantTarget})`
+    : undefined;
+
+  const partnerDoc = value.partnerId;
+  const partnerName = partnerDoc && typeof partnerDoc === 'object'
+    ? (partnerDoc.organizationName || partnerDoc.name || undefined)
+    : undefined;
+  const partnerIdStr = partnerDoc && typeof partnerDoc === 'object'
+    ? (partnerDoc._id?.toString() || partnerDoc.id)
+    : (partnerDoc ? partnerDoc.toString() : undefined);
+
+  const client = {
+    id: value.id || value._id?.toString(),
+    ...value,
+    _id: undefined,
+    __v: undefined,
+    title: value.title || value.name,
+    name: value.title || value.name,
+    programType: value.programType || value.type,
+    type: value.programType || value.type,
+    status: value.status,
+    participantCount,
+    participants: participantCount,
+    participantTarget,
+    target: participantTarget,
+    partnerId: partnerIdStr,
+    partnerName,
+    deliveredAt: value.deliveredAt ? new Date(value.deliveredAt).toISOString() : undefined,
+  };
+
+  if (warning) {
+    client.warning = warning;
+  }
+
+  return client;
+};
+
+export const prepareProgram = (data = {}, actorId, existing = {}) => {
+  const title = (data.title || data.name || existing.title || '').trim();
+  const programType = data.programType || data.type || existing.programType || 'training';
+  const status = data.status || existing.status || 'planned';
+  const format = data.format ?? existing.format ?? 'in-person';
+  const country = data.country ?? existing.country;
+  const location = data.location ?? existing.location;
+  const partnerId = data.partnerId !== undefined ? (data.partnerId || null) : existing.partnerId;
+  const participantCount = Number.isFinite(Number(data.participantCount ?? data.participants))
+    ? Math.max(0, Math.round(Number(data.participantCount ?? data.participants)))
+    : (existing.participantCount ?? 0);
+  const participantTarget = Number.isFinite(Number(data.participantTarget ?? data.target))
+    ? Math.max(0, Math.round(Number(data.participantTarget ?? data.target)))
+    : (existing.participantTarget ?? 0);
+  const facilitators = Array.isArray(data.facilitators) ? data.facilitators : (existing.facilitators || []);
+  const notes = data.notes ?? existing.notes;
+  const startAt = data.startAt ? new Date(data.startAt) : existing.startAt;
+  const endAt = data.endAt ? new Date(data.endAt) : existing.endAt;
+
+  let deliveredAt = existing.deliveredAt;
+  if (status === 'delivered') {
+    if (data.deliveredAt) {
+      deliveredAt = new Date(data.deliveredAt);
+    } else if (!deliveredAt) {
+      deliveredAt = endAt || new Date();
+    }
+  } else {
+    deliveredAt = undefined;
+  }
+
+  return {
+    title,
+    programType,
+    status,
+    format,
+    country,
+    location,
+    partnerId,
+    participantCount,
+    participantTarget,
+    facilitators,
+    notes,
+    startAt,
+    endAt,
+    deliveredAt,
+  };
+};
+
+adminApiRouter.get('/programs/upcoming', requireAdminOrStaffAuth, requireScreen('programs', 'view'), asyncHandler(async (req, res) => {
+  const records = await Program.find({ status: { $in: ['planned', 'running'] } })
+    .populate('partnerId', 'organizationName name')
+    .sort({ startAt: 1, createdAt: -1 })
+    .limit(5);
+
+  listResponse(res, records.map(toProgramClientObject));
+}));
+
+addManagedRoutes({
+  path: '/programs',
+  Model: Program,
+  resource: 'programs',
+  roles: PROGRAM_ROLES,
+  screen: 'programs',
+  prepare: prepareProgram,
+  transform: toProgramClientObject,
+  populate: { path: 'partnerId', select: 'organizationName name' },
+  validateCreate: validate(programSchema),
+  validateUpdate: validate(programUpdateSchema),
+  filters: ['status', 'country', 'programType'],
+});
 addManagedRoutes({ path: '/partners', Model: Partner, resource: 'partners', roles: PARTNER_ROLES, screen: 'partners', prepare: preparePartner, filters: ['stage', 'country', 'partnerType', 'closed'] });
 addManagedRoutes({ path: '/ambassadors', Model: Ambassador, resource: 'ambassadors', roles: AMBASSADOR_ROLES, screen: 'network', filters: ['status', 'tier', 'country'] });
 addManagedRoutes({ path: '/social-posts', Model: SocialPost, resource: 'social-posts', roles: SOCIAL_ROLES, screen: 'social', filters: ['platform'] });
@@ -558,7 +694,14 @@ const dashboardMetrics = async (month) => {
   const [opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified, beneficiariesAdded, social, applications] = await Promise.all([
     Opportunity.countDocuments({ vetted: true, moderationStatus: { $in: ['published', 'approved'] }, createdAt: { $gte: start, $lt: end } }),
     Program.countDocuments({ status: { $in: ['planned', 'running'] } }),
-    Program.countDocuments({ status: 'delivered', endAt: { $gte: start, $lt: end } }),
+    Program.countDocuments({
+      status: 'delivered',
+      $or: [
+        { deliveredAt: { $gte: start, $lt: end } },
+        { deliveredAt: { $exists: false }, endAt: { $gte: start, $lt: end } },
+        { deliveredAt: null, endAt: { $gte: start, $lt: end } },
+      ],
+    }),
     Partner.countDocuments({ closed: true, updatedAt: { $gte: start, $lt: end } }),
     Ambassador.countDocuments({ status: 'active' }),
     Beneficiary.countDocuments({ verified: true }),
@@ -663,7 +806,18 @@ const scorecardForStaff = async (staff, month, targetsByMetric) => {
     metrics.push({ metric: 'opportunitiesPublished', value: await Opportunity.countDocuments({ createdBy: userId, vetted: true, createdAt: { $gte: start, $lt: end } }) });
   }
   if (roles.includes('training and capacity development officer')) {
-    metrics.push({ metric: 'programsDelivered', value: await Program.countDocuments({ createdBy: userId, status: 'delivered', endAt: { $gte: start, $lt: end } }) });
+    metrics.push({
+      metric: 'programsDelivered',
+      value: await Program.countDocuments({
+        createdBy: userId,
+        status: 'delivered',
+        $or: [
+          { deliveredAt: { $gte: start, $lt: end } },
+          { deliveredAt: { $exists: false }, endAt: { $gte: start, $lt: end } },
+          { deliveredAt: null, endAt: { $gte: start, $lt: end } },
+        ],
+      }),
+    });
   }
   if (roles.includes('partnerships officer')) {
     metrics.push({ metric: 'partnersClosed', value: await Partner.countDocuments({ assignedOwnerId: userId, closed: true, updatedAt: { $gte: start, $lt: end } }) });
