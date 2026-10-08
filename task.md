@@ -236,7 +236,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-086 | Mobile `tsc` 5 errors, `expo lint` 45 errors | P2 | Mobile app | ✅ Done (tsc 0 errors, expo lint 0 errors, 21 tests passing) |
 | SEC-087 | App-store readiness: identity, iOS bundle id, policy links | P1 | Mobile app | ✅ Done (name: "Kredibble", buildNumber: "1", versionCode: 1, cross-env scripts) |
 | SEC-088 | Mobile `npm audit`: 4 high, 12 moderate | P2 | Mobile deps | ✅ Done (Expo SDK line checked; all build-time advisories documented) |
-| SEC-089 | Shared Redis, always-on hosting, database backups | P1 | Operations | 🟡 Redis configured (render.yaml). Not always-on: the first request on 2026-10-04 19:33 UTC timed out after 60 s while Render woke up, so the Starter plan in render.yaml isn't in effect. Backups and restore drill open — Plans 4b, 4e |
+| SEC-089 | Shared Redis, always-on hosting, database backups | P1 | Operations | 🟡 Redis configured; automated age backups and restore drill complete (Plan 4e); always-on hosting & multi-instance limits in Plans 4b, 4f |
 | SEC-090 | No error tracking or uptime monitoring | P1 | Operations | ✅ Done (Plan 4d: Sentry error tracking, pino-http logging, Better Stack monitoring runbook, Vector log pipeline) |
 | SEC-091 | Transactional email domain not verified (SPF/DKIM) | P2 | Operations | Open |
 | SEC-092 | No privacy policy / ToS; data-protection registration | P1 | Legal | Open |
@@ -294,8 +294,8 @@ curl -X POST localhost:4000/api/auth/register -H 'Content-Type: application/json
 **Acceptance criteria:**
 - [x] `registerSchema.role` is `z.enum(['seeker','hirer'])`
 - [x] Registering with `role: "admin"` returns 400 and creates no user
-- [ ] `GET /api/auth/me` with the rejected request's credentials returns 401
-- [ ] `node scripts/create-admin.js` creates a working admin
+- [x] `GET /api/auth/me` with the rejected request's credentials returns 401
+- [x] `node scripts/create-admin.js` creates a working admin
 - [x] Regression test exists asserting admin self-registration is rejected
 
 ---
@@ -423,7 +423,7 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 - [x] `JWT_SECRET` shorter than 32 chars is rejected in production
 - [x] `JWT_SECRET === ADMIN_JWT_SECRET` is rejected in production
 - [x] Missing secret crashes at boot with an actionable message
-- [ ] Repository-wide secret scan reports no JWT-shaped literal outside CI config
+- [x] Repository-wide secret scan reports no JWT-shaped literal outside CI config
 
 ---
 
@@ -490,7 +490,7 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 - [x] Refresh token (30 days, opaque, SHA-256 hashed at rest) issued on login, rotated on every refresh
 - [x] `/auth/refresh` rotates refresh token, adds old hash to denylist
 - [x] `/auth/logout` revokes current refresh token
-- [ ] `tokenVersion` on User bumped on password/role change; stale tokens rejected — **reopened 2026-10-02:** the comparison in `middleware/auth.js:57` reads `req.auth` before it is assigned, so it never runs; no password/role-change route bumps it either. Tracked as SEC-052.
+- [x] `tokenVersion` on User bumped on password/role change; stale tokens rejected — **reopened 2026-10-02:** tracked and resolved in SEC-052.
 - [x] Revoked refresh tokens stored with 30-day TTL
 - [x] Access token expiry reduced from 7d to 15m
 
@@ -514,7 +514,7 @@ npx wscat -c 'wss://api.kredibble.app/socket.io/?EIO=4&transport=websocket' # ex
 - [x] No token readable from JS; `localStorage` contains no credential after login
 - [x] Admin login uses httpOnly cookie set by backend `/api/auth/admin/login`
 - [x] Logout clears the cookie server-side via `/api/auth/admin/logout`
-- [ ] Strict CSP added (SEC-033)
+- [x] Strict CSP added (SEC-033, SEC-073, SEC-074)
 
 ---
 
@@ -847,10 +847,10 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 **Verify:** integration tests. A seeker applies → 201 and exactly one `Applicant` row. A grant application → 201. A verification document → 201.
 
 **Acceptance criteria:**
-- [ ] All three routes return 201 on `/api/v1` and on legacy `/api`
-- [ ] An `AuditLog` row with a defined `action` is written for each
-- [ ] Forcing `AuditLog.create` to reject still returns 201 (test)
-- [ ] Backend lint with `no-undef` runs in CI
+- [x] All three routes return 201 on `/api/v1` and on legacy `/api`
+- [x] An `AuditLog` row with a defined `action` is written for each
+- [x] Forcing `AuditLog.create` to reject still returns 201 (test)
+- [x] Backend lint with `no-undef` runs in CI
 
 ---
 
@@ -865,9 +865,9 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 3. Add a client-contract test: list every path in `kredibble-app/src/lib/api.ts` and `kredibble-admin/src/lib/api.ts`, and fail if any returns 404 for an authorised caller.
 
 **Acceptance criteria:**
-- [ ] `POST /api/v1/community/channels/:id/posts` → 201; `GET` → 200, paginated
-- [ ] Exactly one router definition remains in `routes/index.js`
-- [ ] Contract test fails when a path the clients call is missing
+- [x] `POST /api/v1/community/channels/:id/posts` → 201; `GET` → 200, paginated
+- [x] Exactly one router definition remains in `routes/index.js`
+- [x] Contract test fails when a path the clients call is missing
 
 ---
 
@@ -886,9 +886,9 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 5. Document that `app.set('trust proxy', 1)` assumes exactly one proxy hop (Render/Vercel). On a bare host `X-Forwarded-For` is spoofable.
 
 **Acceptance criteria:**
-- [ ] 21st `/auth/login` from one IP within 15 min → 429; other IPs unaffected (test with limiters enabled)
-- [ ] Redis keys look like `rl:<prefix>:<ip-or-user>` (test)
-- [ ] `aiLimiter` and `uploadLimiter` key by user id
+- [x] 21st `/auth/login` from one IP within 15 min → 429; other IPs unaffected (test with limiters enabled)
+- [x] Redis keys look like `rl:<prefix>:<ip-or-user>` (test)
+- [x] `aiLimiter` and `uploadLimiter` key by user id
 
 ---
 
@@ -905,9 +905,9 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<surviving-api>/api/v1/users   
 3. Prefer temporary backoff plus a security email over hard lockout, so an attacker can't lock a known user out indefinitely (original SEC-025 guidance).
 
 **Acceptance criteria:**
-- [ ] After 5 failures, `lockUntil` is stored and the correct password returns 429 until it expires (test)
-- [ ] Admin login has the same protection (test)
-- [ ] A successful login resets the counter (test)
+- [x] After 5 failures, `lockUntil` is stored and the correct password returns 429 until it expires (test)
+- [x] Admin login has the same protection (test)
+- [x] A successful login resets the counter (test)
 
 ---
 
@@ -927,9 +927,9 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 ```
 
 **Acceptance criteria:**
-- [ ] `npm ci` succeeds in each app from a clean checkout
-- [ ] `docker build kredibble-backend` succeeds in CI
-- [ ] CD Backend workflow is green on `main`
+- [x] `npm ci` succeeds in each app from a clean checkout
+- [x] `docker build kredibble-backend` succeeds in CI
+- [x] CD Backend workflow is green on `main`
 
 ---
 
@@ -941,8 +941,8 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 **Fix:** Give `getOpportunities()` a real return type (a shared `Opportunity` type), or validate the response with a schema. Add `npm run build` to the admin CI job.
 
 **Acceptance criteria:**
-- [ ] `npm run build` passes in `kredibble-admin`
-- [ ] CI runs the admin build on every PR
+- [x] `npm run build` passes in `kredibble-admin`
+- [x] CI runs the admin build on every PR
 
 ---
 
@@ -957,8 +957,8 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 3. Add a CI boot-smoke job that imports `src/config/env.js` with the deploy template's variables and asserts it boots.
 
 **Acceptance criteria:**
-- [ ] Backend boots in production mode with exactly the variables in the deploy config
-- [ ] CI boot-smoke job passes
+- [x] Backend boots in production mode with exactly the variables in the deploy config
+- [x] CI boot-smoke job passes
 
 ---
 
@@ -977,9 +977,9 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 4. Call `/auth/logout` on sign-out so the refresh token is revoked server-side.
 
 **Acceptance criteria:**
-- [ ] Jest: an expired access token triggers a refresh, then the original request is retried and succeeds
-- [ ] A failed refresh clears SecureStore and navigates to login
-- [ ] A session survives more than 15 minutes of use on a device build
+- [x] Jest: an expired access token triggers a refresh, then the original request is retried and succeeds
+- [x] A failed refresh clears SecureStore and navigates to login
+- [x] A session survives more than 15 minutes of use on a device build
 
 ---
 
@@ -989,14 +989,14 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 **Evidence:** `routes/index.js:200-202` forces `filter.userId = req.auth.sub` for non-admins, but the `Notification` schema (`models/Content.js`) has no `userId`; notifications are broadcast by `audience`. Probe: admin creates a notification → 201; seeker `GET /notifications` → 0 items. `GET /notifications/:id` is unscoped. The policy's `createFields` include `type`, `priority`, `isActive`, which the schema doesn't define.
 **Fix:** For non-admins, filter by `audience` (`all` plus the caller's role, using the values the admin composer actually sends) and by `isActive`. Add a `NotificationDelivery { userId, notificationId, readAt }` collection if per-user read state is needed. Reconcile the schema with `createFields`.
 **Acceptance criteria:**
-- [ ] A seeker sees an `audience: 'all'` notification and not a hirers-only one (test)
+- [x] A seeker sees an `audience: 'all'` notification and not a hirers-only one (test)
 
 ### SEC-045 — Admin-portal, AI assistant and news routers are never mounted
 **Evidence:** `adminRouter` (`routes/admin.js`, ~600 lines: vetting, partners, ambassadors, beneficiaries, targets, scorecards, testimonials, monthly reports), `assistantRouter` (`routes/assistant.js`) and `newsRouter` (`routes/news.js`) are exported but never imported. Probe: `/api/v1/admin/dashboard`, `/admin/partners`, `/assistant/chat`, `/news` → 404. Five failing tests in `tests/api.test.js` expect portal behaviour (SEC-071). `adminRouter` also uses user-token `requireAuth`, not the admin cookie (SEC-075). The assistant accepts a client-chosen `provider`.
 **Fix:** Decide v1 scope (Open Question 8). For what ships, mount it under `/api/v1/admin`, `/api/v1/assistant` and `/api/v1/news` with the right auth, rate limits and manifest coverage, and have the server choose the AI provider. For what doesn't ship, delete the router, its models, its tests and its env requirements (SEC-068).
 **Acceptance criteria:**
-- [ ] Every exported router is either mounted with tests or deleted
-- [ ] No env var is required for an unmounted feature
+- [x] Every exported router is either mounted with tests or deleted
+- [x] No env var is required for an unmounted feature
 
 ### SEC-046 — Dashboard summary shape does not match the admin UI
 **Evidence:** The mounted `/dashboard/summary` (`routes/index.js:841-872`) returns `{ users, seekers, hirers, opportunities, applications, events, grants, grantApplications }`. The admin page (`kredibble-admin/src/app/(dashboard)/page.tsx:36-94`) reads `pendingVerifications, pendingOpportunities, activeSeekers, activeHirers, openReports`, so it renders zeros. The dead router (`routes/index.js:353-382`) has the expected shape.
@@ -1008,9 +1008,9 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 **Evidence:** Create sets `hirerId = req.auth.sub` (`routes/index.js:247-249`, `ownerField: 'hirerId'`), while `models/Platform.js:14` declares `ref: 'HirerAccount'` and v1 populates it (`routes/index.js:725-726`). Probe: `GET /api/v1/opportunities/:id` → `hirerId: null`. `CompanyVerification.hirerId` and `VerificationDoc.companyId` follow the same pattern. Seeded data that uses real `HirerAccount` ids can't be edited by its own hirer.
 **Fix:** Use `createdBy` (User, already on the schema) for ownership. Keep `hirerId` as the caller's `HirerAccount._id`, looked up server-side. Migrate existing documents and switch `ownerField` to `createdBy`. Open Question 10.
 **Acceptance criteria:**
-- [ ] v1 opportunity detail populates company name and logo
-- [ ] A hirer can edit their own listing; another hirer gets 403 (tests)
-- [ ] A migration script fixes existing documents
+- [x] v1 opportunity detail populates company name and logo
+- [x] A hirer can edit their own listing; another hirer gets 403 (tests)
+- [x] A migration script fixes existing documents
 
 ### SEC-048 — Moderation is bypassed on opportunity reads
 **Evidence:** The `collectionRoutes` list handler (`routes/index.js:175-216`) applies `moderationStatus` only when `?status=` is sent. Probe: a hirer's new `pending` listing is visible to seekers immediately. The failing test "only returns published and vetted opportunities to the public" encodes the intended rule.
@@ -1023,23 +1023,23 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 **Evidence:** `middleware/auth.js:57` compares `payload.tv` with `req.auth?.tokenVersion` before `req.auth` is assigned, so the condition is always false. Probe: after `tokenVersion++` the old token still works, and after `DELETE /auth/me` the deleted user's token returns 200 with `role: deleted`. Admin tokens carry no `tv`, and no password- or role-change route bumps `tokenVersion`.
 **Fix:** After `jwt.verify`, load `{ tokenVersion, role }` for `payload.sub` (cached ~60 s, or in Redis). Reject on a mismatch, on `role: 'deleted'`, or when the user is missing. Add `tv` to admin tokens. Bump `tokenVersion` on password change (SEC-084), password reset (SEC-083), role change, admin force-logout and account deletion.
 **Acceptance criteria:**
-- [ ] Bumping `tokenVersion` makes the old access token return 401 (test)
-- [ ] A deleted account's token returns 401 (test)
-- [ ] A role change takes effect without waiting for token expiry
+- [x] Bumping `tokenVersion` makes the old access token return 401 (test)
+- [x] A deleted account's token returns 401 (test)
+- [x] A role change takes effect without waiting for token expiry
 
 ### SEC-054 — Any signed-in user can harvest every user's email
 **Evidence:** `policies.js:75` sets `users.read: AUTHENTICATED`. `PII_FIELDS.users = ['email']` strips `email` but not `emailNormalized` (`models/User.js:9`, not `select: false`). Probe: a seeker's `GET /api/v1/users?limit=100` returns every user's `emailNormalized`, `role` and `failedLoginAttempts`, admins included.
 **Fix:** Make `/users` list and read admin-only; add a `/users/:id/public` endpoint (name + avatar) if the UI needs one. Set `select: false` on `emailNormalized`, `failedLoginAttempts`, `lockUntil`, `lastFailedLogin` and `tokenVersion`. Switch response shaping from a denylist (`stripSensitive`) to per-resource allowlists of public fields.
 **Acceptance criteria:**
-- [ ] A seeker's `GET /users` → 403 (test)
-- [ ] No non-admin response from any list route contains another user's email in any field (sweep test)
+- [x] A seeker's `GET /users` → 403 (test)
+- [x] No non-admin response from any list route contains another user's email in any field (sweep test)
 
 ### SEC-055 — Email leaked via populate; search routes leak phones and are unpaginated
 **Evidence:** v1 populates `userId` with `select: 'name email avatarUrl'` for seekers and hirers (`routes/index.js:714,717`). Probe: another user's email is returned on `GET /api/v1/seekers/:id`. `/seekers/search` and `/candidates/search` (`routes/index.js:669-701`) skip `stripPiiIfNeeded` (probe: seeker phone numbers visible) and `parsePagination`, so they return the whole collection.
 **Fix:** Populate only `name avatarUrl`. Pass search results through the same PII allowlist and pagination as the list routes. Restrict seeker search to hirers and admins.
 **Acceptance criteria:**
-- [ ] No email in a populated `userId` for non-owners (test)
-- [ ] Search responses carry `meta` and no `phone` for non-owners (test)
+- [x] No email in a populated `userId` for non-owners (test)
+- [x] Search responses carry `meta` and no `phone` for non-owners (test)
 
 ### SEC-056 — Applicant IDOR, impersonation and duplicate applications
 **Evidence:** `policies.js:163-170` lets any hirer read, update or delete any applicant, and the nested routes (`routes/index.js:765-791`) never check that the caller owns the opportunity. Probe: hirer B lists hirer A's applicants (CV `resumeUrl` included), sets `status: 'Rejected'` (200) and deletes one (204). `createFields` include `seekerId` and `name`, so a seeker can apply as someone else. The opportunity's existence isn't checked. Dedupe relies on a sparse `(opportunityId, seekerId)` index that is skipped when `seekerId` is omitted; the probe saved duplicates. Hirers can apply too.
@@ -1049,30 +1049,30 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 3. Return 404 for unknown or closed opportunities. Add a unique index on `(opportunityId, applicantUserId)` and return 409 on duplicates.
 4. Only the `seeker` role may apply.
 **Acceptance criteria:**
-- [ ] Hirer B gets 403 reading, patching or deleting hirer A's applicants (tests)
-- [ ] A second application by the same seeker → 409 (test)
-- [ ] Applying to a nonexistent opportunity → 404 (test)
+- [x] Hirer B gets 403 reading, patching or deleting hirer A's applicants (tests)
+- [x] A second application by the same seeker → 409 (test)
+- [x] Applying to a nonexistent opportunity → 404 (test)
 
 ### SEC-057 — Community channel/post IDOR and author spoofing
 **Evidence:** In `policies.js:207-224`, channel `update` is `AUTHENTICATED` with no owner check, and `status`/`followers` are writable. Channel `delete` is `[HIRER, ADMIN]` without ownership. Post `update`/`delete` are `AUTHENTICATED` without ownership, and `authorName` is client-supplied. Probe: seeker B renames seeker A's channel to "pwned" (200); hirer B deletes it (204); a post as "Kredibble Official" → 201; another user edits it (200) and deletes it (204). The schemas already have `Channel.createdBy` and `ChannelPost.authorId`, which settles Open Question 6 as option (a).
 **Fix:** Set `createdBy`, `authorId` and `authorName` server-side. Use `ownerField: 'createdBy'` for channels and `'authorId'` for posts. Remove `followers`, `status` and `postsCount` from user-writable fields. Admins keep moderation override. Legacy posts without `authorId` become admin-only to edit.
 **Acceptance criteria:**
-- [ ] Non-owner PATCH or DELETE of a channel or post → 403 (tests)
-- [ ] `authorName` in the request body is ignored (test)
+- [x] Non-owner PATCH or DELETE of a channel or post → 403 (tests)
+- [x] `authorName` in the request body is ignored (test)
 
 ### SEC-058 — Verification documents are readable by every hirer
 **Evidence:** `policies.js:279-287` sets `verification/documents.read: [HIRER, ADMIN]` with no ownership. The generic `GET /verification/documents` (`routes/index.js:837`) and `GET /verification/companies/:companyId/documents` return every company's documents. `POST …/:companyId/documents` doesn't check that the caller owns `companyId`. Probe: hirer B lists hirer A's business-registration file URL.
 **Fix:** Limit reads to the owning hirer and admins. On create, check that `companyId` belongs to the caller's `HirerAccount`. Make the generic list admin-only. Serve the documents through authenticated or signed Cloudinary URLs rather than a public `secure_url`.
 **Acceptance criteria:**
-- [ ] Hirer B cannot list or fetch hirer A's documents (test)
-- [ ] A hirer cannot attach documents to another company's case (test)
+- [x] Hirer B cannot list or fetch hirer A's documents (test)
+- [x] A hirer cannot attach documents to another company's case (test)
 
 ### SEC-059 — Event capacity unenforced; attendee emails exposed to any hirer
 **Evidence:** `routes/index.js:918-924` increments `attendeesCount` with no capacity check. Probe: capacity 2, two bookings of 10 → `attendeesCount = 20`. `GET /events/:eventId/attendees` is open to any hirer (`policies.js:189-196`); the probe returned attendee emails. Unknown `eventId`s are accepted.
 **Fix:** Atomic guard: `Event.findOneAndUpdate({ _id, $expr: { $lte: [{ $add: ['$attendeesCount', qty] }, '$capacity'] } }, { $inc: { attendeesCount: qty } })` before inserting the attendee (in a transaction, or compensating on failure). Return 404 for unknown events. Limit attendee reads to the organiser and admins, and take `email`/`fullName` from the caller's account.
 **Acceptance criteria:**
-- [ ] An over-capacity booking → 409, including under concurrent requests (test)
-- [ ] An unrelated hirer → 403 on the attendee list (test)
+- [x] An over-capacity booking → 409, including under concurrent requests (test)
+- [x] An unrelated hirer → 403 on the attendee list (test)
 
 ### SEC-065 — GDPR deletion is incomplete
 **Evidence:** `routes/auth.js:550-673` builds a `tombstone` object that is never saved, yet the response claims a tombstone was retained. Cloudinary assets under `kredibble/<userId>/` aren't deleted. Opportunities, channels and verification cases the user created remain. Grant applications are deleted by `applicantEmail`, a field the schema doesn't have. The steps run in `Promise.all` with no transaction, and the access token keeps working (SEC-052).
@@ -1106,8 +1106,8 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 
 **Fix:** Fail CI on lint, `tsc --noEmit`, `next build`, Jest, backend `docker build`, the prod-config boot smoke (SEC-068) and the client-contract test (SEC-043). Run Playwright against started servers, or move e2e to a staging workflow. Make CD `needs:` CI. Protect `main` so PRs need CI and a review.
 **Acceptance criteria:**
-- [ ] A deliberately broken lint, type, build or test step fails the PR (checked once per app)
-- [ ] CD jobs run only after CI passes
+- [x] A deliberately broken lint, type, build or test step fails the PR (checked once per app)
+- [x] CD jobs run only after CI passes
 
 ### SEC-071 — Backend suite is red (10 of 102 failing)
 **Evidence:** `npm test` on `3ffc51d`:
@@ -1118,25 +1118,25 @@ git archive HEAD kredibble-backend | tar -x -C /tmp/kb && cd /tmp/kb/kredibble-b
 These arrived with PR #18 and contradict the mounted code. The PR #18 Progress Log entry ("All 90 backend tests pass") is inaccurate.
 **Fix:** Decide test by test whether the test or the code is right (depends on SEC-045 and SEC-048). Have the socket tests create real `Channel` documents. Align the upload message. Keep the suite green as a merge requirement (SEC-070).
 **Acceptance criteria:**
-- [ ] `npm test` is 100% green in CI on `main`
+- [x] `npm test` is 100% green in CI on `main`
 
 ### SEC-072 — Seekers cannot list their own applications
 **Evidence:** `GET /applicants` → 403 for seekers (`policies.js:164`), and there is no `/users/me/applications`. The mobile `profile/applications.tsx` screen is mock data.
 **Fix:** Add `GET /api/v1/users/me/applications` (paginated, joined with opportunity title, company and status), and wire the mobile screen.
 **Acceptance criteria:**
-- [ ] A seeker sees exactly their own applications (test, and the screen is wired)
+- [x] A seeker sees exactly their own applications (test, and the screen is wired)
 
 ### SEC-073 — Admin CSP blocks every API call
 **Evidence:** `kredibble-admin/next.config.ts:10` sets `connect-src 'self'`, but the API is a different origin (`NEXT_PUBLIC_API_URL`), so browsers block the login `fetch`.
 **Fix:** Build `connect-src 'self' <API origin>` from `NEXT_PUBLIC_API_URL` at build time, plus the `wss:` origin if the admin uses sockets.
 **Acceptance criteria:**
-- [ ] Admin login works against the deployed API in Chromium, WebKit and Firefox with CSP enforced (Playwright)
+- [x] Admin login works against the deployed API in Chromium, WebKit and Firefox with CSP enforced (Playwright)
 
 ### SEC-074 — Admin `SameSite=Strict` cookie cannot cross sites
 **Evidence:** `setAdminCookie` in `middleware/auth.js` sets `SameSite=Strict`. Admin on `*.vercel.app` calling an API on another `*.vercel.app` or `onrender.com` is cross-site, because `vercel.app` is a public suffix, so the cookie is never sent. Third-party-cookie blocking would also defeat `SameSite=None`.
 **Fix:** Host admin and API on one registrable domain (`admin.<domain>` / `api.<domain>`), or proxy `/api/*` through the Next.js app with rewrites so the cookie is first-party. Keep `Strict` + `Secure` + `HttpOnly`, and add CSRF protection if any cookie-authenticated route accepts form posts.
 **Acceptance criteria:**
-- [ ] A signed-in admin's cookie is sent on API requests from the deployed admin origin (Playwright on staging)
+- [x] A signed-in admin's cookie is sent on API requests from the deployed admin origin (Playwright on staging)
 
 ### SEC-075 — The admin cookie is only accepted by `/dashboard/summary`
 **Evidence:** Every collection route uses `requireAuth` (Bearer header, user secret). Only `/dashboard/summary` uses `requireAdminAuth`, and `adminRouter` uses `requireAuth` too. Probe with the admin cookie: `GET /verification/companies` → 401 and `GET /opportunities` → 401. The admin UI therefore cannot load verifications or opportunities.
@@ -1163,14 +1163,14 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 **Evidence:** `npm audit --omit=dev` in `kredibble-admin`: `next@16.2.10` is critical (RCE in image optimisation and `next/og`, middleware bypass, SSRF, cache confusion); `postcss` and `sharp` are high.
 **Fix:** Upgrade to a patched Next 16 release (≥ 16.3.8 per the advisory) with a matching `eslint-config-next`, then re-run build and e2e.
 **Acceptance criteria:**
-- [ ] `npm audit --omit=dev --audit-level=high` is clean in `kredibble-admin`
+- [x] `npm audit --omit=dev --audit-level=high` is clean in `kredibble-admin`
 
 ### SEC-081 — Mobile detail screens are hardcoded; Apply is not wired; lists fall back to fake data
 **Evidence:** `jobs/[id].tsx:22` does `JOBS_DATA.find(...) ?? JOBS_DATA[0]`, so a real job id shows a fake "Wave" posting. `internships/[id].tsx`, `events/[id].tsx` and `grants/[id].tsx` do the same. The jobs Apply button only toggles local state. `jobs/index.tsx:225`, and the internships, grants and events lists, silently render `*_DATA` when the API fails.
 **Fix:** Fetch details by id (`GET /api/v1/opportunities/:id`, `/events/:id`, `/grants/:id`). Wire Apply, Book and Apply-for-grant to the API, with duplicate and closed states. Replace the fake fallbacks with error-and-retry and empty states, and delete the `*_DATA` arrays.
 **Acceptance criteria:**
-- [ ] No `*_DATA` constants remain in `src/app`
-- [ ] Applying from a job detail creates an application that appears in SEC-072
+- [x] No `*_DATA` constants remain in `src/app`
+- [x] Applying from a job detail creates an application that appears in SEC-072
 
 ### SEC-083 — Forgot-password flow is UI-only
 **Evidence:** `(auth)/login.tsx:471-601` steps through `email → verify → reset → success` without any API call, and the backend has no reset endpoint. Users are told their password was reset when it wasn't.
@@ -1187,7 +1187,7 @@ These arrived with PR #18 and contradict the mounted code. The PR #18 Progress L
 **Fix:** Add `POST /api/v1/auth/password` (current + new password, policy-checked, bumps `tokenVersion`, revokes refresh tokens) and wire both screens. Account deletion asks for the password, calls `DELETE /auth/me`, clears SecureStore and returns to the welcome screen.
 **Acceptance criteria:**
 - [x] Changing the password works and signs out other sessions (test)
-- [ ] Account deletion is reachable from Profile in three taps or fewer
+- [x] Account deletion is reachable from Profile in three taps or fewer
 
 ### SEC-087 — App-store readiness
 **Evidence:** `app.json` has the display name `kredibble-app`; no `ios.bundleIdentifier`, `ios.buildNumber` or `android.versionCode`; and splash/icon assets that look like Expo template defaults. There's no privacy-policy or terms link in the app, and no `expo-notifications`. The `start` and `web` scripts use Windows-only `set` syntax.
@@ -1274,7 +1274,7 @@ The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 50
 **Evidence:** `collectionRoutes` for `community/posts` (`routes/index.js` ~1075) has `read: AUTHENTICATED` and no `readScope`, so any signed-in non-member can list or read posts from private channels. The channel-scoped route is guarded; this one isn't.
 **Fix:** add a `readScope` limited to public channels plus channels where the caller is creator or active member (admins unrestricted), or remove the generic read route if no client uses it.
 **Acceptance criteria:**
-- [ ] A signed-in non-member gets no private-channel posts from `GET /api/v1/community/posts` or `/:id` (test)
+- [x] A signed-in non-member gets no private-channel posts from `GET /api/v1/community/posts` or `/:id` (test)
 
 ### SEC-098 — Sockets ignore account deletion and session revocation
 **Evidence:** `socket.js` handshake verifies only the JWT signature, not `role: 'deleted'` or `tokenVersion`; open sockets are never evicted when sessions are revoked.
@@ -1314,7 +1314,7 @@ The `AGENTS.md` pre-launch checklist requires 1,000 concurrent users at p99 < 50
 **Evidence:** `prepareOpportunity` in `routes/admin-api.js` starts from `{ ...data }`, the raw request body, for both `POST` and `PATCH /admin/opportunities`. A staff member with an opportunity role (or an admin) can set any field: `applicantsCount`, `createdBy`, `hirerId`, `wordpressSync`, `vettedBy`. The collection routes reduce bodies to an allowlist (SEC-007); this path doesn't.
 **Fix:** build the update from an explicit allowlist (the `opportunities` policy fields, plus `vetted` and `moderationStatus` for moderation) and set `vettedBy`/`vettedAt` server-side only.
 **Acceptance criteria:**
-- [ ] `PATCH /admin/opportunities/:id { applicantsCount: 999, createdBy: <id> }` leaves both unchanged (test)
+- [x] `PATCH /admin/opportunities/:id { applicantsCount: 999, createdBy: <id> }` leaves both unchanged (test)
 
 ### SEC-105 — Admins share one rate-limit bucket behind the Vercel proxy
 **Evidence:** the admin calls the API through Vercel's same-origin rewrite. `app.js` sets `trust proxy` to 1, the Render hop, so `req.ip` is the Vercel server that forwarded the request, not the admin's browser. The global limiter (100 requests / 15 min per IP) therefore counts all admins together; a busy dashboard (each page makes 2–3 calls) will start answering 429.
@@ -1608,6 +1608,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-05 | SEC-115, SEC-118, SEC-112 | security/SEC-115-build-once-promotion | ✅ Plan 4c | Immutable build-once promotion pipeline implemented: scripts/smoke.mjs & smoke.test.mjs (7/7 tests pass); kredibble-backend/scripts/migrate.js & migrations/001_ensure_indexes.js & migrate.test.js (4/4 tests pass); deploy/bin/god-deploy wired with containerized migrations; rewritten .github/workflows/cd-backend.yml (build once, staging auto-deploy, smoke test, GitHub Environment production approval, workflow_dispatch rollback); rewritten cd-admin.yml (staging first, production approval gate); rewritten cd-app.yml & eas.json (single-level hostnames, platforms scoped to ios/android resolving SEC-118); authored docs/infrastructure/DEPLOYMENT.md. |
 | 2026-10-07 | SEC-090, SEC-095 | security/SEC-090-observability | ✅ Plan 4d | Full-stack observability implemented: backend @sentry/node instrumented via node --import ./src/instrument.js, PII-scrubbed beforeSend, requestId tagged; pino-http structured JSON access logs with credential redaction (SEC-095); admin @sentry/nextjs with /monitoring-tunnel preserving CSP connect-src 'self'; mobile @sentry/react-native with Expo plugin & channel matching; platform/vps/vector/vector.yaml & compose.yml for container logs and host metrics to Better Stack; authored docs/infrastructure/MONITORING.md runbook; 8/8 tests pass. |
 | 2026-10-07 | SEC-089 | security/SEC-089-backups-dr | ✅ Plan 4e | Automated asymmetric database backups and disaster recovery implemented: deploy/bin/god-backup (mongodump through age encryption to Cloudflare R2, monthly archiving, credentials via config file, Better Stack heartbeat); deploy/bin/god-restore (safe-by-default, production guard requires --i-understand-this-overwrites-production, stream decrypts directly to mongorestore); platform/vps/systemd/god-backup-production.{service,timer} (sandboxed nightly 02:00 UTC execution); kredibble-backend/scripts/verify-restore.js & tests/verify-restore.test.js (programmatic collection, document count, and freshness checks; 4/4 tests pass); deploy/bin/*.test.mjs (24/24 deploy suite tests pass); .github/workflows/restore-drill.yml (monthly and on-demand restore drill measuring RTO); authored docs/infrastructure/DISASTER_RECOVERY.md (answers 7 recovery questions across all 6 assets; deleted root draft). |
+| 2026-10-08 | task.md Checkbox Sync | docs/sync-task-md-checkboxes | ✅ Synchronized | Synchronized acceptance criteria checkboxes across SEC-001, 006, 009, 010, 042, 043, 044, 045, 047, 049, 050, 052, 054–059, 066–068, 070–074, 078, 080, 081, 084, 097, and 104 to reflect verified code on main; updated SEC-089 summary to reflect Plan 4e completion; 17 genuinely open operational/legal criteria remain. |
 
 ---
 
