@@ -154,6 +154,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, drawerOpen, onCloseDrawe
   return (
     // The wrapper owns position, width (and its 200ms animation) and the drawer slide. The aside fills it.
     <div
+      data-print-hide
       className={cn(
         "z-40 shrink-0",
         // Desktop: sticky full-height column; width follows the expanded / rail state.

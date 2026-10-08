@@ -128,29 +128,76 @@ export const CLOSED_STAGES: readonly PartnerStage[] = ["onboard", "renew"];
  */
 export const isPartnerClosed = (partner: Pick<Partner, "stage">): boolean => CLOSED_STAGES.includes(partner.stage);
 
-/** The day a partner first reached onboard or renew, or undefined while it is still open. Derived from the history. */
-export const partnerClosedAt = (partner: Pick<Partner, "stageHistory">): string | undefined =>
-  partner.stageHistory.find((entry) => CLOSED_STAGES.includes(entry.stage))?.at;
+/**
+ * The day a partner closed: the first entry of the closed stretch it is in NOW (onboard, then maybe renew), or undefined
+ * while it is open. A partner moved back out of onboard is open again, so it no longer counts as onboarded; if it closes
+ * once more, the new closing day counts. Derived from the history.
+ */
+export const partnerClosedAt = (partner: Pick<Partner, "stageHistory">): string | undefined => {
+  let at: string | undefined;
+  for (let i = partner.stageHistory.length - 1; i >= 0; i--) {
+    const entry = partner.stageHistory[i];
+    if (!CLOSED_STAGES.includes(entry.stage)) break;
+    at = entry.at;
+  }
+  return at;
+};
 
+/**
+ * One step of a partner's history: it entered `stage` on `at`, coming `from` the stage before (undefined for the
+ * first entry, when the partner was added). The from-to pair of every move is therefore always recorded.
+ */
 export interface PartnerStageEntry {
   stage: PartnerStage;
   at: string;
+  from?: PartnerStage;
 }
+
+export const PARTNER_TYPES = ["corporate", "university", "foundation", "ngo", "government", "media_tech"] as const;
+export type PartnerType = (typeof PARTNER_TYPES)[number];
+export const PARTNER_TYPE_LABELS: Record<PartnerType, string> = {
+  corporate: "Corporate",
+  university: "University",
+  foundation: "Foundation",
+  ngo: "NGO",
+  government: "Government",
+  media_tech: "Media & tech",
+};
 
 export interface Partner {
   id: string;
   name: string;
   country: string;
   sector: string;
+  type: PartnerType;
+  /** The staff member who looks after this partner. */
+  ownerId: string;
   contactName: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  /** One line: what they provide to the desk ("Graduate roles and internships"). */
+  provides: string;
+  /** How the desk found them ("Ambassador introduction"). */
+  sourcedVia?: string;
+  notes?: string;
   /** The current stage: always the last entry of stageHistory. */
   stage: PartnerStage;
   stageHistory: PartnerStageEntry[];
 }
 
 // ---- Ambassadors (the Network) ----------------------------------------------------------------------
-export const AMBASSADOR_TIERS = ["starter", "rising", "champion"] as const;
+export const AMBASSADOR_TIERS = ["ambassador", "senior", "lead"] as const;
 export type AmbassadorTier = (typeof AMBASSADOR_TIERS)[number];
+export const AMBASSADOR_TIER_LABELS: Record<AmbassadorTier, string> = {
+  ambassador: "Ambassador",
+  senior: "Senior Ambassador",
+  lead: "Campus or Regional Lead",
+};
+/** Shorter wording for list columns (the full name stays in the form, the detail page and the filter). */
+export const AMBASSADOR_TIER_SHORT_LABELS: Record<AmbassadorTier, string> = { ambassador: "Ambassador", senior: "Senior Ambassador", lead: "Regional Lead" };
+export const MEMBER_TYPES = ["student", "graduate", "staff", "volunteer"] as const;
+export type MemberType = (typeof MEMBER_TYPES)[number];
+export const MEMBER_TYPE_LABELS: Record<MemberType, string> = { student: "Student", graduate: "Graduate", staff: "Campus staff", volunteer: "Volunteer" };
 export const AMBASSADOR_STATUSES = ["applicant", "onboarding", "active", "dormant"] as const;
 export type AmbassadorStatus = (typeof AMBASSADOR_STATUSES)[number];
 
@@ -162,6 +209,20 @@ export interface Ambassador {
   referralCode: string;
   campus: string;
   country: string;
+  city: string;
+  phone?: string;
+  /** A picked image (an object URL for a new pick). Without one the initials avatar shows. */
+  photoUrl?: string;
+  memberType: MemberType;
+  description?: string;
+  /** "Campus Lead, KNUST" */
+  roleTitle?: string;
+  /** The staff member this ambassador reports to. */
+  assignedLeadId?: string;
+  /** Finished the desk's ambassador training. */
+  trained: boolean;
+  /** The seeker account this ambassador also has (optional). */
+  linkedSeekerId?: string;
   tier: AmbassadorTier;
   status: AmbassadorStatus;
   joinedAt: string;
@@ -173,7 +234,10 @@ export interface Ambassador {
 export interface AmplificationLog {
   id: string;
   ambassadorId: string;
-  listingId: string;
+  /** The listing that was shared; a share logged by hand on the Network page may not name one. */
+  listingId?: string;
+  /** A note typed when the share was logged by hand. */
+  note?: string;
   channel: SocialPlatform;
   at: string;
   clicks: number;
@@ -181,20 +245,37 @@ export interface AmplificationLog {
 }
 
 // ---- Database records (beneficiaries) ---------------------------------------------------------------
-export const RECORD_SOURCES = ["ambassador", "website", "event", "partner", "referral", "social"] as const;
+export const RECORD_SOURCES = ["organic", "ambassador", "event", "partner", "import"] as const;
 export type RecordSource = (typeof RECORD_SOURCES)[number];
+/** The words for each source (the pill, the filter and the legend). */
+export const RECORD_SOURCE_LABELS: Record<RecordSource, string> = {
+  organic: "Organic",
+  ambassador: "Ambassador referral",
+  event: "Event",
+  partner: "Partner channel",
+  import: "Bulk import",
+};
 
 export interface DatabaseRecord {
   id: string;
   name: string;
+  /** Used to spot a duplicate (compared without case or surrounding spaces). */
+  email: string;
+  /** Used to spot a duplicate (compared without spaces, dashes or the country prefix). */
+  phone?: string;
   country: string;
   institution: string;
   source: RecordSource;
   verified: boolean;
+  /** The day the record was added. */
   createdAt: string;
+  /** The staff member who added it. */
+  addedById?: string;
   /** Set when verified. This decides the month it counts in. */
   verifiedAt?: string;
+  /** Only for the source "ambassador" (a referral). */
   ambassadorId?: string;
+  /** The opportunity the person came in through (optional). */
   listingId?: string;
 }
 
@@ -203,9 +284,29 @@ export const SOCIAL_PLATFORMS = ["instagram", "linkedin", "x", "facebook", "tikt
 export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
 export type SocialPostStatus = "draft" | "scheduled" | "published";
 
+/** The platforms a post can be logged on (a superset of the amplification channels above). */
+export const SOCIAL_POST_PLATFORMS = ["facebook", "instagram", "x", "linkedin", "tiktok", "youtube", "whatsapp", "other"] as const;
+export type PostPlatform = (typeof SOCIAL_POST_PLATFORMS)[number];
+export const POST_PLATFORM_LABELS: Record<PostPlatform, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  x: "X",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  whatsapp: "WhatsApp",
+  other: "Other",
+};
+
 export interface SocialPost {
   id: string;
-  platform: SocialPlatform;
+  platform: PostPlatform;
+  /** The headline of the post (what the list shows). */
+  title: string;
+  /** The link to the post on the platform. */
+  url?: string;
+  /** The opportunity the post promotes (optional). */
+  listingId?: string;
   text: string;
   status: SocialPostStatus;
   /** The publish (or planned) date. */
@@ -221,6 +322,8 @@ export type TestimonialStatus = (typeof TESTIMONIAL_STATUSES)[number];
 export interface Testimonial {
   id: string;
   author: string;
+  /** Staff only: never shown in the public preview. */
+  email: string;
   /** "Software engineer, Accra" */
   role: string;
   quote: string;
@@ -235,6 +338,8 @@ export interface Testimonial {
 export interface MonthlyReport {
   id: string;
   reportMonth: MonthKey;
+  /** Which template it was generated from: the partner report or the internal team report. */
+  view: "partner" | "team";
   generatedAt: string;
 }
 
@@ -272,11 +377,44 @@ export interface StaffMember {
   isCurrentUser?: boolean;
 }
 
-/** The monthly target for one KPI. */
+/** The monthly target for one KPI: the one that applied from the start. Changes made in Settings are TargetChange rows on top of it. */
 export interface Target {
   id: string;
   kpi: KpiKey;
   target: number;
+}
+
+/**
+ * A change of target, saved in Settings: from `effectiveFrom` (a month, "2026-10") the KPI's target is `value`. Rows are only ever
+ * ADDED, never edited (a second save for the same KPI and month is a new row, and the later row wins): earlier months keep the target that
+ * applied then. `previous` is the target that was in force in that month before the change, and `changedBy` and `changedAt` say who saved
+ * it and on what day (the Change history list on Settings > Targets).
+ */
+export interface TargetChange {
+  id: string;
+  kpi: KpiKey;
+  value: number;
+  effectiveFrom: MonthKey;
+  previous?: number;
+  changedBy?: string;
+  /** "YYYY-MM-DD", the day it was saved. */
+  changedAt?: string;
+  /** The order of saving across targets AND thresholds (1, 2, 3 ...): the Change history is sorted by it. */
+  seq?: number;
+}
+
+/**
+ * The status thresholds that apply from `effectiveFrom` (a month), exactly like a TargetChange. The seed has ONE row, effective from the
+ * first month of the data (the default 95% and 70%); Settings only ever appends rows. `previous` is what applied in that month before a
+ * change (a row without it is the starting point, not a change).
+ */
+export interface ThresholdChange extends KpiThresholds {
+  id: string;
+  effectiveFrom: MonthKey;
+  previous?: KpiThresholds;
+  changedBy?: string;
+  changedAt?: string;
+  seq?: number;
 }
 
 /** When a KPI turns green, amber or red: attainment (value / pro-rated target) at or above `green` is green, at or above `amber` is amber. */
@@ -300,6 +438,8 @@ export interface EntityCollections {
   websiteMonths: WebsiteMonth[];
   staff: StaffMember[];
   targets: Target[];
+  targetHistory: TargetChange[];
+  thresholdHistory: ThresholdChange[];
 }
 
 export type EntityName = keyof EntityCollections;

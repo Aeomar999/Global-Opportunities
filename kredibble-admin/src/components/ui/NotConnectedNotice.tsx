@@ -11,7 +11,8 @@ import { Info } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isMockMode } from "@/lib/services/mock-mode";
 
-export function NotConnectedNotice({ className }: { className?: string }) {
+/** `message` replaces the default wording (for a page where only PART of what shows is not live). */
+export function NotConnectedNotice({ className, message }: { className?: string; message?: string }) {
   if (isMockMode()) return null;
   return (
     <p
@@ -23,7 +24,7 @@ export function NotConnectedNotice({ className }: { className?: string }) {
       )}
     >
       <Info size={16} aria-hidden="true" />
-      This page isn&apos;t connected to live data yet. What you see is sample data.
+      {message ?? "This page isn't connected to live data yet. What you see is sample data."}
     </p>
   );
 }

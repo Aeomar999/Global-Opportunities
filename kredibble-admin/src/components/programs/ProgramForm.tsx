@@ -29,6 +29,7 @@ import { NotConnectedNotice } from "@/components/ui/NotConnectedNotice";
 import { ChipsInput } from "@/components/ui/form/ChipsInput";
 import { Field } from "@/components/ui/form/Field";
 import { FormSection } from "@/components/ui/form/FormSection";
+import { DateTimeField } from "@/components/ui/form/DateTimeField";
 import { Input } from "@/components/ui/form/Input";
 import { Select, type SelectOption } from "@/components/ui/form/Select";
 import { StickyActionBar } from "@/components/ui/form/StickyActionBar";
@@ -228,12 +229,8 @@ export function ProgramForm({ program }: { program?: Program }) {
               <Field label="Location" optional helper="A city, a venue or a link.">
                 <Input value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. Accra" autoComplete="off" />
               </Field>
-              <Field label="Start date and time" error={show("startAt") ? errors.startAt : undefined}>
-                <Input type="datetime-local" value={form.startAt} onChange={(e) => set("startAt", e.target.value)} onBlur={() => touch("startAt")} />
-              </Field>
-              <Field label="End date and time" error={show("endAt") ? errors.endAt : undefined}>
-                <Input type="datetime-local" value={form.endAt} onChange={(e) => set("endAt", e.target.value)} onBlur={() => touch("endAt")} />
-              </Field>
+              <DateTimeField label="Start date and time" value={form.startAt} onChange={(value) => set("startAt", value)} onBlur={() => touch("startAt")} error={show("startAt") ? errors.startAt : undefined} />
+              <DateTimeField label="End date and time" value={form.endAt} onChange={(value) => set("endAt", value)} onBlur={() => touch("endAt")} minTimeAfter={form.startAt || undefined} error={show("endAt") ? errors.endAt : undefined} />
             </FormSection>
           </Card>
 

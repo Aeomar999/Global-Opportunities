@@ -12,7 +12,7 @@
  * - training_officer: edit programs, events; view network.
  * - database_officer: edit database; view network.
  * - communications_officer: edit testimonials, notifications, career resources; view monthly report, social.
- * - social_media_manager: edit social.
+ * - social_media_manager: edit social; view testimonials (the quotes they can share).
  * - country_lead: edit network; view programs, partners, database, leaderboard.
  * - admin_support: edit team (members).
  * - roles_permissions (the Roles & permissions tab on Team): edit for super_admin, view for desk_lead, nobody else.
@@ -100,7 +100,7 @@ export const FIXED_PERMISSIONS: Record<Exclude<Role, "moderator" | "support">, G
   training_officer: own({ programs: "edit", events: "edit", network: "view" }),
   database_officer: own({ database: "edit", network: "view" }),
   communications_officer: own({ testimonials: "edit", notifications: "edit", career_resources: "edit", monthly_report: "view", social: "view" }),
-  social_media_manager: own({ social: "edit" }),
+  social_media_manager: own({ social: "edit", testimonials: "view" }),
   country_lead: own({ network: "edit", programs: "view", partners: "view", database: "view", leaderboard: "view" }),
   admin_support: own({ team: "edit" }),
 };

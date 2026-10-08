@@ -20,7 +20,7 @@
  * - useMockStoreVersion() re-renders a component whenever anything in the store changes.
  */
 import { useSyncExternalStore } from "react";
-import type { EntityCollections, EntityName, KpiThresholds } from "@/lib/mock-entities";
+import { PARTNER_STAGE_LABELS, type EntityCollections, type EntityName, type PartnerStage } from "@/lib/mock-entities";
 import { buildSeed } from "@/lib/mock-seed";
 import { isMockMode } from "@/lib/services/mock-mode";
 
@@ -89,7 +89,6 @@ export function overlayRows<T extends { id: string }>(collection: MockCollection
 // ---------------------------------------------------------------------------------------------
 const initial = buildSeed();
 let collections: EntityCollections = initial.collections;
-let thresholds: KpiThresholds = initial.thresholds;
 
 /** The current rows of one entity collection. */
 export const getMockCollection = <K extends EntityName>(name: K): EntityCollections[K] => collections[name];
@@ -111,12 +110,24 @@ export function useMockCollection<K extends EntityName>(name: K): EntityCollecti
   return collections[name];
 }
 
-/** When a KPI turns green or amber (stored values, never hard-coded in components). */
-export const getKpiThresholds = (): KpiThresholds => thresholds;
+/**
+ * The labels of the six partner stages. The KEYS are fixed (prospect ... renew); only the words can change, and the
+ * Settings screen will edit them. The Partners board reads them from here, never from PARTNER_STAGE_LABELS directly.
+ */
+let partnerStageLabels: Record<PartnerStage, string> = { ...PARTNER_STAGE_LABELS };
 
-/** Replaces the thresholds (mock mode only). TODO(backend): persist this change. */
-export function setKpiThresholds(next: KpiThresholds) {
-  if (!isMockMode()) return;
-  thresholds = { ...next };
+export const getPartnerStageLabels = (): Record<PartnerStage, string> => partnerStageLabels;
+
+/** Replaces the stage labels (a blank label keeps the default). TODO(backend): persist this change. */
+export function setPartnerStageLabels(next: Partial<Record<PartnerStage, string>>) {
+  const merged = { ...PARTNER_STAGE_LABELS };
+  for (const key of Object.keys(merged) as PartnerStage[]) if (next[key]?.trim()) merged[key] = next[key]!.trim();
+  partnerStageLabels = merged;
   emit();
+}
+
+/** The stage labels; re-renders the caller whenever the store changes. */
+export function usePartnerStageLabels(): Record<PartnerStage, string> {
+  useMockStoreVersion();
+  return partnerStageLabels;
 }

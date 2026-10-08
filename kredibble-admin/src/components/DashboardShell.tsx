@@ -118,7 +118,7 @@ export function DashboardShell({ initialSidebar, initialDevRoles, children }: Da
   return (
     <ToastProvider>
     <RoleProvider initialDevRoles={initialDevRoles}>
-    <div className="flex flex-1 bg-sb-bg">
+    <div data-print-flow className="flex flex-1 bg-sb-bg">
       {/* First tab stop: jumps past the sidebar to the page content. Visible only while focused. */}
       <a
         href="#main-content"
@@ -135,15 +135,15 @@ export function DashboardShell({ initialSidebar, initialDevRoles, children }: Da
         onOpenPalette={() => setPaletteOpen(true)}
       />
 
-      {drawerOpen && <div aria-hidden="true" onClick={closeDrawer} className="fixed inset-0 z-30 bg-ink/40 lg:hidden" />}
+      {drawerOpen && <div aria-hidden="true" data-print-hide onClick={closeDrawer} className="fixed inset-0 z-30 bg-ink/40 lg:hidden" />}
 
-      <div className="flex min-w-0 flex-1 flex-col bg-canvas">
+      <div data-print-flow className="flex min-w-0 flex-1 flex-col bg-canvas">
         <TopBar onOpenNav={() => setDrawerOpen(true)} counts={knownCounts} />
         {/* Page padding: 28px desktop, 20px tablet, 16px mobile. */}
         {/* flex column: a page can grow to fill the height (forms use it to pin their action bar to the bottom) */}
-        <main id="main-content" tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-4 outline-none sm:p-5 lg:p-7">
+        <main id="main-content" data-print-flow tabIndex={-1} className="flex min-w-0 flex-1 flex-col p-4 outline-none sm:p-5 lg:p-7">
           {/* Content is capped at 1440px and centred; the top bar above stays full width. */}
-          <div className="mx-auto flex w-full max-w-page flex-1 flex-col">
+          <div data-print-flow className="mx-auto flex w-full max-w-page flex-1 flex-col">
             {/* Every nav route is checked against the roles here, so direct URL visits are guarded too. */}
             <RouteGuard>{children}</RouteGuard>
           </div>

@@ -37,13 +37,26 @@ export const KPI_KEYS = [
 
 export type KpiKey = (typeof KPI_KEYS)[number];
 
+/**
+ * What a KPI counts:
+ * - "count": earned DURING the month (listings published, posts, reach...). The current month is judged against the part of the target the month
+ *   has earned so far (pro-rated), a past month against the full target.
+ * - "running_total": a stock at the end of the month (active ambassadors), not something earned during it. It is judged against the FULL
+ *   monthly target all month: no pro-rating, no pace tick.
+ */
+export type KpiKind = "count" | "running_total";
+
 export interface KpiDefinition {
   key: KpiKey;
   label: string;
   /** What one unit is, as a plural noun: "listings", "views". */
   unit: string;
+  /** The same for exactly one: "listing", "view" (so "of 1 listing", never "of 1 listings"). See kpiUnit in lib/plural.ts. */
+  unitOne: string;
   /** Roles held to this number. */
   owners: Role[];
+  /** What it counts: earned in the month, or a running total (see KpiKind). */
+  kind: KpiKind;
   /** One line: exactly what is counted. */
   note: string;
   /** The screen to open for the detail behind the number. */
@@ -71,7 +84,9 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "opportunities_published",
     label: "Opportunities published",
     unit: "listings",
+    unitOne: "listing",
     owners: owned("opportunities_published"),
+    kind: "count",
     note: "Vetted listings published this month",
     screen: "opportunities_queue",
   },
@@ -79,7 +94,9 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "programs_organised",
     label: "Programs organised",
     unit: "programs",
+    unitOne: "program",
     owners: owned("programs_organised"),
+    kind: "count",
     note: "Delivered programs this month",
     screen: "programs",
   },
@@ -87,15 +104,19 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "active_ambassadors",
     label: "Active ambassadors",
     unit: "ambassadors",
+    unitOne: "ambassador",
     owners: owned("active_ambassadors"),
-    note: "Running total: ambassadors who are active at the end of the month",
+    kind: "running_total",
+    note: "Running total: judged against the full target",
     screen: "network",
   },
   partners_onboarded: {
     key: "partners_onboarded",
     label: "Partners onboarded",
     unit: "partners",
+    unitOne: "partner",
     owners: owned("partners_onboarded"),
+    kind: "count",
     note: "Partners that moved to Onboard or Renew (a closed deal) this month",
     screen: "partners",
   },
@@ -103,7 +124,9 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "beneficiaries_verified",
     label: "Beneficiaries verified",
     unit: "records",
+    unitOne: "record",
     owners: owned("beneficiaries_verified"),
+    kind: "count",
     note: "Database records verified this month",
     screen: "database",
   },
@@ -111,7 +134,9 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "social_reach",
     label: "Social reach",
     unit: "people reached",
+    unitOne: "person reached",
     owners: owned("social_reach"),
+    kind: "count",
     note: "Total reach of posts published this month",
     screen: "social",
   },
@@ -119,7 +144,9 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "social_engagement",
     label: "Social engagement",
     unit: "interactions",
+    unitOne: "interaction",
     owners: owned("social_engagement"),
+    kind: "count",
     note: "Likes, comments, shares and clicks on posts published this month",
     screen: "social",
   },
@@ -127,7 +154,9 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "posts_published",
     label: "Posts published",
     unit: "posts",
+    unitOne: "post",
     owners: owned("posts_published"),
+    kind: "count",
     note: "Social posts published this month",
     screen: "social",
   },
@@ -135,7 +164,9 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "website_views",
     label: "Website views",
     unit: "views",
+    unitOne: "view",
     owners: owned("website_views"),
+    kind: "count",
     note: "Page views on the website this month",
     screen: "monthly_report",
   },
@@ -143,11 +174,16 @@ export const KPIS: Record<KpiKey, KpiDefinition> = {
     key: "monthly_reports",
     label: "Monthly reports",
     unit: "reports",
+    unitOne: "report",
     owners: owned("monthly_reports"),
+    kind: "count",
     note: "Monthly reports generated this month",
     screen: "monthly_report",
   },
 };
+
+/** True for a KPI that is a running total (judged against the full target, never pro-rated). */
+export const isRunningTotal = (key: KpiKey): boolean => KPIS[key].kind === "running_total";
 
 /** The KPIs a set of roles owns (their scorecard). A person with two roles owns the union, in the usual order. */
 export const kpisOwnedBy = (roles: readonly Role[]): KpiDefinition[] =>

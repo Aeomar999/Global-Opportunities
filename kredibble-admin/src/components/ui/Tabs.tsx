@@ -14,10 +14,14 @@
  * - the caller renders the panel with role="tabpanel", id={tabPanelId(idPrefix, value)} and
  *   aria-labelledby={tabId(idPrefix, value)}
  *
- * Props: tabs [{ value, label, count? }], value, onChange, ariaLabel, idPrefix (unique per tab row), className
+ * LINKS: with `links` (a path for each tab) the tabs are plain links (a navigation landmark, aria-current="page" on the selected one) in the same scroller with
+ * the same edge fades: for pages that are routes of their own (the two Monthly report templates). The caller then needs no tabpanel.
+ *
+ * Props: tabs [{ value, label, count? }], value, onChange, ariaLabel, idPrefix (unique per tab row), className, links?
  * A count is shown in a small pill in tabular numerals.
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/cn";
 
 export const tabId = (idPrefix: string, value: string) => `${idPrefix}-tab-${value}`;
@@ -36,11 +40,13 @@ interface TabsProps<T extends string> {
   ariaLabel: string;
   idPrefix: string;
   className?: string;
+  /** A path for each tab: the tabs are then plain links. */
+  links?: Partial<Record<T, string>>;
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange, ariaLabel, idPrefix, className }: TabsProps<T>) {
+export function Tabs<T extends string>({ tabs, value, onChange, ariaLabel, idPrefix, className, links }: TabsProps<T>) {
   const listRef = useRef<HTMLDivElement>(null);
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const refs = useRef<(HTMLElement | null)[]>([]);
   // Which edges have more tabs hidden beyond them (drives the fades).
   const [edges, setEdges] = useState({ start: false, end: false });
 
@@ -95,7 +101,7 @@ export function Tabs<T extends string>({ tabs, value, onChange, ariaLabel, idPre
     <div className={cn("relative", className)}>
       <div
         ref={listRef}
-        role="tablist"
+        role={links ? "navigation" : "tablist"}
         aria-label={ariaLabel}
         data-edge-fade="true"
         onScroll={measure}
@@ -109,6 +115,35 @@ export function Tabs<T extends string>({ tabs, value, onChange, ariaLabel, idPre
       >
         {tabs.map((tab, index) => {
           const selected = tab.value === value;
+          if (links) {
+            return (
+              <Link
+                key={tab.value}
+                ref={(el) => {
+                  refs.current[index] = el;
+                }}
+                id={tabId(idPrefix, tab.value)}
+                href={links[tab.value] ?? "#"}
+                aria-current={selected ? "page" : undefined}
+                className={cn(
+                "button-text relative z-10 inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 transition-colors duration-150",
+                selected ? "border-purple-600 text-purple-700" : "border-transparent text-muted hover:text-ink",
+              )}
+              >
+              {tab.label}
+              {tab.count !== undefined && (
+                <span
+                  className={cn(
+                    "caption inline-flex min-w-6 items-center justify-center whitespace-nowrap rounded-pill px-1.5 font-semibold tabular-nums",
+                    selected ? "bg-purple-50 text-purple-700" : "bg-neutral-soft text-muted",
+                  )}
+                >
+                  {tab.count}
+                </span>
+              )}
+              </Link>
+            );
+          }
           return (
             <button
               key={tab.value}

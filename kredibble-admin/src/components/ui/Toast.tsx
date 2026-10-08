@@ -13,6 +13,7 @@
  * - The stack is a polite live region (role="status", aria-live="polite"), so screen readers hear the
  *   message without focus moving. It sits at the bottom, so it never covers the page header or its
  *   actions. Newer toasts stack UPWARD above older ones. At most 3 are shown.
+ * - A toast may carry one action ({ action: { label: "Undo", onClick } }): a 40px text button; it runs and closes the toast.
  * - Each toast dismisses itself after 5s. The timer pauses while the pointer is over the toast or
  *   focus is inside it, and continues with the time that was left.
  * - Each toast has a close button with an aria-label.
@@ -27,15 +28,26 @@ import { useActionBar } from "./form/action-bar-store";
 
 type ToastTone = "success" | "info" | "error";
 
+/** An action on a toast (for example Undo). Clicking it runs onClick and closes the toast. */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
+interface ToastOptions {
+  action?: ToastAction;
+}
+
 interface ToastItem {
   id: number;
   tone: ToastTone;
   message: string;
+  action?: ToastAction;
 }
 
 interface ToastApi {
-  success: (message: string) => void;
-  info: (message: string) => void;
+  success: (message: string, options?: ToastOptions) => void;
+  info: (message: string, options?: ToastOptions) => void;
   error: (message: string) => void;
 }
 
@@ -91,15 +103,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((list) => list.filter((toast) => toast.id !== id));
   }, []);
 
-  const push = useCallback((tone: ToastTone, message: string) => {
+  const push = useCallback((tone: ToastTone, message: string, options?: ToastOptions) => {
     const id = nextId.current++;
-    setToasts((list) => [...list.slice(-(MAX_TOASTS - 1)), { id, tone, message }]);
+    setToasts((list) => [...list.slice(-(MAX_TOASTS - 1)), { id, tone, message, action: options?.action }]);
   }, []);
 
   const api = useMemo<ToastApi>(
     () => ({
-      success: (message) => push("success", message),
-      info: (message) => push("info", message),
+      success: (message, options) => push("success", message, options),
+      info: (message, options) => push("info", message, options),
       error: (message) => push("error", message),
     }),
     [push],
@@ -113,6 +125,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         role="status"
         aria-live="polite"
         aria-label="Status messages"
+        data-print-hide
         className="pointer-events-none fixed right-6 z-70 flex w-[calc(100%-3rem)] max-w-sm flex-col-reverse gap-2"
         // Data-driven (follows the action bar), so inline.
         style={{ bottom }}
@@ -157,6 +170,19 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: num
         className={cn("mt-0.5 shrink-0", iconClassName)}
       />
       <p className="body-sm min-w-0 flex-1 font-semibold text-ink">{toast.message}</p>
+      {toast.action && (
+        <button
+          type="button"
+          data-testid="toast-action"
+          onClick={() => {
+            toast.action?.onClick();
+            onDismiss(toast.id);
+          }}
+          className="relative -my-2 inline-flex h-10 shrink-0 items-center rounded-control px-3 text-sm font-semibold text-purple-700 transition-colors hover:bg-purple-50"
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button
         type="button"
         aria-label="Dismiss message"

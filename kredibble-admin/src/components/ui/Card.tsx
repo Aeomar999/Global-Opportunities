@@ -5,8 +5,9 @@
  *
  * Props:
  * - as: element to render ("div" by default; use "section" for labelled regions)
- * - padding: "md" = 20px (default, the brief's card padding) or "lg" = 24px
+ * - padding: "md" = 20px (default, the brief's card padding), "lg" = 24px or "sm" = 16px (a dense card)
  * - flush: remove the padding (for tables / lists that run edge to edge)
+ * - testId: a data-testid for the card
  * - ariaLabel: names a <section> so it is a landmark region ("New submissions"); screen-reader
  *   users can jump between the Overview's cards
  * - className: extra classes (layout only, such as spans or margins)
@@ -21,16 +22,17 @@ import { cn } from "@/lib/cn";
 
 interface CardProps {
   as?: "div" | "section" | "article";
-  padding?: "md" | "lg";
+  padding?: "sm" | "md" | "lg";
   flush?: boolean;
   ariaLabel?: string;
+  testId?: string;
   className?: string;
   children: ReactNode;
 }
 
-export function Card({ as: Tag = "div", padding = "md", flush = false, ariaLabel, className, children }: CardProps) {
+export function Card({ as: Tag = "div", padding = "md", flush = false, ariaLabel, testId, className, children }: CardProps) {
   return (
-    <Tag aria-label={ariaLabel} className={cn("card-surface", !flush && (padding === "lg" ? "p-6" : "p-5"), flush && "overflow-hidden", className)}>
+    <Tag aria-label={ariaLabel} data-testid={testId} className={cn("card-surface", !flush && (padding === "lg" ? "p-6" : padding === "sm" ? "p-4" : "p-5"), flush && "overflow-hidden", className)}>
       {children}
     </Tag>
   );

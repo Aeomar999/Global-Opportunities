@@ -21,6 +21,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOverride, updateOverride, useMockStoreVersion, type MockCollection } from "@/lib/mock-store";
+import { ApiError } from "@/lib/api";
 import { isMockMode } from "@/lib/services/mock-mode";
 
 export type DetailStatus = "loading" | "ready" | "notfound" | "error";
@@ -75,7 +76,14 @@ export function useDetailData<T>(load: () => Promise<T | undefined>, options: Op
         })
         .catch((error: unknown) => {
           if (cancelled) return;
-          setState({ status: "error", record: null, error: error instanceof Error ? error.message : "Could not load this record." });
+          // An id the server cannot read (a malformed id) or does not know is a record that is not there: the calm not-found state, never the server's own words
+          // (a database "Cast to ObjectId failed..." must not reach the screen). Any other failure shows a plain sentence (the forced dev error keeps its own).
+          if (error instanceof ApiError && (error.status === 400 || error.status === 404)) {
+            setState({ status: "notfound", record: null, error: null });
+            return;
+          }
+          const message = error instanceof ApiError ? "We could not load this record. Please try again." : error instanceof Error && isMockMode() ? error.message : "We could not load this record. Please try again.";
+          setState({ status: "error", record: null, error: message });
         });
     };
 

@@ -15,9 +15,9 @@
  * 30 = a third of the target); a PAST month is judged against the full target. To get that, callers pass
  * dayOfMonth = daysInMonth for a past month (see monthProgress).
  */
-import { KPI_KEYS, type KpiKey } from "@/config/kpis";
-import { partnerClosedAt, type EntityCollections, type KpiThresholds, type MonthKey, type MonthlyReport } from "@/lib/mock-entities";
-import { getKpiThresholds, getMockCollection } from "@/lib/mock-store";
+import { KPI_KEYS, KPIS, type KpiKey } from "@/config/kpis";
+import { partnerClosedAt, type EntityCollections, type KpiThresholds, type MonthKey, type MonthlyReport, type TargetChange, type ThresholdChange } from "@/lib/mock-entities";
+import { getMockCollection } from "@/lib/mock-store";
 
 export type KpiStatus = "green" | "amber" | "red";
 
@@ -48,6 +48,15 @@ export function monthProgress(month: MonthKey, today: Date = new Date()): { dayO
   return { dayOfMonth: isPastMonth(month, today) ? total : Math.min(today.getUTCDate(), total), daysInMonth: total };
 }
 
+/**
+ * How far into the month a KPI is judged: monthProgress for a "count" KPI, the WHOLE month for a "running_total" (Active ambassadors is a stock, so it is
+ * compared with the full monthly target from day 1 and never pro-rated). Everything that judges a KPI in the current month goes through this.
+ */
+export function kpiMonthProgress(key: KpiKey, month: MonthKey, today: Date = new Date()): { dayOfMonth: number; daysInMonth: number } {
+  const progress = monthProgress(month, today);
+  return KPIS[key].kind === "running_total" ? { dayOfMonth: progress.daysInMonth, daysInMonth: progress.daysInMonth } : progress;
+}
+
 const inMonth = (iso: string | undefined, month: MonthKey): boolean => !!iso && iso.slice(0, 7) === month;
 const lastDayOf = (month: MonthKey): string => `${month}-${pad(daysInMonth(month))}`;
 
@@ -55,7 +64,7 @@ const lastDayOf = (month: MonthKey): string => `${month}-${pad(daysInMonth(month
 /** The collections the KPIs are counted from. */
 export type KpiData = Pick<
   EntityCollections,
-  "listings" | "programs" | "ambassadors" | "partners" | "databaseRecords" | "socialPosts" | "websiteMonths" | "monthlyReports" | "targets"
+  "listings" | "programs" | "ambassadors" | "partners" | "databaseRecords" | "socialPosts" | "websiteMonths" | "monthlyReports" | "targets" | "targetHistory" | "thresholdHistory"
 >;
 
 /** The shared mock store's current collections. */
@@ -69,6 +78,8 @@ export const storeData = (): KpiData => ({
   websiteMonths: getMockCollection("websiteMonths"),
   monthlyReports: getMockCollection("monthlyReports"),
   targets: getMockCollection("targets"),
+  targetHistory: getMockCollection("targetHistory"),
+  thresholdHistory: getMockCollection("thresholdHistory"),
 });
 
 /** The value of one KPI in one month, counted from the data. */
@@ -109,9 +120,32 @@ export function kpiValue(key: KpiKey, month: MonthKey, data: KpiData = storeData
   }
 }
 
-/** The monthly target stored for a KPI (0 when none is set). */
-export const kpiTarget = (key: KpiKey, data: Pick<KpiData, "targets"> = storeData()): number =>
-  data.targets.find((target) => target.kpi === key)?.target ?? 0;
+/**
+ * The monthly target of a KPI IN A MONTH (0 when none is set; default: the current month). Targets have a history: the latest change
+ * whose effectiveFrom is that month or earlier applies, otherwise the first target. So a change saved in Settings never rewrites the
+ * past: an earlier month keeps the target that applied then. Everything that reads a target (the gauges, the pace card, the pipeline health,
+ * the Social captions, the KPI statuses) goes through this function.
+ */
+export const kpiTarget = (key: KpiKey, data: Pick<KpiData, "targets"> & Partial<Pick<KpiData, "targetHistory">> = storeData(), month: MonthKey = currentMonth()): number => {
+  // The row with the latest effectiveFrom that has started; of two for the same month, the one saved later (later in the list) wins.
+  const change = (data.targetHistory ?? []).reduce<TargetChange | undefined>(
+    (best, entry) => (entry.kpi === key && entry.effectiveFrom <= month && (!best || entry.effectiveFrom >= best.effectiveFrom) ? entry : best),
+    undefined,
+  );
+  return change ? change.value : (data.targets.find((target) => target.kpi === key)?.target ?? 0);
+};
+
+/**
+ * The status thresholds IN A MONTH (default: the current month), exactly like kpiTarget: the row of the thresholdHistory with the latest
+ * effectiveFrom that has started (of two for one month, the later one). A month before the first row uses the first row. Settings appends
+ * rows and never edits one, so a past month keeps the thresholds that applied then. Nothing else reads the default thresholds.
+ */
+export function kpiThresholds(month: MonthKey = currentMonth(), data: Pick<KpiData, "thresholdHistory"> = storeData()): KpiThresholds {
+  const rows = data.thresholdHistory;
+  const started = rows.reduce<ThresholdChange | undefined>((best, row) => (row.effectiveFrom <= month && (!best || row.effectiveFrom >= best.effectiveFrom) ? row : best), undefined);
+  const row = started ?? rows.reduce<ThresholdChange | undefined>((first, entry) => (!first || entry.effectiveFrom < first.effectiveFrom ? entry : first), undefined);
+  return row ? { green: row.green, amber: row.amber } : { green: 1, amber: 1 };
+}
 
 // ------------------------------------------------------------------------------------------------ status
 /**
@@ -119,7 +153,8 @@ export const kpiTarget = (key: KpiKey, data: Pick<KpiData, "targets"> = storeDat
  *
  * The target is PRO-RATED to how far into the month we are: target x dayOfMonth / daysInMonth. For a past month
  * pass dayOfMonth = daysInMonth, which makes it the full target. Then attainment = value / pro-rated target:
- * at or above thresholds.green is green, at or above thresholds.amber is amber, below that is red. A KPI with no
+ * at or above thresholds.green is green, at or above thresholds.amber is amber, below that is red. The thresholds are the ones that
+ * applied in `month` (kpiThresholds; a call without a month uses the current month), unless a `thresholds` object is given. A KPI with no
  * target (0) is always green. The comparison is done on whole numbers (value x days against target x day), so a
  * value exactly on a threshold is never pushed over or under it by rounding.
  */
@@ -128,13 +163,15 @@ export function kpiStatus(
   target: number,
   dayOfMonth: number,
   daysInTheMonth: number,
-  thresholds: KpiThresholds = getKpiThresholds(),
+  thresholds?: KpiThresholds,
+  month: MonthKey = currentMonth(),
 ): KpiStatus {
   if (target <= 0) return "green";
+  const limits = thresholds ?? kpiThresholds(month);
   const earned = target * Math.max(1, Math.min(dayOfMonth, daysInTheMonth));
   const ratio = (value * daysInTheMonth) / earned;
-  if (ratio >= thresholds.green) return "green";
-  if (ratio >= thresholds.amber) return "amber";
+  if (ratio >= limits.green) return "green";
+  if (ratio >= limits.amber) return "amber";
   return "red";
 }
 
@@ -143,20 +180,20 @@ export const attainment = (value: number, target: number): number | null => (tar
 
 /** The status of a KPI in a month, judged the way the dashboard does (pro-rated now, full target for the past). */
 export function kpiMonthStatus(key: KpiKey, month: MonthKey, today: Date = new Date(), data: KpiData = storeData()): KpiStatus {
-  const { dayOfMonth, daysInMonth: total } = monthProgress(month, today);
-  return kpiStatus(kpiValue(key, month, data), kpiTarget(key, data), dayOfMonth, total);
+  const { dayOfMonth, daysInMonth: total } = kpiMonthProgress(key, month, today);
+  return kpiStatus(kpiValue(key, month, data), kpiTarget(key, data, month), dayOfMonth, total, kpiThresholds(month, data));
 }
 
 // ------------------------------------------------------------------------------------------------ monthly reports
 /**
  * Should "Download PDF" add a report record now? The Monthly reports KPI counts reports GENERATED in a calendar month, so
  * the download step records one report for the month being viewed (`reportMonth`) with generatedAt = now, but at most
- * ONCE for each reportMonth in each calendar month of generation: viewing or downloading the same report again in the
+ * ONCE for each reportMonth AND view (partner or team) in each calendar month of generation: viewing or downloading the same report again in the
  * same month adds nothing, while generating it again next month does count.
  */
-export function shouldRecordReport(reports: MonthlyReport[], reportMonth: MonthKey, now: Date = new Date()): boolean {
+export function shouldRecordReport(reports: MonthlyReport[], reportMonth: MonthKey, now: Date = new Date(), view?: MonthlyReport["view"]): boolean {
   const thisMonth = currentMonth(now);
-  return !reports.some((report) => report.reportMonth === reportMonth && inMonth(report.generatedAt, thisMonth));
+  return !reports.some((report) => report.reportMonth === reportMonth && (view === undefined || report.view === view) && inMonth(report.generatedAt, thisMonth));
 }
 
 // ------------------------------------------------------------------------------------------------ new in a month

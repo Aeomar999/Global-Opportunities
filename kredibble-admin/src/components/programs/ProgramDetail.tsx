@@ -7,8 +7,8 @@
  *   view-only role it is disabled with the standard tooltip).
  * - Main: Participants (the figure "42 of 60", a 6px purple bar and the percentage, always also as text), Facilitators
  *   (chips), Notes (when there are any).
- * - Side: Details (type, status, format, country, location, start, end, linked partner). The partner is a link when the
- *   viewer can see Partners (it opens the Partners page; there is no partner page yet), plain text otherwise.
+ * - Side: Details (type, status, format, country, location, start, end, linked partner). The partner is a link to that
+ *   partner's page (/partners/[id]) when the viewer can see Partners, plain text otherwise.
  *   A delivered program says it counts toward the monthly target.
  * - Danger zone (edit access, program not yet delivered or cancelled): "Cancel program", with a confirm dialog. It sets
  *   the status to Cancelled, so Active drops by one on the list and Delivered does not change.
@@ -161,7 +161,7 @@ export function ProgramDetail({ id }: { id: string }) {
                   label: "Partner",
                   value: program.partnerName ? (
                     canSeePartners ? (
-                      <Link href="/partners" data-testid="partner-link" className="font-medium text-purple-700 underline-offset-2 hover:underline">
+                      <Link href={`/partners/${program.partnerId}`} data-testid="partner-link" className="font-medium text-purple-700 underline-offset-2 hover:underline">
                         {program.partnerName}
                       </Link>
                     ) : (

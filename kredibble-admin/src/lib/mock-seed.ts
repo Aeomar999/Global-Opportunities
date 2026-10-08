@@ -36,6 +36,7 @@ import type {
   MonthlyReport,
   Partner,
   PartnerStage,
+  PartnerType,
   Program,
   ProgramStatus,
   ProgramType,
@@ -48,6 +49,7 @@ import type {
   WebsiteMonth,
 } from "@/lib/mock-entities";
 import { SOCIAL_PLATFORMS } from "@/lib/mock-entities";
+import { seekerAccounts } from "@/lib/mock-seekers";
 
 /** Months in the history (the current one and five before it). */
 export const SERIES_MONTHS = 6;
@@ -62,7 +64,9 @@ export const DEFAULT_TARGETS: Record<KpiKey, number> = {
   opportunities_published: 2,
   programs_organised: 1,
   active_ambassadors: 21,
-  partners_onboarded: 1,
+  // 4 (was 1): at 1 the pipeline looked 4.3 times bigger than needed (13 open deals, 3 needed) and the gauge was always pinned.
+  // At 4 the 11 deals that reached Outreach and the 5 that closed in six months need 9 open deals: 13 / 9 = 1.44, healthy.
+  partners_onboarded: 4,
   beneficiaries_verified: 15,
   social_reach: 10500,
   social_engagement: 800,
@@ -131,7 +135,6 @@ const emailOf = (name: string, domain = "example.org") => `${name.toLowerCase().
 // ------------------------------------------------------------------------------------------ the builder
 export interface Seed {
   collections: EntityCollections;
-  thresholds: KpiThresholds;
 }
 
 export function buildSeed(today: Date = new Date()): Seed {
@@ -162,17 +165,22 @@ export function buildSeed(today: Date = new Date()): Seed {
     { id: "staff-2", name: "Efua Mensimah", roles: ["moderator"], status: "active", joinedDate: "2026-03-15", title: "Moderator", country: "Ghana" },
     { id: "staff-3", name: "Yaw Antwi", roles: ["support"], status: "active", joinedDate: "2026-06-02", title: "Support", country: "Ghana" },
   ];
+  // ROLES AND THE SCORECARD: the KPIs are desk-wide counts, so a person's composite depends only on WHICH metrics their roles own. The assignments below
+  // are chosen so the Team scorecard shows a spread (roughly 100, 100, 90, 87, 76, 67, 50, 50, 0, and four people with no metrics: Nana Adjei, Efua, Yaw Antwi and Yaw Frimpong, who hold Super Admin, Moderator, Support and Admin Support, so every role is still held) with at most two people on
+  // one score. They also keep every list the seed picks from the same: vetting staff (opportunities_officer, desk_lead), writers (opportunities_officer,
+  // communications_officer), partner owners (partnerships_officer, country_lead, desk_lead), leads (country_lead, desk_lead), record staff (database_officer,
+  // desk_lead) and the first social_media_manager keep the same people in the same order, so no owner, writer or "added by" reference moved.
   const deskSpecs: Omit<StaffMember, "id" | "email" | "status" | "joinedDate">[] = [
     { name: "Esi Mensah-Owusu", title: "Desk Lead", country: "Ghana", roles: ["desk_lead"], isCurrentUser: true },
     { name: "Kojo Appiah", title: "Partnerships Officer", country: "Ghana", roles: ["partnerships_officer"] },
-    { name: "Adaeze Okonkwo", title: "Opportunities Officer and Moderator", country: "Nigeria", roles: ["opportunities_officer", "moderator"] },
+    { name: "Adaeze Okonkwo", title: "Opportunities and Communications Officer", country: "Nigeria", roles: ["opportunities_officer", "communications_officer"] },
     { name: "Kwabena Tetteh", title: "Training Officer and Ghana Lead", country: "Ghana", roles: ["training_officer", "country_lead"] },
     { name: "Nana Yaa Boateng", title: "Database Officer", country: "Ghana", roles: ["database_officer"] },
     { name: "Fatou Ndiaye", title: "Communications Officer", country: "Senegal", roles: ["communications_officer"] },
     { name: "Samuel Kiprono", title: "Social Media Manager", country: "Kenya", roles: ["social_media_manager"] },
-    { name: "Amara Kamara", title: "Sierra Leone Lead", country: "Sierra Leone", roles: ["country_lead"] },
-    { name: "Chioma Eze", title: "Admin Support", country: "Nigeria", roles: ["admin_support"] },
-    { name: "Yaw Frimpong", title: "Support Agent", country: "Ghana", roles: ["support"] },
+    { name: "Amara Kamara", title: "Sierra Leone Lead and Partnerships Officer", country: "Sierra Leone", roles: ["country_lead", "partnerships_officer"] },
+    { name: "Chioma Eze", title: "Social Media and Training Assistant", country: "Nigeria", roles: ["social_media_manager", "training_officer"] },
+    { name: "Yaw Frimpong", title: "Admin Support", country: "Ghana", roles: ["admin_support"] },
   ];
   const staff: StaffMember[] = [
     ...originals.map((person) => ({ ...person, email: emailOf(person.name, BRAND_EMAIL_DOMAIN) })),
@@ -279,15 +287,47 @@ export function buildSeed(today: Date = new Date()): Seed {
     { name: "Wave Mobile Money", country: "Senegal", sector: "Fintech", contact: "Seydou Keita", path: [["prospect", 1]] },
     { name: "Africa Leadership University", country: "Rwanda", sector: "Education", contact: "Nakato Mukasa", path: [["prospect", 0]] },
   ];
+  // The type, what they provide and how they were found, in the order of partnerSpecs (no random numbers here).
+  const PARTNER_FACTS: [PartnerType, string][] = [
+    ["corporate", "Graduate roles and internships"],
+    ["university", "Campus access and career talks"],
+    ["university", "Career office space and student referrals"],
+    ["media_tech", "Engineering internships and mentors"],
+    ["foundation", "Scholarship funding and programme grants"],
+    ["media_tech", "Remote engineering roles and bootcamp trainers"],
+    ["media_tech", "Fintech internships and product mentors"],
+    ["foundation", "Entrepreneurship grants"],
+    ["corporate", "Graduate trainee schemes"],
+    ["ngo", "Agribusiness fellowships and field placements"],
+    ["corporate", "Customer-experience internships"],
+    ["corporate", "Telecoms graduate roles"],
+    ["corporate", "Banking graduate programme places"],
+    ["corporate", "Finance internships"],
+    ["media_tech", "Product and cloud skills webinars"],
+    ["university", "Alumni network and venue hire"],
+    ["media_tech", "Mobile-money internships"],
+    ["university", "Leadership programme referrals"],
+  ];
+  const SOURCED = ["Ambassador introduction", "Event contact", "Inbound request", "Desk lead outreach"];
+  const DIAL: Record<string, string> = { Ghana: "+233", Nigeria: "+234", Kenya: "+254", Senegal: "+221", "Côte d'Ivoire": "+225", Rwanda: "+250" };
+  const partnerOwners = staff.filter((person) => person.roles.some((role) => role === "partnerships_officer" || role === "country_lead" || role === "desk_lead"));
   const partners: Partner[] = partnerSpecs.map((spec, index) => {
-    // Entries in the same month are spread in order; earlier months come first.
-    const history = spec.path.map(([stage, ago], step) => ({ stage, at: clamp(dayIn(ago, 0.2 + step * 0.12)) }));
+    // Entries in the same month are spread in order; earlier months come first. Each entry also records where it came from.
+    const history = spec.path.map(([stage, ago], step) => ({ stage, at: clamp(dayIn(ago, 0.2 + step * 0.12)), from: step > 0 ? spec.path[step - 1][0] : undefined }));
+    const slug = spec.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
     return {
       id: `ptn-${pad(index + 1)}`,
       name: spec.name,
       country: spec.country,
       sector: spec.sector,
+      type: PARTNER_FACTS[index][0],
+      ownerId: partnerOwners[index % partnerOwners.length].id,
       contactName: spec.contact,
+      contactEmail: emailOf(spec.contact, `${slug}.example.org`),
+      contactPhone: `${DIAL[spec.country] ?? "+233"} 20 555 ${String(1000 + index * 7).slice(-4)}`,
+      provides: PARTNER_FACTS[index][1],
+      sourcedVia: SOURCED[index % SOURCED.length],
+      notes: index % 6 === 0 ? "Prefers email first, then a call. Keep the proposal to two pages." : undefined,
       stage: history[history.length - 1].stage,
       stageHistory: history,
     };
@@ -378,13 +418,28 @@ export function buildSeed(today: Date = new Date()): Seed {
       }
     }
   };
-  const tiers: AmbassadorTier[] = ["champion", "champion", "champion", "champion", "champion", "rising", "rising", "rising", "rising", "rising", "rising", "rising", "rising", "rising", "rising"];
+  // The first 15 who joined hold a higher tier: 5 Campus or Regional Leads and 10 Senior Ambassadors; everyone later is an Ambassador.
+  const tiers: AmbassadorTier[] = ["lead", "lead", "lead", "lead", "lead", "senior", "senior", "senior", "senior", "senior", "senior", "senior", "senior", "senior", "senior"];
+  const CAMPUS_CITY: Record<string, string> = { KNUST: "Kumasi", "University of Ghana": "Accra", "Ashesi University": "Berekuso", UCC: "Cape Coast", "University of Lagos": "Lagos", "Covenant University": "Ota", "Makerere University": "Kampala", "University of Nairobi": "Nairobi", UCAD: "Dakar", "Fourah Bay College": "Freetown" };
+  const DIAL_CODE: Record<string, string> = { Ghana: "+233", Nigeria: "+234", Uganda: "+256", Kenya: "+254", Senegal: "+221", "Sierra Leone": "+232" };
+  const MEMBER_ORDER = ["student", "student", "graduate", "volunteer"] as const;
+  const leads = staff.filter((person) => person.roles.some((role) => role === "country_lead" || role === "desk_lead"));
+  const ROLE_TITLES = { lead: "Campus lead", senior: "Senior ambassador", ambassador: "Campus ambassador" } as const;
   const ambassadors: Ambassador[] = [];
   const makeAmbassador = (status: AmbassadorStatus, joinedAgo: number, fraction: number, tier: AmbassadorTier, dormantAgo?: number) => {
     const index = ambassadors.length;
     const campus = CAMPUSES[(index * 3 + 1) % CAMPUSES.length];
     const name = fullName(index, 4);
     ambassadors.push({
+      city: CAMPUS_CITY[campus.name] ?? campus.country,
+      phone: `${DIAL_CODE[campus.country] ?? "+233"} 24 555 ${String(2000 + index * 13).slice(-4)}`,
+      memberType: MEMBER_ORDER[index % MEMBER_ORDER.length],
+      description: index % 4 === 0 ? `Shares listings with the ${campus.name} career club and the alumni group.` : undefined,
+      roleTitle: `${ROLE_TITLES[tier]}, ${campus.name}`,
+      assignedLeadId: status === "applicant" ? undefined : leads[index % leads.length].id,
+      // Active and dormant ambassadors have mostly finished the training; onboarding ones are in it; applicants have not started.
+      trained: status === "active" || status === "dormant" ? index % 5 !== 0 : false,
+      linkedSeekerId: index % 4 === 1 ? seekerAccounts[index % seekerAccounts.length].id : undefined,
       id: `amb-${pad(index + 1)}`,
       name,
       email: emailOf(name, "students.example.edu"),
@@ -399,12 +454,12 @@ export function buildSeed(today: Date = new Date()): Seed {
   };
   joinedBy.forEach((ago, i) => {
     const dormantAgo = dormantAt.get(i);
-    const tier: AmbassadorTier = tiers[i % tiers.length] ?? "starter";
+    const tier: AmbassadorTier = tiers[i % tiers.length] ?? "ambassador";
     // The tier list covers the first 15; everyone after that starts out.
-    makeAmbassador(dormantAgo !== undefined ? "dormant" : "active", ago, (i % 5) * 0.2, i < tiers.length ? tier : "starter", dormantAgo);
+    makeAmbassador(dormantAgo !== undefined ? "dormant" : "active", ago, (i % 5) * 0.2, i < tiers.length ? tier : "ambassador", dormantAgo);
   });
-  for (let i = 0; i < 6; i++) makeAmbassador("onboarding", i < 3 ? 0 : 1, 0.2 + i * 0.12, "starter");
-  for (let i = 0; i < 5; i++) makeAmbassador("applicant", 0, 0.1 + i * 0.15, "starter");
+  for (let i = 0; i < 6; i++) makeAmbassador("onboarding", i < 3 ? 0 : 1, 0.2 + i * 0.12, "ambassador");
+  for (let i = 0; i < 5; i++) makeAmbassador("applicant", 0, 0.1 + i * 0.15, "ambassador");
 
   // ---- Amplification logs (non-applicants share listings) ----------------------------------------------------
   const channels: SocialPlatform[] = ["whatsapp", "linkedin", "instagram", "facebook", "x"];
@@ -417,7 +472,10 @@ export function buildSeed(today: Date = new Date()): Seed {
         const listing = publishedListings[(a * 3 + s * 5) % publishedListings.length];
         const earliest = ambassador.joinedAt > (listing.publishedAt ?? "") ? ambassador.joinedAt : (listing.publishedAt as string);
         const at = clamp(addDays(earliest, between(1, 20)));
-        const clicks = between(8, 140);
+        // The old random draw is kept (and ignored) so every later random number in the seed stays the same.
+        between(8, 140);
+        // A share brings 20 to 80 referred clicks (a fixed pattern, so the seed never changes between runs).
+        const clicks = 20 + ((a * 29 + s * 53 + amplificationLogs.length * 7) % 61);
         amplificationLogs.push({
           id: `amp-${pad(amplificationLogs.length + 1)}`,
           ambassadorId: ambassador.id,
@@ -431,39 +489,102 @@ export function buildSeed(today: Date = new Date()): Seed {
     });
 
   // ---- Database records (beneficiaries) ---------------------------------------------------------------------
-  // 88 verified (per month: 15, 16, 11 weak, 15, 16, 15 from the oldest month) and 32 not yet verified.
+  // Verified per month (from the oldest month): 15, 16, 11 (the weak month), 15, 16, then THIS month, which is month-to-date
+  // like the social posts: a little ahead of the pro-rated target of 15 (so the pace gauge is never off its scale). The rest of
+  // the 120 records are not yet verified.
+  const verifiedThisMonth = Math.max(1, Math.round(15 * (elapsed / daysIn(0)) * 1.05));
   const verifiedPerMonth: [number, number][] = [
     [5, 15],
     [4, 16],
     [WEAK_MONTH, 11],
     [2, 15],
     [1, 16],
-    [0, 15],
+    [0, verifiedThisMonth],
   ];
-  const sources: RecordSource[] = ["ambassador", "website", "event", "partner", "referral", "social"];
+  // The mix of sources: organic 46 (38%), ambassador referral 29 (24%), event 22 (18%), partner channel 14 (12%), bulk import 9
+  // (8%): 120 in all. A fixed stride (53 is coprime with 120) deals them out, so the mix is uneven but the same on every load.
+  const sourceMix: RecordSource[] = [
+    ...Array<RecordSource>(46).fill("organic"),
+    ...Array<RecordSource>(29).fill("ambassador"),
+    ...Array<RecordSource>(22).fill("event"),
+    ...Array<RecordSource>(14).fill("partner"),
+    ...Array<RecordSource>(9).fill("import"),
+  ];
+  const recordStaff = staff.filter((person) => person.roles.includes("database_officer") || person.roles.includes("desk_lead"));
   const sourceAmbassadors = ambassadors.filter((ambassador) => ambassador.status === "active" || ambassador.status === "dormant");
   const databaseRecords: DatabaseRecord[] = [];
-  const addRecord = (verifiedAgo: number | null, fraction: number) => {
+  // The referring ambassador: the usual pick, or the next one who had already joined by the day of the record.
+  const referrer = (index: number, day: string) => {
+    for (let step = 0; step < sourceAmbassadors.length; step++) {
+      const candidate = sourceAmbassadors[(index * 5 + step) % sourceAmbassadors.length];
+      if (candidate.joinedAt <= day) return candidate.id;
+    }
+    return sourceAmbassadors[(index * 5) % sourceAmbassadors.length].id;
+  };
+  const addRecord = (verifiedAgo: number | null, fraction: number, fixedGap?: number) => {
     const index = databaseRecords.length;
     const campus = CAMPUSES[(index * 7 + 2) % CAMPUSES.length];
-    const source = sources[(index * 5 + (index >> 2)) % sources.length];
-    const viaAmbassador = source === "ambassador" || source === "referral";
-    const createdAt = verifiedAgo === null ? dayIn(index % 3, fraction) : addDays(dayIn(verifiedAgo, fraction), -between(2, 9));
+    const source = sourceMix[(index * 53 + 7) % sourceMix.length];
+    const viaAmbassador = source === "ambassador";
+    const name = fullName(index, 11);
+    const createdAt = verifiedAgo === null ? dayIn(index % 3, fraction) : addDays(dayIn(verifiedAgo, fraction), -(fixedGap ?? between(2, 9)));
     databaseRecords.push({
       id: `rec-${String(index + 1).padStart(3, "0")}`,
-      name: fullName(index, 11),
+      name,
+      email: emailOf(name, BRAND_EMAIL_DOMAIN),
+      phone: `${DIAL_CODE[campus.country] ?? "+233"} 20 555 ${String(1000 + index * 7).slice(-4)}`,
       country: campus.country,
       institution: campus.name,
+      addedById: recordStaff[index % recordStaff.length]?.id,
       source,
       verified: verifiedAgo !== null,
       createdAt,
       verifiedAt: verifiedAgo !== null ? dayIn(verifiedAgo, fraction) : undefined,
-      ambassadorId: viaAmbassador ? sourceAmbassadors[(index * 5) % sourceAmbassadors.length].id : undefined,
+      ambassadorId: viaAmbassador ? referrer(index, verifiedAgo === null ? createdAt : (dayIn(verifiedAgo, fraction))) : undefined,
       listingId: index % 3 === 0 ? publishedListings[(index * 2) % publishedListings.length].id : undefined,
     });
   };
-  for (const [ago, count] of verifiedPerMonth) for (let i = 0; i < count; i++) addRecord(ago, (i + 0.5) / count);
+  // Every month draws exactly the same random numbers as before (15 for this month, however many records it has so far), so the
+  // past months and everything seeded after the records never change with the day.
+  const CURRENT_MONTH_DRAWS = 15;
+  for (const [ago, count] of verifiedPerMonth) {
+    for (let i = 0; i < count; i++) addRecord(ago, (i + 0.5) / count, ago === 0 && i >= CURRENT_MONTH_DRAWS ? 3 + (i % 5) : undefined);
+    if (ago === 0) for (let i = count; i < CURRENT_MONTH_DRAWS; i++) between(2, 9);
+  }
   for (let i = 0; databaseRecords.length < 120; i++) addRecord(null, (i % 10) / 10);
+
+  // A verified signup needs clicks behind it: in the month a referred record was verified, its ambassador logged at least 15
+  // referred clicks for every signup (so signups never exceed clicks / 15). Months that fall short get one more share.
+  {
+    const monthKey = (iso: string) => iso.slice(0, 7);
+    const signupsBy = new Map<string, { ambassadorId: string; at: string; count: number }>();
+    for (const record of databaseRecords) {
+      if (!record.verified || !record.ambassadorId || !record.verifiedAt) continue;
+      const key = `${record.ambassadorId}|${monthKey(record.verifiedAt)}`;
+      const entry = signupsBy.get(key) ?? { ambassadorId: record.ambassadorId, at: record.verifiedAt, count: 0 };
+      entry.count += 1;
+      signupsBy.set(key, entry);
+    }
+    for (const [key, entry] of signupsBy) {
+      const month = key.split("|")[1];
+      const have = amplificationLogs.filter((log) => log.ambassadorId === entry.ambassadorId && monthKey(log.at) === month).reduce((sum, log) => sum + log.clicks, 0);
+      let missing = entry.count * 15 - have;
+      const listing = publishedListings.filter((candidate) => (candidate.publishedAt ?? "") <= entry.at).at(-1) ?? publishedListings[0];
+      while (missing > 0) {
+        const clicks = Math.max(20, Math.min(80, missing));
+        amplificationLogs.push({
+          id: `amp-${pad(amplificationLogs.length + 1)}`,
+          ambassadorId: entry.ambassadorId,
+          listingId: listing.id,
+          channel: channels[amplificationLogs.length % channels.length],
+          at: entry.at,
+          clicks,
+          applications: 0,
+        });
+        missing -= clicks;
+      }
+    }
+  }
 
   // ---- Social posts ---------------------------------------------------------------------------------------
   // Past months are complete: published 9, 9, 7 (weak), 9, 9 (oldest to newest), about 1,350 reach and 100 engagement a
@@ -479,6 +600,15 @@ export function buildSeed(today: Date = new Date()): Seed {
     "This week on the desk: {t}.",
     "Missed our last webinar? The recording is live.",
   ];
+  // Each post has its own title, never the title of the opportunity it promotes.
+  const postTitles = [
+    "Applications are open for the {t} role",
+    "Meet our ambassador from {c}",
+    "Three tips to make your CV stand out",
+    "Apply early: the {t} role closes soon",
+    "This week on the desk: the {t} role",
+    "Missed our last webinar? The recording is live",
+  ];
   const socialPosts: SocialPost[] = [];
   const addPost = (status: SocialPost["status"], postedAt: string, reach: number, engagement: number) => {
     const index = socialPosts.length;
@@ -487,6 +617,9 @@ export function buildSeed(today: Date = new Date()): Seed {
     socialPosts.push({
       id: `soc-${pad(index + 1)}`,
       platform: SOCIAL_PLATFORMS[index % SOCIAL_PLATFORMS.length],
+      title: postTitles[index % postTitles.length].replace("{t}", listing.title).replace("{c}", campus.name),
+      url: `https://social.example/${SOCIAL_PLATFORMS[index % SOCIAL_PLATFORMS.length]}/post-${pad(index + 1)}`,
+      listingId: listing.id,
       text: postTexts[index % postTexts.length].replace("{t}", listing.title).replace("{c}", campus.name),
       status,
       postedAt,
@@ -542,6 +675,7 @@ export function buildSeed(today: Date = new Date()): Seed {
   const testimonials: Testimonial[] = testimonialSpecs.map(([author, role, quote, status], index) => ({
     id: `tst-${pad(index + 1)}`,
     author,
+    email: emailOf(author, BRAND_EMAIL_DOMAIN),
     role,
     quote,
     status,
@@ -553,7 +687,7 @@ export function buildSeed(today: Date = new Date()): Seed {
   const monthlyReports: MonthlyReport[] = [];
   for (let ago = SERIES_MONTHS - 1; ago >= 1; ago--) {
     if (ago === WEAK_MONTH) continue;
-    monthlyReports.push({ id: `rpt-${monthKey(ago)}`, reportMonth: monthKey(ago + 1), generatedAt: dayIn(ago, 0.1) });
+    monthlyReports.push({ id: `rpt-${monthKey(ago)}`, reportMonth: monthKey(ago + 1), view: "partner", generatedAt: dayIn(ago, 0.1) });
   }
 
   // ---- Website audience: six months, with where the visits came from -----------------------------------------
@@ -600,7 +734,11 @@ export function buildSeed(today: Date = new Date()): Seed {
       websiteMonths,
       staff,
       targets,
+      targetHistory: [],
+      // One row: the default thresholds, from the first month of the data. Settings appends to it; the defaults are read only here.
+      thresholdHistory: [
+        { id: "thr-initial", green: DEFAULT_THRESHOLDS.green, amber: DEFAULT_THRESHOLDS.amber, effectiveFrom: monthKey(SERIES_MONTHS - 1), changedBy: staff.find((person) => person.isCurrentUser)?.name, changedAt: todayIso },
+      ],
     },
-    thresholds: { ...DEFAULT_THRESHOLDS },
   };
 }

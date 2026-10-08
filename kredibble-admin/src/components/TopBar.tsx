@@ -99,7 +99,7 @@ export function TopBar({ onOpenNav, counts }: TopBarProps) {
   const back = match && match.extra.length > 0 ? { href: match.child.href, label: match.child.label } : null;
 
   return (
-    <header className="lg:panel-corner sticky top-0 z-30 flex h-topbar shrink-0 items-center gap-3 border-b border-line bg-surface px-4 sm:px-5 lg:px-7">
+    <header data-print-hide className="lg:panel-corner sticky top-0 z-30 flex h-topbar shrink-0 items-center gap-3 border-b border-line bg-surface px-4 sm:px-5 lg:px-7">
       <button type="button" onClick={onOpenNav} aria-label="Open navigation" className={cn(ICON_BUTTON, "lg:hidden", back && "max-sm:hidden")}>
         <MenuIcon size={20} strokeWidth={1.75} aria-hidden="true" />
       </button>

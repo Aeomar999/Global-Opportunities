@@ -16,7 +16,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
-import type { OverviewIssue } from "@/lib/services/overview";
+import type { OverviewIssue } from "@/lib/services/dashboard-types";
 import { Button, buttonClasses } from "@/components/ui/Button";
 
 export function StatusBanner({ issue, onRetry }: { issue: OverviewIssue; onRetry: () => void }) {

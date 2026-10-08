@@ -3,7 +3,7 @@
  * The tint is picked from the name so the same person always gets the same
  * colour: purple, orange, success or warning tints from the palette.
  *
- * Props: name (required), size "sm" (32px) | "md" (40px, default) | "lg" (56px, detail headers).
+ * Props: name (required), size "xs" (24px, dense cards) | "sm" (32px) | "md" (40px, default) | "lg" (56px, detail headers).
  * Decorative by default: the name is expected to be shown next to it.
  */
 import { cn } from "@/lib/cn";
@@ -19,7 +19,7 @@ export const getInitials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("") || "?";
 
-const AVATAR_SIZES = { sm: "size-8", md: "size-10", lg: "size-14 text-lg" } as const;
+const AVATAR_SIZES = { xs: "size-6", sm: "size-8", md: "size-10", lg: "size-14 text-lg" } as const;
 
 export function Avatar({ name, size = "md" }: { name: string; size?: keyof typeof AVATAR_SIZES }) {
   // Cheap stable hash: sum of char codes picks one of the tones.

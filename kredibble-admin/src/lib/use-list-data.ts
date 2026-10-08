@@ -24,6 +24,7 @@
  *   as the staff list). It is called with a function to run on every change and returns an
  *   unsubscribe function.
  */
+import { ApiError } from "@/lib/api";
 import { useCallback, useEffect, useState } from "react";
 import { isMockMode } from "@/lib/services/mock-mode";
 
@@ -68,7 +69,7 @@ export function useListData<T>(load: () => Promise<T[]>, options: UseListDataOpt
         .then((rows) => !cancelled && setState({ rows, error: null, isLoading: false }))
         .catch((error: unknown) => {
           if (cancelled) return;
-          setState({ rows: null, error: error instanceof Error ? error.message : "Could not load this list.", isLoading: false });
+          setState({ rows: null, error: error instanceof ApiError ? "We could not load this list. Please try again." : error instanceof Error ? error.message : "Could not load this list.", isLoading: false });
         });
     };
 

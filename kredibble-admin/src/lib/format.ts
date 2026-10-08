@@ -12,8 +12,12 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 export type DateStyle = "full" | "short";
 
-/** Accepts a Date or any string `new Date()` can parse (ISO, "28 Jun 2026", ...). */
-export function formatDate(input: string | Date, style: DateStyle = "full"): string {
+/** What a date column says when a record has no date (a real record can lack one): never the text "undefined" or "Invalid Date". */
+export const NO_DATE = "Not recorded";
+
+/** Accepts a Date or any string `new Date()` can parse (ISO, "28 Jun 2026", ...). A missing date reads "Not recorded". */
+export function formatDate(input: string | Date | null | undefined, style: DateStyle = "full"): string {
+  if (input === null || input === undefined || input === "" || input === "undefined") return NO_DATE;
   const date = input instanceof Date ? input : new Date(input);
   // Unparseable values are shown as-is instead of "Invalid Date".
   if (Number.isNaN(date.getTime())) return String(input);
@@ -35,7 +39,8 @@ export const stripEmoji = (text: string): string =>
  * "3 Oct 2026, 2:05 PM": the ONE format for every date-time in the admin (12-hour clock with AM/PM,
  * month names written out like formatDate). Accepts a Date or any string new Date() can parse.
  */
-export function formatDateTime(input: string | Date): string {
+export function formatDateTime(input: string | Date | null | undefined): string {
+  if (input === null || input === undefined || input === "" || input === "undefined") return NO_DATE;
   const date = input instanceof Date ? input : new Date(input);
   if (Number.isNaN(date.getTime())) return String(input);
   const hours = date.getHours();

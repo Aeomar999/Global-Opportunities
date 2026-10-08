@@ -32,6 +32,8 @@ import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/form/Field";
 import { FileDrop } from "@/components/ui/form/FileDrop";
 import { FormSection } from "@/components/ui/form/FormSection";
+import { DatePicker } from "@/components/ui/form/DatePicker";
+import { DateTimeField } from "@/components/ui/form/DateTimeField";
 import { Input } from "@/components/ui/form/Input";
 import { Select, type SelectOption } from "@/components/ui/form/Select";
 import { StickyActionBar } from "@/components/ui/form/StickyActionBar";
@@ -270,7 +272,7 @@ export function ListingForm({ listing }: { listing?: Listing }) {
           <Card>
             <FormSection title="Logistics" description="When, where and how people apply.">
               <Field label="Application deadline" error={show("deadline") ? errors.deadline : undefined}>
-                <Input type="date" value={form.deadline} onChange={(e) => set("deadline", e.target.value)} onBlur={() => touch("deadline")} />
+                <DatePicker value={form.deadline} onChange={(iso) => set("deadline", iso)} onBlur={() => touch("deadline")} label="Choose the application deadline" />
               </Field>
               <Field label="Official application link" error={show("applyUrl") ? errors.applyUrl : undefined} helper="Where people apply. Must start with https://">
                 <Input type="url" inputMode="url" value={form.applyUrl} onChange={(e) => set("applyUrl", e.target.value)} onBlur={() => touch("applyUrl")} placeholder="https://" autoComplete="off" />
@@ -287,9 +289,7 @@ export function ListingForm({ listing }: { listing?: Listing }) {
               <Field label="Country" error={show("country") ? errors.country : undefined}>
                 <Select options={COUNTRY_OPTIONS} value={form.country} onChange={(value) => set("country", value)} onBlur={() => touch("country")} placeholder="Choose a country" sheetTitle="Country" />
               </Field>
-              <Field label="Event date and time" optional helper="Only for events.">
-                <Input type="datetime-local" value={form.eventAt} onChange={(e) => set("eventAt", e.target.value)} />
-              </Field>
+              <DateTimeField label="Event date and time" optional helper="Only for events." value={form.eventAt} onChange={(value) => set("eventAt", value)} />
               <Field label="Duration" optional helper={'For example "3 months" or "2 days".'}>
                 <Input value={form.durationLabel} onChange={(e) => set("durationLabel", e.target.value)} placeholder="3 months" autoComplete="off" />
               </Field>

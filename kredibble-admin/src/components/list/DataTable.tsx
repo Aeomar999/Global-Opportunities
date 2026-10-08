@@ -23,7 +23,7 @@
  * Props:
  * - columns: Column config (see ./types)
  * - rows: the rows to show (already searched / filtered by the page)
- * - getRowKey / getRowHref: stable key and detail link of a row
+ * - getRowKey / getRowHref: stable key and detail link of a row (getRowHref is optional: without it rows are plain)
  * - label: accessible name of the table
  * - isFiltered: true when a search or filter is active (selects the empty message)
  * - emptyNoData / emptyNoResults: copy for the two empty states
@@ -37,11 +37,14 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Avatar } from "@/components/ui/Avatar";
 import { IconTile } from "@/components/ui/IconTile";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { TagPill } from "@/components/ui/TagPill";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { TruncatedLink, TruncatedText } from "@/components/ui/TruncatedText";
 import type { Column, EmptyCopy } from "./types";
 
@@ -52,7 +55,8 @@ interface DataTableProps<T> {
   columns: Column<T>[];
   rows: T[];
   getRowKey: (row: T) => string;
-  getRowHref: (row: T) => string;
+  /** Omit it for a table whose rows are not links (the leaderboard, for someone who cannot open the ambassador): no link, no arrow column. */
+  getRowHref?: (row: T) => string;
   label: string;
   isFiltered?: boolean;
   emptyNoData: EmptyCopy;
@@ -62,6 +66,12 @@ interface DataTableProps<T> {
   onRetry?: () => void;
   resetKey?: string;
   pageSize?: number;
+  /**
+   * A compact card for PHONES (below 640px). When given, a row is that card instead of the generic stack of labelled values (the
+   * cells are still there for the table from 640px up). The card is responsible for the row link: give its title link
+   * "after:absolute after:inset-0" so the whole card opens the row, and put any other control above it with "relative z-10".
+   */
+  renderCard?: (row: T) => ReactNode;
 }
 
 // Narrowest a progress column may get: the 180px cell plus its 12px side padding.
@@ -81,7 +91,10 @@ export function DataTable<T>({
   onRetry,
   resetKey = "",
   pageSize = DEFAULT_PAGE_SIZE,
+  renderCard,
 }: DataTableProps<T>) {
+  // With renderCard, a phone gets the card INSTEAD of the cells (one set of elements in the page, never both).
+  const phoneCards = useMediaQuery("(max-width: 639px)") && !!renderCard;
   // Page state that resets to 1 whenever resetKey changes (derived-state pattern, no effect).
   const [pager, setPager] = useState({ key: resetKey, page: 1 });
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -125,7 +138,7 @@ export function DataTable<T>({
             {columns.map((column) => (
               <col key={column.key} style={column.width ? { width: column.width } : undefined} />
             ))}
-            <col className="w-10" />
+            {getRowHref && <col className="w-10" />}
           </colgroup>
 
           {/* Header band: 36px, surface-2, 10px radius. Hidden visually on mobile, still read by screen readers. */}
@@ -143,9 +156,11 @@ export function DataTable<T>({
                   {column.header}
                 </th>
               ))}
-              <th scope="col" className="h-9 rounded-r-inset">
-                <span className="sr-only">Open</span>
-              </th>
+              {getRowHref && (
+                <th scope="col" className="h-9 rounded-r-inset">
+                  <span className="sr-only">Open</span>
+                </th>
+              )}
             </tr>
           </thead>
 
@@ -158,7 +173,7 @@ export function DataTable<T>({
                       <Skeleton className="h-4 w-3/4" />
                     </td>
                   ))}
-                  <td className="max-sm:hidden" />
+                  {getRowHref && <td className="max-sm:hidden" />}
                 </tr>
               ))}
 
@@ -171,21 +186,28 @@ export function DataTable<T>({
                     "relative border-b border-line transition-colors duration-150 ease-out last:border-b-0 hover:bg-surface-2",
                     // Mobile: a two-column card (title | badge) with label/value pairs below. Cards are separated by flat
                     // full-width lines (the border-b above); no rounded corners, so the line has no curved end-caps.
-                    "max-sm:grid max-sm:grid-cols-[1fr_auto] max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-2 max-sm:px-3 max-sm:py-4",
+                    phoneCards
+                      ? "max-sm:block max-sm:px-3 max-sm:py-3"
+                      : "max-sm:grid max-sm:grid-cols-[1fr_auto] max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-1.5 max-sm:px-3 max-sm:py-3",
                   )}
                 >
-                  {columns.map((column) => (
+                  {!phoneCards && columns.map((column) => (
                     <Cell
                       key={column.key}
                       column={column}
                       row={row}
-                      href={getRowHref(row)}
+                      href={getRowHref?.(row)}
                       isBadgeColumn={column.key === lastStatusKey}
                     />
                   ))}
-                  <td className="w-10 pr-3 text-right max-sm:hidden" aria-hidden="true">
-                    <ChevronRight size={18} strokeWidth={1.75} className="ml-auto text-muted" />
-                  </td>
+                  {phoneCards && renderCard && (
+                    <td data-card="true">{renderCard(row)}</td>
+                  )}
+                  {getRowHref && !phoneCards && (
+                    <td className="w-10 pr-3 text-right max-sm:hidden" aria-hidden="true">
+                      <ChevronRight size={18} strokeWidth={1.75} className="ml-auto text-muted" />
+                    </td>
+                  )}
                 </tr>
               ))}
           </tbody>
@@ -252,7 +274,7 @@ function TextIcon({ icon: Icon }: { icon?: LucideIcon }) {
 interface CellProps<T> {
   column: Column<T>;
   row: T;
-  href: string;
+  href?: string;
   isBadgeColumn: boolean;
 }
 
@@ -278,21 +300,27 @@ function Cell<T>({ column, row, href, isBadgeColumn }: CellProps<T>) {
               (leading.imageSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={leading.imageSrc} alt="" className="size-9 shrink-0 rounded-inset object-cover" />
+              ) : "avatarName" in leading ? (
+                <Avatar name={leading.avatarName} size="sm" />
               ) : (
                 <IconTile icon={leading.icon} tone={leading.tone ?? "accent"} size="sm" />
               ))}
             <div className="min-w-0">
               {/* Stretched link: its ::after covers the whole row (the <tr> is relative). When the title
                   is cut off it also gets a title attribute and a tooltip (hover and focus). */}
-              <TruncatedLink
-                href={href}
-                text={column.title(row)}
-                className={cn(
-                  wrapOnPhone,
-                  "table-text rounded-inset font-semibold text-ink outline-none after:absolute after:inset-0 after:rounded-inset",
-                  "focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-focus",
-                )}
-              />
+              {href ? (
+                <TruncatedLink
+                  href={href}
+                  text={column.title(row)}
+                  className={cn(
+                    wrapOnPhone,
+                    "table-text rounded-inset font-semibold text-ink outline-none after:absolute after:inset-0 after:rounded-inset",
+                    "focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-focus",
+                  )}
+                />
+              ) : (
+                <TruncatedText text={column.title(row)} className={cn(wrapOnPhone, "table-text font-semibold text-ink")} />
+              )}
               {subtitle && <TruncatedText text={subtitle} className={cn("caption", wrapOnPhone)} />}
             </div>
           </div>
@@ -361,13 +389,33 @@ function Cell<T>({ column, row, href, isBadgeColumn }: CellProps<T>) {
         </td>
       );
     }
+    case "custom":
+      return (
+        <td className={cn(base, labelled)} data-label={label}>
+          <div className="max-sm:text-left">{column.render(row)}</div>
+        </td>
+      );
     case "pill":
       return (
         <td className={cn(base, labelled)} data-label={label}>
           <div className="flex flex-wrap gap-1.5 max-sm:justify-end">
-            {[column.label(row)].flat().map((text) => (
-              <TagPill key={text}>{text}</TagPill>
-            ))}
+            {[column.label(row)].flat().map((text) => {
+              const full = column.tooltip?.(row);
+              const pill = <TagPill className="whitespace-nowrap">{text}</TagPill>;
+              if (!full || full === text) return <span key={text}>{pill}</span>;
+              // The pill sits above the row's stretched link so the tooltip can be hovered; a click on it is passed on to that link,
+              // so the pill behaves like any other part of the row.
+              return (
+                <Tooltip key={text} label={full} placement="top">
+                  <span
+                    className="relative z-10 cursor-pointer"
+                    onClick={(event) => event.currentTarget.closest("tr")?.querySelector<HTMLAnchorElement>("a[href]")?.click()}
+                  >
+                    {pill}
+                  </span>
+                </Tooltip>
+              );
+            })}
           </div>
         </td>
       );

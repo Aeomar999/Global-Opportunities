@@ -17,19 +17,19 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { AlertCircle, ShieldCheck } from "lucide-react";
 import { BRAND, BRAND_ADMIN_TITLE } from "@/config/brand";
 import { BrandMark } from "@/components/BrandMark";
 import { loginAdmin } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/form/Field";
 import { Input } from "@/components/ui/form/Input";
+import { PasswordInput } from "@/components/ui/form/PasswordInput";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -90,25 +90,7 @@ export default function LoginPage() {
             </Field>
 
             <Field label="Password">
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="pr-11"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((shown) => !shown)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
-                  className="absolute right-0 top-0 inline-flex size-10 items-center justify-center rounded-inset text-muted transition-colors hover:bg-neutral-soft hover:text-ink"
-                >
-                  {showPassword ? <EyeOff size={18} strokeWidth={1.75} aria-hidden="true" /> : <Eye size={18} strokeWidth={1.75} aria-hidden="true" />}
-                </button>
-              </div>
+              <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" placeholder="Enter your password" />
             </Field>
 
             {error && (

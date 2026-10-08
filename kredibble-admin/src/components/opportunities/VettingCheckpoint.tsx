@@ -25,7 +25,7 @@ import { todayIsoDate } from "@/lib/services/listings";
 import type { StaffMember } from "@/lib/mock-entities";
 import { Checkbox } from "@/components/ui/form/Checkbox";
 import { Field } from "@/components/ui/form/Field";
-import { Input } from "@/components/ui/form/Input";
+import { DatePicker } from "@/components/ui/form/DatePicker";
 import { Select } from "@/components/ui/form/Select";
 
 export interface VettingValue {
@@ -95,7 +95,7 @@ export function VettingCheckpoint({ vetted, vettedById, vettedOn, staff, default
           </Field>
           </div>
           <Field label="Vetted on" error={errors?.vettedOn}>
-            <Input type="date" value={vettedOn} disabled={disabled || !vetted} onChange={(event) => onChange({ vetted, vettedById, vettedOn: event.target.value })} />
+            <DatePicker value={vettedOn} disabled={disabled || !vetted} onChange={(iso) => onChange({ vetted, vettedById, vettedOn: iso })} label="Choose the vetting date" />
           </Field>
         </div>
       </div>

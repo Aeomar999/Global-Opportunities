@@ -18,6 +18,9 @@
  *   testimonial  pending = warning, approved = success, unpublished = neutral, rejected = danger
  *   listing      draft = neutral, published = success
  *   vetting      unvetted = warning, vetted = success
+ *   pipeline     healthy = success, thin = warning, critical = danger, unknown ("Not enough data") = neutral
+ *   pace         on_pace = success, behind = warning, far_behind = danger (the Database verification pace, from kpiStatus). They read
+ *                "On track / Behind / Off track" (KPI_STATUS_LABELS): the gauge ZONES have their own words.
  *
  * "Open" is the one word that means two things: an open opportunity or grant is
  * good (success) but an open REPORT is waiting on a person (warning). Pass
@@ -35,6 +38,12 @@ export interface StatusMeta {
   label: string;
 }
 
+/**
+ * THE words for a KPI status, used everywhere a target is judged: the Overview cards, the Database pace chip, the Settings example and
+ * every aria text. (The Database gauge's three ZONES keep their own words, "Far behind / Behind / On pace".)
+ */
+export const KPI_STATUS_LABELS = { green: "On track", amber: "Behind", red: "Off track" } as const;
+
 const STATUS_MAP: Record<string, StatusMeta> = {
   // success
   active: { tone: "success", label: "Active" },
@@ -46,6 +55,8 @@ const STATUS_MAP: Record<string, StatusMeta> = {
   onboard: { tone: "success", label: "Onboard" },
   renew: { tone: "success", label: "Renew" },
   vetted: { tone: "success", label: "Vetted" },
+  healthy: { tone: "success", label: "Healthy" },
+  on_pace: { tone: "success", label: KPI_STATUS_LABELS.green },
   open: { tone: "success", label: "Open" },
   // info
   running: { tone: "info", label: "Running" },
@@ -56,11 +67,15 @@ const STATUS_MAP: Record<string, StatusMeta> = {
   // warning
   dormant: { tone: "warning", label: "Dormant" },
   unvetted: { tone: "warning", label: "Unvetted" },
+  thin: { tone: "warning", label: "Thin" },
+  behind: { tone: "warning", label: KPI_STATUS_LABELS.amber },
   pending: { tone: "warning", label: "Pending" },
   flagged: { tone: "warning", label: "Flagged" },
   in_review: { tone: "warning", label: "In review" },
   // danger
   rejected: { tone: "danger", label: "Rejected" },
+  critical: { tone: "danger", label: "Critical" },
+  far_behind: { tone: "danger", label: KPI_STATUS_LABELS.red },
   suspended: { tone: "danger", label: "Suspended" },
   removed: { tone: "danger", label: "Removed" },
   cancelled: { tone: "danger", label: "Cancelled" },
@@ -75,6 +90,7 @@ const STATUS_MAP: Record<string, StatusMeta> = {
   resolved: { tone: "neutral", label: "Resolved" },
   dismissed: { tone: "neutral", label: "Dismissed" },
   not_submitted: { tone: "neutral", label: "Not submitted" },
+  unknown: { tone: "neutral", label: "Not enough data" },
 };
 
 const KIND_OVERRIDES: Record<StatusKind, Record<string, StatusMeta>> = {
