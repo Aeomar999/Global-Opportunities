@@ -23,3 +23,7 @@ PLAN-2a-admin-data-api.md:generic-api-key:583
 # Local IDE configuration key
 .idea/planningMode.xml:generic-api-key:6
 /repo/.idea/planningMode.xml:generic-api-key:6
+
+# Public age test recipient key fixture
+deploy/bin/god-backup.test.mjs:generic-api-key:6
+/repo/deploy/bin/god-backup.test.mjs:generic-api-key:6
