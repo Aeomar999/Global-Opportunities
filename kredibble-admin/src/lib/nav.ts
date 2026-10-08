@@ -19,7 +19,7 @@ import {
 import type { AccessLevel, Screen } from "@/config/permissions";
 
 /** Counts the sidebar can show. Unknown counts are hidden, never shown as 0. */
-export type CountKey = "pendingVerifications" | "openReports";
+export type CountKey = "pendingVerifications" | "openReports" | "pendingRecords" | "pendingTestimonials";
 
 export interface NavChild {
   label: string;
@@ -79,7 +79,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Seekers", href: "/seekers", icon: Users, screen: "seekers" },
       { label: "Hirers", href: "/hirers", icon: Building2, screen: "hirers" },
       { label: "Channels", href: "/community", icon: Hash, screen: "channels" },
-      { label: "Database", href: "/database", icon: Database, screen: "database" },
+      { label: "Database", href: "/database", icon: Database, screen: "database", countKey: "pendingRecords" },
     ],
   },
   {
@@ -97,7 +97,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Career Resources", href: "/content/articles", icon: FileText, screen: "career_resources" },
       { label: "Reference data", href: "/reference-data", icon: Database, screen: "reference_data" },
       { label: "Social", href: "/social", icon: Share2, screen: "social" },
-      { label: "Testimonials", href: "/testimonials", icon: Quote, screen: "testimonials" },
+      { label: "Testimonials", href: "/testimonials", icon: Quote, screen: "testimonials", countKey: "pendingTestimonials" },
     ],
   },
   {
@@ -111,11 +111,29 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/** The page that owns a screen (the first nav entry for it): where a KPI card or a queue row links to. */
+export function hrefForScreen(screen: Screen): string {
+  for (const group of NAV_GROUPS) for (const child of group.children) if (child.screen === screen) return child.href;
+  return "/";
+}
+
 /** The nav a person may see: only pages whose screen they can view; groups left empty are dropped. */
 export function visibleNavGroups(can: (screen: Screen, level: AccessLevel) => boolean): NavGroup[] {
   return NAV_GROUPS.map((group) => ({ ...group, children: group.children.filter((child) => can(child.screen, "view")) })).filter(
     (group) => group.children.length > 0,
   );
+}
+
+/**
+ * Splits the visible groups: a group with TWO or more visible pages stays a group; a group left with exactly ONE
+ * visible page is not shown as a group (a lone page under a parent is just a click for nothing). That page becomes a
+ * direct row, listed after the groups, in the order of the groups it came from.
+ */
+export function splitNav(groups: NavGroup[]): { groups: NavGroup[]; direct: NavChild[] } {
+  return {
+    groups: groups.filter((group) => group.children.length > 1),
+    direct: groups.filter((group) => group.children.length === 1).map((group) => group.children[0]),
+  };
 }
 
 /** True when `pathname` is this child's page, a page nested under it, or under one of its `match` prefixes. */

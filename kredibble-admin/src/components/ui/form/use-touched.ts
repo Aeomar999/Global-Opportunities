@@ -15,6 +15,7 @@
  * - show(name): true once that field was touched or a submit was attempted
  * - touch(name): mark one field
  * - touchAll(): mark that a submit was attempted (every field's error shows)
+ * - reset(): forget all of it (a form that was saved and emptied starts clean, with no errors showing)
  */
 import { useCallback, useState } from "react";
 
@@ -26,7 +27,12 @@ export function useTouched() {
   const touchAll = useCallback(() => setSubmitted(true), []);
   const show = useCallback((name: string) => submitted || !!touched[name], [submitted, touched]);
 
-  return { show, touch, touchAll };
+  const reset = useCallback(() => {
+    setTouched({});
+    setSubmitted(false);
+  }, []);
+
+  return { show, touch, touchAll, reset };
 }
 
 /** After a failed submit: moves focus to the first control marked aria-invalid (waits for the errors to render). */

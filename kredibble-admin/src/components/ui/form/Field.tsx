@@ -19,7 +19,7 @@
  * - hideLabel: keep the label for screen readers only (the control is explained by its surroundings)
  * - optional: shows a muted "Optional" tag after the label (required is the default, so it is not marked)
  * - helper: one short line of guidance under the control
- * - error: the message to show NOW. The page decides when: after the field was blurred (touched) or
+ * - error: the message (text, or text with a link in it) to show NOW. The page decides when: after the field was blurred (touched) or
  *   after a submit attempt (see useTouched). While an error shows, it replaces the helper.
  * - children: the control
  *
@@ -63,7 +63,7 @@ interface FieldProps {
   hideLabel?: boolean;
   optional?: boolean;
   helper?: string;
-  error?: string;
+  error?: ReactNode;
   className?: string;
   children: ReactNode;
 }

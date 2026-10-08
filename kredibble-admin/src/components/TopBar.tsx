@@ -99,7 +99,7 @@ export function TopBar({ onOpenNav, counts }: TopBarProps) {
   const back = match && match.extra.length > 0 ? { href: match.child.href, label: match.child.label } : null;
 
   return (
-    <header className="lg:panel-corner sticky top-0 z-30 flex h-topbar shrink-0 items-center gap-3 border-b border-line bg-surface px-4 sm:px-5 lg:px-7">
+    <header data-print-hide className="lg:panel-corner sticky top-0 z-30 flex h-topbar shrink-0 items-center gap-3 border-b border-line bg-surface px-4 sm:px-5 lg:px-7">
       <button type="button" onClick={onOpenNav} aria-label="Open navigation" className={cn(ICON_BUTTON, "lg:hidden", back && "max-sm:hidden")}>
         <MenuIcon size={20} strokeWidth={1.75} aria-hidden="true" />
       </button>
@@ -120,7 +120,8 @@ export function TopBar({ onOpenNav, counts }: TopBarProps) {
             <TagPill>Mock data</TagPill>
           </span>
         )}
-        {/* Development only: which role(s) the app is being viewed as. Change them in the account menu. */}
+        {/* Development only: which role(s) the app is being viewed as. Change them in the account menu.
+            Hidden below 640px (it crowds the bar); the account menu names the current role(s) as text instead. */}
         {devSwitcher && (
           <span className="hidden sm:inline-flex" data-testid="viewing-as">
             <TagPill>Viewing as {roles.map((role) => ROLES[role].label).join(" + ")}</TagPill>
@@ -145,6 +146,7 @@ export function TopBar({ onOpenNav, counts }: TopBarProps) {
 
 function UserMenu() {
   const { devSwitcher, devRoles, roles, setDevRoles, can } = useRoles();
+  const roleText = roles.map((held) => ROLES[held].label).join(" + ");
   // The shell renders only after mounting, so reading localStorage here is safe.
   const [user] = useState(getAdminUser);
   const name = user?.name || "Admin";
@@ -156,14 +158,16 @@ function UserMenu() {
       label="Account"
       align="end"
       triggerAriaLabel={`Account menu for ${name}`}
+      header={
+        <div className="border-b border-line px-3 py-2" data-testid="account-roles">
+          <p className="caption">{roles.length > 1 ? "Your roles" : "Your role"}</p>
+          <p className="body-sm font-semibold text-ink">{roleText}</p>
+        </div>
+      }
       triggerClassName="flex h-11 items-center gap-2 rounded-control pl-1 pr-2 transition-colors duration-150 ease-out hover:bg-neutral-soft"
       items={[
-        ...(can("team", "view")
-          ? [
-              { label: "Team", href: "/team" },
-              { label: "Roles & Permissions", href: "/team?tab=roles" },
-            ]
-          : []),
+        ...(can("team", "view") ? [{ label: "Team", href: "/team" }] : []),
+        ...(can("roles_permissions", "view") ? [{ label: "Roles & Permissions", href: "/team?tab=roles" }] : []),
         // Development only: view the app as one or two roles (at most two; none chosen = the real session role).
         ...(devSwitcher
           ? (Object.keys(ROLES) as Role[]).map((role, index) => ({

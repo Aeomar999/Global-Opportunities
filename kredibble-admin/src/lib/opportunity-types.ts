@@ -1,10 +1,11 @@
 /**
  * Labels and icons for opportunity types, shared by the Opportunities Queue and the review page.
  *
- * The redesign's four types (jobs, internships, events, grants) plus the API's other posting types, so a posting
+ * The redesign's four types (jobs, internships, events, grants), the API's other posting types and the desk's curated
+ * scholarships, so a posting
  * is never shown as a type it isn't. A type nobody has listed here shows its own name.
  */
-import { Award, Briefcase, CalendarDays, GraduationCap, HandCoins, Presentation, Trophy, type LucideIcon } from "lucide-react";
+import { Award, Briefcase, CalendarDays, GraduationCap, HandCoins, Medal, Presentation, Trophy, type LucideIcon } from "lucide-react";
 
 export interface OpportunityTypeMeta {
   label: string;
@@ -18,6 +19,7 @@ const TYPE_META: Record<string, OpportunityTypeMeta> = {
   grants: { label: "Grant", icon: HandCoins },
   competitions: { label: "Competition", icon: Trophy },
   fellowships: { label: "Fellowship", icon: Award },
+  scholarships: { label: "Scholarship", icon: Medal },
   trainings: { label: "Training", icon: Presentation },
 };
 

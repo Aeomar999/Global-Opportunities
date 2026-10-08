@@ -25,6 +25,7 @@
  * - unit: noun for the tooltip value, e.g. "submissions"
  * Axis labels are centred under their bars, including the first and last (the plot has right/left
  * padding for them instead of right-aligning the last label).
+ * - axisMax: a FIXED top for the y axis (100 for a score out of 100: ticks at 0, 25, 50, 75, 100). Default: the data maximum, rounded up.
  * - height: CSS height class (default "h-chart", 260px), fixed so nothing shifts
  */
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
@@ -41,6 +42,7 @@ interface HighlightBarChartProps {
   ariaLabel: string;
   unit?: string;
   height?: string;
+  axisMax?: number;
 }
 
 // Drawing-space constants (SVG user units = pixels). Top padding leaves room for value labels.
@@ -51,7 +53,7 @@ const PAD = { top: 28, right: 20, bottom: 28, left: 32 };
 const GRID_LINES = 4;
 const MAX_LABELLED_BARS = 14; // above this, labels do not fit and bars get the darker colour
 
-export function HighlightBarChart({ data, ariaLabel, unit = "", height = "h-chart" }: HighlightBarChartProps) {
+export function HighlightBarChart({ data, ariaLabel, unit = "", height = "h-chart", axisMax }: HighlightBarChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
@@ -73,16 +75,18 @@ export function HighlightBarChart({ data, ariaLabel, unit = "", height = "h-char
 
   // Round the top of the y axis up to a multiple of GRID_LINES so ticks are whole numbers.
   const maxValue = Math.max(...data.map((d) => d.value), 1);
-  const yMax = Math.ceil(maxValue / GRID_LINES) * GRID_LINES;
+  const yMax = axisMax ?? Math.ceil(maxValue / GRID_LINES) * GRID_LINES;
+  // The left padding grows with the widest axis label (a 5-digit number needs more room than "100"), so a label is never clipped.
+  const pad = { ...PAD, left: Math.max(PAD.left, String(yMax).length * 7 + 14) };
 
-  const innerW = Math.max(width - PAD.left - PAD.right, 1);
+  const innerW = Math.max(width - pad.left - PAD.right, 1);
   const innerH = HEIGHT - PAD.top - PAD.bottom;
   const slot = innerW / data.length;
   const barW = Math.min(slot * 0.6, 28);
   const baseline = PAD.top + innerH;
   const bars = data.map((d, i) => {
     const h = (d.value / yMax) * innerH;
-    return { x: PAD.left + slot * i + (slot - barW) / 2, y: baseline - h, h, cx: PAD.left + slot * i + slot / 2 };
+    return { x: pad.left + slot * i + (slot - barW) / 2, y: baseline - h, h, cx: pad.left + slot * i + slot / 2 };
   });
 
   // X labels: every bar up to 7, every 2nd up to 14, every 5th beyond. Counted back from the
@@ -92,7 +96,7 @@ export function HighlightBarChart({ data, ariaLabel, unit = "", height = "h-char
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const index = Math.floor((event.clientX - rect.left - PAD.left) / slot);
+    const index = Math.floor((event.clientX - rect.left - pad.left) / slot);
     setActive(Math.min(lastIndex, Math.max(0, index)));
   };
 
@@ -133,8 +137,8 @@ export function HighlightBarChart({ data, ariaLabel, unit = "", height = "h-char
             const y = PAD.top + (i / GRID_LINES) * innerH;
             return (
               <g key={i}>
-                <line x1={PAD.left} x2={width - PAD.right} y1={y} y2={y} strokeDasharray="4 4" className="stroke-line" />
-                <text x={PAD.left - 8} y={y + 4} textAnchor="end" fontSize={12} className="fill-muted">
+                <line x1={pad.left} x2={width - PAD.right} y1={y} y2={y} strokeDasharray="4 4" className="stroke-line" />
+                <text x={pad.left - 8} y={y + 4} textAnchor="end" fontSize={12} className="fill-muted">
                   {Math.round(yMax - (i / GRID_LINES) * yMax)}
                 </text>
               </g>
@@ -194,8 +198,10 @@ export function HighlightBarChart({ data, ariaLabel, unit = "", height = "h-char
         )}
       </div>
 
-      {/* Full data for screen readers */}
-      <table className="sr-only">
+      {/* Full data for screen readers. The sr-only class is on a WRAPPER: a <table> ignores overflow and height, so on the table itself it stayed a real box
+          that stretched the page below the shell (and left the sticky sidebar a blank band at the bottom). */}
+      <div className="sr-only">
+      <table>
         <caption>{ariaLabel}</caption>
         <tbody>
           {data.map((d) => (
@@ -208,6 +214,7 @@ export function HighlightBarChart({ data, ariaLabel, unit = "", height = "h-char
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

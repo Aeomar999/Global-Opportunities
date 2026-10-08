@@ -1,7 +1,10 @@
 "use client";
 
 /**
- * Opportunity review: one posting awaiting moderation.
+ * Opportunity detail (/opportunities/[id]): ONE route for both sources of the Opportunities Queue.
+ *   - A staff-curated listing (an id in the listings collection) shows CuratedListingDetail.
+ *   - A hirer-submitted posting shows the review page below: approve and reject. They need edit access on
+ *     opportunities_queue; a view-only role sees both buttons disabled with the standard tooltip.
  * Built on the shared detail template.
  *
  * Fields: type, title, company, location, status, Description, Posted, Applicants, Work Type (when
@@ -15,6 +18,10 @@
  */
 import { useCallback, useState } from "react";
 import { useParams } from "next/navigation";
+import { useMockCollection } from "@/lib/mock-store";
+import { useRoles, VIEW_ONLY_TOOLTIP } from "@/components/access/RoleProvider";
+import { CuratedListingDetail } from "@/components/opportunities/CuratedListingDetail";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { Check, X } from "lucide-react";
 import { formatDate } from "@/lib/format";
 import { useBreadcrumbLabel } from "@/lib/breadcrumb-label";
@@ -34,8 +41,16 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TagPill } from "@/components/ui/TagPill";
 import { useToast } from "@/components/ui/Toast";
 
-export default function OpportunityReviewPage() {
+export default function OpportunityPage() {
   const { id } = useParams<{ id: string }>();
+  const listings = useMockCollection("listings");
+  return listings.some((listing) => listing.id === id) ? <CuratedListingDetail id={id} /> : <HirerPostingReview />;
+}
+
+function HirerPostingReview() {
+  const { id } = useParams<{ id: string }>();
+  const { can } = useRoles();
+  const canModerate = can("opportunities_queue", "edit");
   const load = useCallback(() => loadOpportunity(id), [id]);
   const { status, record: opp, setRecord, error, retry } = useDetailData<Opportunity>(load, { collection: "opportunities" });
   const toast = useToast();
@@ -94,9 +109,17 @@ export default function OpportunityReviewPage() {
             badges={<StatusBadge status={opp.moderationStatus} />}
             meta={`${opp.company} · ${opp.location}`}
             actions={
-              <Button icon={Check} onClick={approve} disabled={isApprovedStatus(opp.moderationStatus) || saving}>
-                Approve
-              </Button>
+              canModerate ? (
+                <Button icon={Check} onClick={approve} disabled={isApprovedStatus(opp.moderationStatus) || saving}>
+                  Approve
+                </Button>
+              ) : (
+                <Tooltip label={VIEW_ONLY_TOOLTIP}>
+                  <Button icon={Check} disabled>
+                    Approve
+                  </Button>
+                </Tooltip>
+              )
             }
           />
         }
@@ -138,9 +161,17 @@ export default function OpportunityReviewPage() {
         }
         danger={
           <DangerZone explanation="Marks this posting as Rejected in the moderation queue. You can still approve it afterwards.">
-            <Button variant="danger" icon={X} onClick={reject} disabled={opp.moderationStatus === "rejected" || saving}>
-              Reject opportunity
-            </Button>
+            {canModerate ? (
+              <Button variant="danger" icon={X} onClick={reject} disabled={opp.moderationStatus === "rejected" || saving}>
+                Reject opportunity
+              </Button>
+            ) : (
+              <Tooltip label={VIEW_ONLY_TOOLTIP}>
+                <Button variant="danger" icon={X} disabled>
+                  Reject opportunity
+                </Button>
+              </Tooltip>
+            )}
           </DangerZone>
         }
       />

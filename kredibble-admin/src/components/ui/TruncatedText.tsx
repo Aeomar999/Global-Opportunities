@@ -15,7 +15,9 @@
  * Props:
  * - text: the full text (also the visible text)
  * - className: styling for the text element (the ellipsis behaviour is added for you)
- * TruncatedLink also takes href and renders a Next <Link>; use it where the text is the row's link.
+ * - lines?: how many lines to show before the ellipsis (1 is the default; 2 or 3 clamp a longer text, for example a
+ *   card's description). The text is "truncated" when it needs more room than that, vertically or sideways.
+ * TruncatedLink also takes href (and an optional testId) and renders a Next <Link>; use it where the text is the row's link.
  */
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -30,7 +32,8 @@ function useIsTruncated<T extends HTMLElement>(text: string) {
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const observer = new ResizeObserver(() => setTruncated(element.scrollWidth > element.clientWidth));
+    // One line is cut sideways; a clamped paragraph is cut at the bottom (its content is taller than the box).
+    const observer = new ResizeObserver(() => setTruncated(element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight + 1));
     observer.observe(element); // fires once immediately, then on every size change
     return () => observer.disconnect();
   }, [text]);
@@ -42,7 +45,11 @@ function useIsTruncated<T extends HTMLElement>(text: string) {
 // and must NOT be positioned (a stretched row link positions itself against the table row).
 const WRAPPER = "block min-w-0";
 
-export function TruncatedText({ text, className }: { text: string; className?: string }) {
+/** The clamp classes (written out in full so Tailwind finds them). */
+const CLAMP = { 1: "truncate", 2: "line-clamp-2 clamp-multiline break-words", 3: "line-clamp-3 clamp-multiline break-words" } as const;
+type Lines = keyof typeof CLAMP;
+
+export function TruncatedText({ text, className, lines = 1 }: { text: string; className?: string; lines?: Lines }) {
   const { ref, truncated } = useIsTruncated<HTMLSpanElement>(text);
 
   return (
@@ -51,7 +58,8 @@ export function TruncatedText({ text, className }: { text: string; className?: s
         ref={ref}
         title={truncated ? text : undefined}
         tabIndex={truncated ? 0 : undefined}
-        className={cn("block truncate rounded-inset", className)}
+        // A multi-line clamp is its own display (-webkit-box): a "block" here would switch the clamp off.
+        className={cn("rounded-inset", lines === 1 && "block", CLAMP[lines], className)}
       >
         {text}
       </span>
@@ -59,12 +67,12 @@ export function TruncatedText({ text, className }: { text: string; className?: s
   );
 }
 
-export function TruncatedLink({ href, text, className }: { href: string; text: string; className?: string }) {
+export function TruncatedLink({ href, text, className, lines = 1, testId }: { href: string; text: string; className?: string; lines?: Lines; testId?: string }) {
   const { ref, truncated } = useIsTruncated<HTMLAnchorElement>(text);
 
   return (
     <Tooltip label={text} disabled={!truncated} wrap wrapperClassName={WRAPPER}>
-      <Link ref={ref} href={href} title={truncated ? text : undefined} className={cn("block truncate", className)}>
+      <Link ref={ref} href={href} data-testid={testId} title={truncated ? text : undefined} className={cn(lines === 1 && "block", CLAMP[lines], className)}>
         {text}
       </Link>
     </Tooltip>

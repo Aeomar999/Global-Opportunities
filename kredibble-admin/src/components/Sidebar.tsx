@@ -13,7 +13,8 @@
  * Details
  * - Data comes from NAV_GROUPS (lib/nav.ts), filtered by the current roles (visibleNavGroups). The group holding the active route
  *   (nested routes count: a detail page highlights its parent list) is the violet
- *   pill and is open. Other groups can be opened too, several at once.
+ *   pill and is open. Other groups can be opened too, several at once; switching role resets them.
+ *   A group with exactly one visible page is shown as a direct row at the end of the nav (splitNav).
  * - Sticky, 100dvh: the nav list scrolls inside; brand and user blocks stay put.
  * - The sidebar itself has square corners and sits flush to the viewport. The curve of the
  *   design reference belongs to the CONTENT panel's top-left corner (see TopBar and the
@@ -35,12 +36,13 @@ import { ChevronsLeft, ChevronsRight, Search, X } from "lucide-react";
 import { BRAND } from "@/config/brand";
 import { cn } from "@/lib/cn";
 import { useRoles } from "@/components/access/RoleProvider";
-import { isGroupActive, visibleNavGroups } from "@/lib/nav";
+import { isGroupActive, splitNav, visibleNavGroups } from "@/lib/nav";
 import type { NavCounts } from "@/lib/services/nav-counts";
 import { useMediaQuery, useModifierLabel } from "@/lib/use-media-query";
 import { BrandMark } from "@/components/BrandMark";
 import { Kbd } from "@/components/ui/Kbd";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { NavDirectItem } from "@/components/sidebar/NavDirect";
 import { NavGroupItem } from "@/components/sidebar/NavGroup";
 import { RailGroup } from "@/components/sidebar/RailGroup";
 import { UserCard } from "@/components/sidebar/UserCard";
@@ -63,7 +65,14 @@ export function Sidebar({ collapsed, onToggleCollapsed, drawerOpen, onCloseDrawe
   const modifier = useModifierLabel();
   // Only the pages the current roles can view (a group with none is hidden).
   const { can } = useRoles();
-  const navGroups = useMemo(() => visibleNavGroups(can), [can]);
+  // Groups with two or more pages stay groups; a group with exactly one visible page becomes a direct row at the end.
+  const { navGroups, directItems } = useMemo(() => {
+    const split = splitNav(visibleNavGroups(can));
+    return { navGroups: split.groups, directItems: split.direct };
+  }, [can]);
+  // Identifies WHICH groups are visible. When it changes (another role was chosen, or the matrix was saved) the
+  // hand-opened groups of the previous nav are forgotten, so only the active group is open.
+  const navKey = navGroups.map((group) => group.group).join("|");
 
   // The rail only exists on desktop; the drawer is always the full layout.
   const rail = collapsed && isDesktop;
@@ -79,16 +88,19 @@ export function Sidebar({ collapsed, onToggleCollapsed, drawerOpen, onCloseDrawe
   // The state is adjusted during render (React's "derive state from props" pattern) instead of in
   // an effect, so there is never a frame that shows the wrong groups open.
   const activeGroup = navGroups.find((group) => isGroupActive(group, pathname))?.group ?? null;
-  const [openState, setOpenState] = useState({ path: pathname, rail, userOpened: [] as string[], dismissed: [] as string[] });
+  const [openState, setOpenState] = useState({ path: pathname, rail, navKey, userOpened: [] as string[], dismissed: [] as string[] });
+  const navChanged = openState.navKey !== navKey;
   const navigated = openState.path !== pathname;
   const expandedFromRail = openState.rail && !rail;
-  if (navigated || expandedFromRail || openState.rail !== rail) {
-    // A new page (or a fresh expand) forgets which groups were dismissed on the previous page.
-    setOpenState({ path: pathname, rail, userOpened: openState.userOpened, dismissed: [] });
+  if (navChanged || navigated || expandedFromRail || openState.rail !== rail) {
+    // A new page (or a fresh expand) forgets which groups were dismissed on the previous page; a different nav
+    // (another role) forgets the hand-opened groups too, because they belonged to the other role's nav.
+    setOpenState({ path: pathname, rail, navKey, userOpened: navChanged ? [] : openState.userOpened, dismissed: [] });
   }
-  const dismissedHere = navigated || expandedFromRail ? [] : openState.dismissed;
+  const dismissedHere = navChanged || navigated || expandedFromRail ? [] : openState.dismissed;
+  const userOpenedHere = navChanged ? [] : openState.userOpened;
   const isOpen = (name: string) =>
-    openState.userOpened.includes(name) || (name === activeGroup && !dismissedHere.includes(name));
+    userOpenedHere.includes(name) || (name === activeGroup && !dismissedHere.includes(name));
 
   const toggleGroup = (name: string) =>
     setOpenState((state) => {
@@ -142,6 +154,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, drawerOpen, onCloseDrawe
   return (
     // The wrapper owns position, width (and its 200ms animation) and the drawer slide. The aside fills it.
     <div
+      data-print-hide
       className={cn(
         "z-40 shrink-0",
         // Desktop: sticky full-height column; width follows the expanded / rail state.
@@ -181,12 +194,14 @@ export function Sidebar({ collapsed, onToggleCollapsed, drawerOpen, onCloseDrawe
             </Tooltip>
           </div>
         ) : (
-          <div className="relative flex h-16 shrink-0 items-center gap-2 px-4">
+          <div className="relative flex h-16 shrink-0 items-center gap-2 pl-4 pr-2">
             <BrandMark size={36} />
             <div className="min-w-0 flex-1">
               <p className="brand-name">{BRAND.name}</p>
-              {/* Wraps to two lines instead of being cut off ("Global Opportunity Desk"). */}
-              <p className="brand-sub break-words leading-tight">{BRAND.sub}</p>
+              {/* One line in the expanded desktop sidebar (it fits at 11px); it wraps only in the narrower phone drawer. */}
+              <p className={cn("brand-sub leading-tight", isDesktop ? "whitespace-nowrap" : "break-words")} data-testid="brand-tagline">
+                {BRAND.sub}
+              </p>
             </div>
             {isDesktop ? (
               <Tooltip label={`${toggleLabel} (${modifier} B)`} placement="bottom">
@@ -271,6 +286,11 @@ export function Sidebar({ collapsed, onToggleCollapsed, drawerOpen, onCloseDrawe
                 </li>
               );
             })}
+            {directItems.map((child) => (
+              <li key={child.href} className={rail ? "flex w-full justify-center" : undefined}>
+                <NavDirectItem child={child} pathname={pathname} counts={counts} rail={rail} onNavigate={onCloseDrawer} />
+              </li>
+            ))}
           </ul>
         </nav>
 

@@ -41,7 +41,12 @@ Orange accent (brand #fc5e24)
 - **[adjusted]** 700 #B53B0A (orange text on white, orange-50 and orange-100: 5.84 / 5.29 / 4.65:1).
   It was #C2410C, which is only 4.12:1 on orange-100.
 Status (text on tint): success #15803D on #E8F6EE (dot #16A34A), warning #8A5A00 on #FDF3D8
-  (dot #D99A00), danger #B91C1C on #FDECEC (dot #DC2626), neutral #4B4560 on #EFEEF4
+  (dot #D99A00), danger #B91C1C on #FDECEC (dot #DC2626), neutral #4B4560 on #EFEEF4,
+  info (in progress: a running program, an onboarding ambassador) purple-700 on purple-50 (dot purple-600).
+  Desk statuses live in status-map.ts: program planned = neutral, running = info, delivered = success,
+  cancelled = danger; ambassador applicant = neutral, onboarding = info, active = success, dormant = warning;
+  testimonial pending = warning, approved = success, unpublished = neutral, rejected = danger; listing
+  draft = neutral, published = success; vetting unvetted = warning, vetted = success.
 **[adjusted]** Chart: highlight orange-500, primary series purple-500, secondary purple-400.
   Non-highlighted bars have TWO colours depending on whether they carry value labels:
   - `chart-pale` #D5C6E3 (1.61:1 on white, decorative only): allowed ONLY when every bar has a

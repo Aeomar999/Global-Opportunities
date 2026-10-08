@@ -7,7 +7,7 @@
  * Props:
  * - status: raw status string, e.g. "pending", "approved", "suspended"
  * - label: optional override for the displayed text
- * - tone: optional override for the tone (success | warning | danger | neutral)
+ * - tone: optional override for the tone (success | warning | danger | neutral | info)
  * - kind: "report" for the one word whose tone depends on context ("Open" report = warning)
  * - icon: optional lucide icon shown INSTEAD of the dot (e.g. a flag for flagged channels)
  */
@@ -20,6 +20,8 @@ const TONE_CLASSES: Record<StatusTone, { pill: string; dot: string }> = {
   warning: { pill: "bg-warning-soft text-warning", dot: "bg-warning-dot" },
   danger: { pill: "bg-danger-soft text-danger", dot: "bg-danger-dot" },
   neutral: { pill: "bg-neutral-soft text-neutral", dot: "bg-neutral-dot" },
+  // In progress: purple-50 background, purple-700 text (9.7:1), purple dot. Dot plus text, never colour alone.
+  info: { pill: "bg-purple-50 text-purple-700", dot: "bg-purple-600" },
 };
 
 interface StatusBadgeProps {

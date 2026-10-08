@@ -77,7 +77,9 @@ export function SegmentedBar({ segments, totalLabel, ariaLabel, emptyTitle = "No
         ))}
       </ul>
 
-      <table className="sr-only">
+      {/* sr-only on a wrapper: a <table> ignores overflow, so on the table itself it stays a real box (see HighlightBarChart) */}
+      <div className="sr-only">
+      <table>
         <caption>{ariaLabel}</caption>
         <thead>
           <tr>
@@ -96,6 +98,7 @@ export function SegmentedBar({ segments, totalLabel, ariaLabel, emptyTitle = "No
           ))}
         </tbody>
       </table>
+      </div>
     </figure>
   );
 }

@@ -498,3 +498,104 @@ body {
     animation: none;
   }
 }
+
+/*
+ * A clamped (2 or 3 line) TruncatedText. The caption utility has a 16px line on 12px text (1.33): with the clamp's
+ * overflow:hidden the descenders of p, g, y, q and j of the LAST line were cut off ("programme" read as "orogramme").
+ * A line-height of at least 1.4 plus 0.15em of bottom padding gives them room. The padding only shows the blank half of
+ * the next line's leading (0.2em at 1.4), so the visible line count does not change. Unlayered on purpose: it must win over
+ * the layered text-size utilities.
+ */
+.clamp-multiline {
+  line-height: 1.4;
+  padding-bottom: 0.15em;
+}
+
+/* ===================================================================== monthly report: the paper and printing */
+
+/*
+ * The report PAPER: an A4-proportioned sheet (794px is 210mm at 96dpi, rounded: 49.625rem), centred, with a 1px border, a soft shadow and a 4px orange
+ * line on top. Below 640px it fills the width (16px padding is set by the component). Only the paper prints.
+ */
+.report-paper {
+  width: 100%;
+  max-width: 49.625rem;
+  margin-inline: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-top: 4px solid var(--color-orange-500);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/*
+ * THE PAGE: A4, portrait, 14mm margins. A top-level rule (it only ever applies when printing), so the browser's default paper is A4 and not the printer's
+ * or the locale's (US Letter, 612 x 792pt). The print dialog can still be changed by the person printing; see the hint under "Download PDF".
+ */
+@page {
+  size: A4 portrait;
+  margin: 14mm;
+}
+
+@media print {
+  /* The app shell is a fixed-height flex layout with scrolling parts: in print everything flows at its natural height, otherwise only the first page prints. */
+  html,
+  body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  [data-print-flow] {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+    background: #fff !important;
+  }
+  /* Not part of the paper: the sidebar, the top bar, the breadcrumb, the tabs, the controls, the toasts and the dev overlay. */
+  [data-print-hide],
+  nextjs-portal {
+    display: none !important;
+  }
+
+  .report-paper {
+    max-width: none;
+    border: 0;
+    border-top: 4px solid var(--color-orange-500);
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+    /* Fit more of the sheet on a page: the A4 content width is narrower than the screen paper, so the report is printed at 70%. */
+    zoom: 0.7;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Bars, tints and the rule keep their colours. */
+  .report-paper *,
+  .report-paper {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Nothing is cut across two pages: sections, grid cells, table rows and the scoreboard rows. */
+  .report-section,
+  .report-cell,
+  .report-paper tr,
+  .report-paper li,
+  .report-paper [data-testid="team-scorecard"] {
+    break-inside: avoid;
+  }
+  /* The footer stays with the content above it: it is never alone on an otherwise empty page. */
+  .report-footer {
+    break-before: avoid;
+    break-inside: avoid;
+  }
+  .report-paper > div > :last-child {
+    break-after: avoid;
+  }
+}

@@ -6,12 +6,14 @@
  *
  * - Members: the staff list on the shared list template, with "Invite Staff" (opens /staff/invite).
  *   A member's row opens /staff/[id]; both stay real routes under Team.
- * - Roles & permissions: three role cards with switches and a sticky save bar.
+ * - Roles & permissions: three role cards with switches, a sticky save bar and the compact matrix of the other ten roles.
+ *   It needs the "roles_permissions" screen: hidden without it, read-only with view (desk lead), editable with edit (super admin).
  * Both panels stay mounted (the inactive one is hidden), so unsaved permission edits survive a switch to Members.
  */
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
+import { useRoles } from "@/components/access/RoleProvider";
 import { MembersTab } from "@/components/team/MembersTab";
 import { RolesTab } from "@/components/team/RolesTab";
 import { buttonClasses } from "@/components/ui/Button";
@@ -24,7 +26,11 @@ const ID_PREFIX = "team";
 export default function TeamPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const tab: TeamTab = useSearchParams().get("tab") === "roles" ? "roles" : "members";
+  const { can } = useRoles();
+  // The Roles & permissions tab is hidden without the roles_permissions screen (view = read-only there).
+  const canSeeRoles = can("roles_permissions", "view");
+  const requested = useSearchParams().get("tab");
+  const tab: TeamTab = canSeeRoles && requested === "roles" ? "roles" : "members";
 
   const select = (next: TeamTab) => router.replace(next === "members" ? pathname : `${pathname}?tab=${next}`, { scroll: false });
 
@@ -45,23 +51,28 @@ export default function TeamPage() {
 
       <NotConnectedNotice />
 
-      <Tabs
-        ariaLabel="Team sections"
-        idPrefix={ID_PREFIX}
-        value={tab}
-        onChange={select}
-        tabs={[
-          { value: "members", label: "Members" },
-          { value: "roles", label: "Roles & permissions" },
-        ]}
-      />
+      {/* With no access to Roles & permissions there is only one tab, so no tab row at all. */}
+      {canSeeRoles && (
+        <Tabs
+          ariaLabel="Team sections"
+          idPrefix={ID_PREFIX}
+          value={tab}
+          onChange={select}
+          tabs={[
+            { value: "members", label: "Members" },
+            { value: "roles", label: "Roles & permissions" },
+          ]}
+        />
+      )}
 
       <div role="tabpanel" id={tabPanelId(ID_PREFIX, "members")} aria-labelledby={tabId(ID_PREFIX, "members")} hidden={tab !== "members"}>
         <MembersTab />
       </div>
-      <div role="tabpanel" id={tabPanelId(ID_PREFIX, "roles")} aria-labelledby={tabId(ID_PREFIX, "roles")} hidden={tab !== "roles"} className="flex-1 [&:not([hidden])]:flex [&:not([hidden])]:flex-col">
-        <RolesTab />
-      </div>
+      {canSeeRoles && (
+        <div role="tabpanel" id={tabPanelId(ID_PREFIX, "roles")} aria-labelledby={tabId(ID_PREFIX, "roles")} hidden={tab !== "roles"} className="flex-1 [&:not([hidden])]:flex [&:not([hidden])]:flex-col">
+          <RolesTab />
+        </div>
+      )}
     </div>
   );
 }

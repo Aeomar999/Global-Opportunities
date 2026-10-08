@@ -42,7 +42,7 @@ export function RequireAccess({ screen, level = "view", children }: RequireAcces
       <EmptyState
         icon={Lock}
         title="You don't have access to this page"
-        description={`This page is looked after by the ${joinList(owners)} ${owners.length === 1 ? "role" : "roles"}. Ask your desk lead if you need it.`}
+        description={`This page is looked after by the ${joinList(owners)} ${owners.length === 1 ? "role" : "roles"}. Ask a Desk Lead or Super Admin if you need access.`}
         action={
           <Link href="/" className={buttonClasses("secondary")}>
             Go to Overview

@@ -1659,3 +1659,251 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
     - Rejected company verification documents purged after 90 days.
     - User account deletion tombstones retained for 7 years using keyed HMAC-SHA256 hashes (no raw PII stored) for compliance auditing.
     - Audit logs retain 1-year TTL with sensitive PII scrubbed.
+
+---
+
+## Product Backlog — App and Website Integration (added 2026-10-08)
+
+**Source:** the product owner's request of 2026-10-08. These are product tasks, not security findings, so they are tracked by item number below (not by a `SEC-0xx` id). If one of them turns up a security problem, open a new `SEC-0xx` task and link it here.
+
+| # | Task | Status |
+|---|------|--------|
+| 1 | Opportunity Listings | [ ] Open |
+| 2 | News Category | [ ] Open |
+| 3 | App Colours | [ ] Open |
+| 4 | Stakeholder Segments | [ ] Open |
+| 5 | Ambassador Registration | [ ] Open |
+| 6 | AI Assistant | [ ] Open |
+| 7 | Website–App Integration | [ ] Open |
+| 8 | Email Verification | [ ] Open |
+
+### 1. Opportunity Listings
+- [ ] Tally the opportunities and categories on the GOD website with what is currently on the app.
+
+### 2. News Category
+- [ ] Add a News category to the app for Insight Ghana and The African Journal content.
+
+### 3. App Colours
+- [ ] Work on the app's colours.
+
+### 4. Stakeholder Segments
+- [ ] Create separate sections for:
+  - [ ] General Stakeholder Community
+  - [ ] GOD Ambassador Community
+
+### 5. Ambassador Registration
+- [ ] Add an option for users to register/join as GOD Ambassadors.
+
+### 6. AI Assistant
+- [ ] Integrate an AI assistant into the app.
+
+### 7. Website–App Integration
+- [ ] Link the GOD website data with the app so that updates made on the website automatically reflect on the app, including ambassador data and other relevant information.
+
+### 8. Email Verification
+- [ ] Add an email verification screen.
+
+### Notes from this file (what already exists, so nothing is built twice)
+- **AI assistant (item 6):** the backend already mounts `/api/v1/assistant`, gated behind `AI_ENABLED=true` (503 when no provider is configured). See *v1 scope (SEC-045, SEC-082)*.
+- **News (item 2):** the backend already mounts a news feed at `/api/v1/news` with integration tests. The app still needs the category and the two sources (Insight Ghana, The African Journal).
+- **Email verification (item 8):** the backend already gates high-trust actions behind `requireEmailVerified` (HTTP 403 `EMAIL_VERIFICATION_REQUIRED`). See *Email verification (SEC-062, Q9)*. The app still needs the verification screen itself.
+- **Ambassadors (items 4, 5, 7):** the admin dashboard already has an Ambassador network (list, detail, referral codes, leaderboard) on mock data. It has no backend yet (every write is marked `TODO(backend): persist this change`).
+
+### Progress Log
+- 2026-10-08 — Items 1–8 added to the backlog. No work started.
+
+---
+
+## Backend Work Plan — everything the backend still has to do (added 2026-10-08)
+
+**Why this section exists.** The admin dashboard was rebuilt on a shared in-memory mock store (every write is marked `TODO(backend): persist this change`), and the product backlog above adds eight more requests. This section lists ALL the backend work, task by task, with ids `BE-001` to `BE-027`. It was written after reading `kredibble-backend/src/routes/admin-api.js`, `src/routes/index.js` and `src/models/AdminPortal.js` on 2026-10-08, so "Today" below is what the code does now.
+
+**Rules for these tasks** (same as the rest of this file): one branch per task (`feature/BE-0xx-slug`), validation with Zod, an audit entry for every change, tests with the change, and no task is done until the matching admin service switches from the mock store to the API and the real-mode Playwright run passes. The admin's pages do not change: each task swaps ONE file in `kredibble-admin/src/lib/services/`.
+
+### What the backend already has (do not rebuild)
+- **Admin data API** (`/api/v1/admin`, `routes/admin-api.js`): generic managed routes for `programs`, `partners`, `ambassadors`, `social-posts`, `opportunities` (each with WordPress sync and an activity log); `ambassadors/:id/amplifications`; `beneficiaries` (create, update, verify, retry WordPress sync); `social-posts/monthly-totals`; `targets` (read, and `PUT /targets/:metric`); `scorecards`, `scorecards/me`; `dashboard`; `leaderboard`; `settings/pipeline-stages` and `settings/integrations` (read only); `testimonials` with `POST /testimonials/:id/moderate`; `reports/monthly` (read).
+- **Collections** (`routes/index.js`): users, staff, seekers, hirers, opportunities, candidates, community channels, reports, events, grants, articles, notifications, company verification and documents, saved items, applicants.
+- **Auth and trust:** auth with refresh tokens, `requireEmailVerified`, `EmailVerificationCode`, `PasswordResetCode`, audit log, rate limits, data-retention sweep, AI assistant at `/api/v1/assistant` (503 unless `AI_ENABLED=true`), news feed at `/api/v1/news`.
+
+### Mismatches found in the current code (these drive the first tasks)
+1. **Targets are overwritten, not recorded.** `PUT /targets/:metric` upserts one row per month and metric. The admin needs an append-only history with an effective-from month, who changed it and the previous value, so a past month keeps the target that applied then.
+2. **Thresholds live inside each target row** (`greenThreshold`, `amberThreshold`) and default to 1 and 0.7. The admin needs ONE dated, append-only set of thresholds (green and amber percentages) that applies to every KPI from a chosen month.
+3. **A staff member has ONE `role`** (`userId, name, email, role, status, joinedDate`). The admin has 12 roles, up to two per person, and a permission matrix that Desk Lead can edit for Moderator and Support.
+4. **Programs have no `deliveredAt`.** "Programs organised" counts programs delivered in the month, by the day they were delivered.
+5. **Partners have no stage history** (`stage` and `closed` only). Pipeline health, "Partners onboarded" by month and the activity feed all need dated stage moves.
+6. **Ambassadors have no `joinedAt` or `dormantSince`.** "Active ambassadors" is a running total at the end of a month and "New ambassadors" counts the month they joined.
+7. **No monthly report log, no website audience store, no integrations write path.**
+
+### Task list
+
+| ID | Task | Priority | Depends on | Status |
+|----|------|----------|------------|--------|
+| BE-001 | Roles, two roles per person, permission matrix enforced on the server | P1 | – | [ ] Open |
+| BE-002 | Targets with append-only history and effective-from month | P1 | BE-001 | [ ] Open |
+| BE-003 | Dated status thresholds and the change history | P1 | BE-002 | [ ] Open |
+| BE-004 | KPI engine: the ten KPIs, pro-rating, running totals, status, trend, priorities | P1 | BE-002, BE-003, BE-005 to BE-011 | [ ] Open |
+| BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [ ] Open |
+| BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [ ] Open |
+| BE-007 | Ambassadors and the Network: dates, statuses, amplification, leaderboard, summary | P1 | – | [ ] Open |
+| BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [ ] Open |
+| BE-009 | Social posts: logging, validation, monthly totals by platform | P2 | – | [ ] Open |
+| BE-010 | Testimonials: statuses, decisions, counts | P2 | – | [ ] Open |
+| BE-011 | Listings curation: vetting, publish dates, drafts, event date-times | P1 | – | [ ] Open |
+| BE-012 | Website audience: Google Analytics sync and manual entry | P2 | BE-016 | [ ] Open |
+| BE-013 | Monthly reports: the generated-report log and the two report endpoints | P2 | BE-004, BE-012 | [ ] Open |
+| BE-014 | Overview: activity feed, attention counts, the same numbers as the nav pills | P1 | BE-005 to BE-011 | [ ] Open |
+| BE-015 | Scorecard: composite, grace period, team view, who did what | P2 | BE-004, BE-001 | [ ] Open |
+| BE-016 | Settings: integrations (write-only credentials), my account, password | P1 | BE-001 | [ ] Open |
+| BE-017 | Remaining collections: notifications, reference data, team, invitations | P3 | BE-001 | [ ] Open |
+| BE-018 | Audit trail for every settings and role change | P1 | – | [ ] Open |
+| BE-019 | Performance, indexes, pagination, OpenAPI, tests | P1 | all | [ ] Open |
+| BE-020 | Demo seed for the real-mode test run | P3 | BE-001 to BE-011 | [ ] Open |
+| BE-021 | Product item 1: tally website opportunities and categories with the app | P1 | BE-026 | [ ] Open |
+| BE-022 | Product item 2: News category (Insight Ghana, The African Journal) | P2 | BE-026 | [ ] Open |
+| BE-023 | Product item 4: stakeholder segments | P2 | – | [ ] Open |
+| BE-024 | Product item 5: ambassador registration (apply, review, approve) | P1 | BE-007 | [ ] Open |
+| BE-025 | Product item 6: AI assistant hardening | P2 | – | [ ] Open |
+| BE-026 | Product item 7: website to app sync (inbound) | P1 | BE-011, BE-007 | [ ] Open |
+| BE-027 | Product item 8: email verification screen support | P1 | – | [ ] Open |
+
+(Product item 3, App Colours, is frontend only: no backend task.)
+
+### Task cards
+
+#### BE-001 — Roles, two roles per person, permission matrix
+- **Today:** `StaffMember.role` is a single string; portal roles are names like "Desk Lead" and "Admin Support".
+- **To do:**
+  - Store `roles: string[]` (one or two) using the 12 ids: `super_admin, moderator, support, partnerships_officer, opportunities_officer, training_officer, database_officer, communications_officer, social_media_manager, country_lead, admin_support, desk_lead`. Migrate the existing single roles.
+  - Store the permission matrix (screen × view/edit) and the Moderator and Support toggles. `GET` and `PUT /admin/roles-permissions` (Desk Lead and Super Admin only; Desk Lead may view, Super Admin edits).
+  - One middleware `requireScreen(screen, level)` on EVERY admin route, using the union of the person's roles. A wrong role gets 403.
+  - `GET /me` returns the roles and the resolved screens.
+- **Verify:** every role can open exactly the screens in the admin's `config/permissions.ts`; a request without the grant returns 403 whatever the UI does.
+
+#### BE-002 — Targets with append-only history
+- **Today:** `PUT /targets/:metric` upserts `{month, metric}` and overwrites.
+- **To do:**
+  - Collection `TargetChange { kpi, value, effectiveFrom ("YYYY-MM"), previous, changedBy, changedAt, seq }`, insert-only. The target for a month is the latest row whose `effectiveFrom` is that month or earlier (of two for one month, the later `seq`).
+  - `GET /admin/targets?month=` (the target in force), `GET /admin/targets/history` (newest first), `POST /admin/targets` (a batch of `{kpi, value}` with ONE `effectiveFrom`; whole numbers from 1 to 10,000,000).
+  - Seed the first row for each KPI from the current values. Keep `PUT /targets/:metric` working until the admin switches, then remove it.
+- **Verify:** saving next month's target leaves this month alone; a past month keeps its target; no row is ever edited or deleted.
+
+#### BE-003 — Dated thresholds
+- **To do:** `ThresholdChange { green, amber, effectiveFrom, previous, changedBy, changedAt, seq }` insert-only (percentages as whole numbers 1 to 200, amber below green). `GET /admin/thresholds?month=`, `GET /admin/thresholds/history`, `POST /admin/thresholds`. One `seq` counter is shared with targets so the Change history lists both newest first. A save may carry targets and thresholds together under one `effectiveFrom`.
+- **Verify:** thresholds that start next month do not change this month's statuses; the change history shows targets and thresholds in one list; a later save for the same KPI and month marks the earlier row "Replaced" (computed, never edited).
+
+#### BE-004 — KPI engine
+- **Today:** the admin computes the ten KPIs in the browser (`src/lib/kpi.ts`); `/admin/dashboard` and `/admin/scorecards` exist but use their own logic.
+- **To do:**
+  - ONE module that returns, for a month: value, target (BE-002), pro-rated target, attainment, status (BE-003), pace. Each KPI has a kind: `count` (earned in the month, pro-rated in the current month, full target for a past month) or `running_total` (Active ambassadors: judged against the FULL target all month).
+  - `GET /admin/kpis?month=` (ten cards), `GET /admin/kpis/trend?kpi=&months=6`, `GET /admin/kpis/priorities?month=` (ranked by attainment against the pro-rated target, ties by KPI order).
+  - Make `/admin/dashboard` and `/admin/scorecards` call the same module so they cannot disagree.
+  - Statuses are "On track", "Behind" and "Off track" everywhere.
+- **Verify:** the admin's coherence tests (Overview card, Priorities and Scorecard equal for the same month) pass against the real API for the current month and a past month.
+
+#### BE-005 — Programs
+- **Today:** `title, programType, status, format, partnerId, country, location, participantCount, participantTarget, facilitators, notes, startAt, endAt`.
+- **To do:** add `deliveredAt` (required when status becomes `delivered`; it decides the month it counts in). Status flow planned, running, delivered, cancelled. `GET /admin/programs/upcoming` (the next five planned or running by start date, with the partner name). Participants may not exceed the target by accident (warn, do not block).
+- **Verify:** "Programs organised" for a month equals the programs delivered in it.
+
+#### BE-006 — Partners and the pipeline
+- **Today:** `stage` and `closed` only.
+- **To do:**
+  - `stageHistory: [{ stage, at, by }]` appended on every move (first entry on create). `POST /admin/partners/:id/move { to }`. A partner is closed when its stage is `onboard` or `renew` (derived, never stored on its own).
+  - `GET /admin/partners/pipeline-health?month=`: open deals now, deals needed (target × reached Outreach ÷ closed, rounded up), close rate over the last 6 months, status healthy (ratio 1 or more), thin (0.6 or more), critical, or unknown ("not enough data").
+  - Stage names: `GET` and `PUT /admin/settings/pipeline-stages` (six display names, each 1 to 24 characters and different from the others, case-insensitive; the keys and what counts as closed never change) and a reset.
+- **Verify:** "Partners onboarded" for a month counts partners that moved to Onboard or Renew in it.
+
+#### BE-007 — Ambassadors and the Network
+- **Today:** `fullName, email, phone, country, city, memberType, roleTitle, campus, tier, status, assignedLeadId, trained, linkedUserId, referralCode`; amplification logs exist.
+- **To do:** add `joinedAt` and `dormantSince`; statuses applicant, onboarding, active, dormant; tiers ambassador, senior, lead. "Active ambassadors" at the end of a month = joined by then and not dormant by then. Unique referral code ("GOD-" plus six characters, no 0 O 1 I). Amplification log `{ambassadorId, channel, at, clicks, note}`; signups attributed through verified database records. `GET /admin/network/summary?month=` (size, active, activity rate = active ambassadors who shared in the month ÷ active), `GET /admin/leaderboard?month=` (ranked by verified signups, then clicks, then shares, then name; applicants excluded).
+- **Verify:** the leaderboard order and the activity rate equal the admin's unit tests on the same data.
+
+#### BE-008 — Database records
+- **To do:** fields `source` (organic, ambassador, event, partner, import), `verified`, `verifiedAt`, `createdAt`, `addedBy`, `ambassadorId`, `listingId`. Verify sets `verifiedAt` to today; undo puts back exactly what was there. Duplicate check on create and update: first by email (trimmed, case-insensitive), then by phone (digits only, without the country calling code, the national 0 or a leading + or 00); return which field matched. `GET /admin/beneficiaries/pace?month=` (verified, target, pro-rated pace, status). `GET /admin/beneficiaries/sources?month=`. Pending count for the sidebar pill.
+- **Verify:** "Beneficiaries verified" for a month counts records verified in it, by `verifiedAt`.
+
+#### BE-009 — Social posts
+- **To do:** `platform` (facebook, instagram, x, linkedin, tiktok, youtube, whatsapp, other), `postedAt` (not in the future), `url` (http or https with a real host), `reach`, `engagement`, `status`, `listingId` (optional). `GET /admin/social-posts/monthly-totals?month=` returns posts, reach, engagement and the platform table (leading platform first) that add up to the totals.
+- **Verify:** equals the KPIs "Posts published", "Social reach" and "Social engagement".
+
+#### BE-010 — Testimonials
+- **To do:** statuses pending, approved, unpublished, rejected; `submittedAt`, `decidedAt`, `decidedBy`; allowed moves per status (the admin's table of actions). Public `POST /testimonials` stays rate-limited. Counts for the sidebar pill (pending). The email of the author is staff-only and never in the public preview.
+
+#### BE-011 — Listings curation
+- **Today:** opportunities with WordPress sync and a `vetted` flag.
+- **To do:** `status` (draft, published), `vetted`, `vettedBy`, `vettedOn`, `publishedAt`, `writerId`, `closesAt`, `applyUrl`, `eventAt` (local date and time), `format`, `location`, `costLabel`, `durationLabel`, images. Rule: a published listing is always vetted. `GET /admin/opportunities/counts` (unvetted drafts). Views and applications per listing, split website and app.
+- **Verify:** "Opportunities published" counts vetted, published listings by `publishedAt`.
+
+#### BE-012 — Website audience
+- **To do:** collection `WebsiteMonth { month, views, dailyFirstVisits, dailyVisitors, channels[] }` (daily figures are averages per day; the month's channels add up to the views; the current month is month to date). A monthly job pulls Google Analytics 4 (property ID and API secret from BE-016, never returned); an admin can also enter a month by hand. `GET /admin/website-audience?months=6`.
+- **Open decision:** Google Analytics sync, or manual entry only (see "Decisions needed").
+
+#### BE-013 — Monthly reports
+- **To do:** `MonthlyReport { reportMonth, view ("partner" or "team"), generatedAt, generatedBy }`. `POST /admin/monthly-reports` records one report, at most once per reportMonth and view in each calendar month (the second call returns the existing one). The "Monthly reports" KPI counts reports by the month of `generatedAt`. `GET /admin/reports/partner?month=` (aggregate figures only: no person, no ambassador name, no scoreboard) and `GET /admin/reports/team?month=` (internal; Desk Lead and Super Admin only). Both come from the KPI engine.
+- **Verify:** the figures equal the Overview for the same month; the partner response contains no staff or ambassador names.
+
+#### BE-014 — Overview feed and attention counts
+- **To do:** `GET /admin/overview/activity`: a mixed feed, newest first, at most two of each kind (new ambassador, partner moved to a stage, listing published, program delivered, record verified, testimonial approved). `GET /admin/overview/attention`: pending verifications, open reports, pending testimonials, unvetted draft listings. The sidebar and breadcrumb pills read the SAME function so the numbers always match.
+
+#### BE-015 — Scorecard
+- **To do:** composite = average of min(attainment, 1) over the metrics the roles own, × 100, rounded; null before day 5 of the current month ("Too early in the month to score"; the day is a config value) and for roles that own no metric. `GET /admin/scorecards/me` (the signed-in user's roles only) and `GET /admin/scorecards/team?month=` (Desk Lead and Super Admin only). A person's own scorecard response must never contain a colleague's name.
+- **Open decision:** people who share a role share a score, because the KPIs are desk-wide counts. Per-person attribution needs the actor stored on every action (who published, who verified, who delivered).
+
+#### BE-016 — Settings and my account
+- **To do:** integrations (WordPress site address and application password; Google Analytics property ID and API secret): the address and ID are ordinary settings, the password and secret are WRITE-ONLY, encrypted at rest, returned only as "ends in ••••3f9a"; `POST /admin/settings/integrations/:kind/test` (a real connection test, no secret in the response or the logs). My account: name, notification preferences, password change (minimum length, different from the old one, rate limited).
+
+#### BE-017 — Remaining collections
+- Notifications (compose, schedule, history), reference data lists (universities, countries and so on), team invitations by email (`POST /admin/staff/invite` exists: add the two roles), staff status and removal, channels moderation. Each with pagination, search and the roles from BE-001.
+
+#### BE-018 — Audit trail
+- Every change to a target, a threshold, a role, a permission, a stage name, an integration or a report is written to `AuditLog` with who, when, the previous value and the new one. The Change history screen reads from it. Nothing in the audit log is editable.
+
+#### BE-019 — Performance, indexes, pagination, OpenAPI, tests
+- Indexes on every month and date field the KPIs filter by (`publishedAt`, `deliveredAt`, `joinedAt`, `verifiedAt`, `postedAt`, `generatedAt`, `stageHistory.at`). Pagination on every list. Update `swagger.json` for each new route. Jest tests with `mongodb-memory-server` for the KPI engine (same cases as the admin's no-browser tests), the permission middleware and every append-only rule. Target: more than 80% coverage on the new code.
+
+#### BE-020 — Demo seed for the real-mode test run
+- Extend `scripts/e2e-server.js` with an optional `E2E_SEED=demo` that creates staff with the 12 roles and sample records, in the same shape as the admin's mock seed, so the real-mode Playwright run exercises real data. The default stays "one admin and nothing else".
+
+#### BE-021 — Product item 1: tally the website and the app
+- Export the website's opportunities and categories (WordPress REST), compare them with the app's, and produce a report: in both, only on the website, only in the app, and category names that differ. Add a category taxonomy collection with a mapping table (website category to app category). Run it as a script first; make it a scheduled check once BE-026 exists.
+
+#### BE-022 — Product item 2: News category
+- Add `News` as a content category with a `source` of `insight_ghana` or `african_journal`. Ingest each source (RSS or WordPress REST) on a schedule with a stable external id (no duplicates), store title, summary, link, image, published date and source. `GET /api/v1/news?source=&page=`. Admin can hide an item. The existing `/api/v1/news` is the base.
+
+#### BE-023 — Product item 4: stakeholder segments
+- A `segment` on each user (`general` or `ambassador`; an ambassador also belongs to the general community). Channels, feeds and content carry the segment(s) they are visible to; list endpoints filter by the caller's segment; moving a user between segments is audited. Migration: everyone starts as `general`.
+
+#### BE-024 — Product item 5: ambassador registration
+- Public `POST /api/v1/ambassadors/apply` (signed-in user; name, campus or city, country, motivation): creates an Ambassador with status `applicant`, links `linkedUserId`, sends a confirmation email, rate limited and duplicate-safe (one open application per user). Admin review: approve moves the person to `onboarding` or `active`, issues the unique referral code, sets `joinedAt`, and flips the user's segment (BE-023); reject keeps a reason. `GET /api/v1/me/ambassador` for the app.
+
+#### BE-025 — Product item 6: AI assistant
+- `/api/v1/assistant` exists behind `AI_ENABLED=true`. To do: choose and configure the provider, per-user rate limit and daily cost cap, a system prompt limited to the platform's content, no personal data sent to the provider, conversations logged without PII, a kill switch in Settings, tests with a stubbed provider. Never reach a real provider from the e2e server.
+
+#### BE-026 — Product item 7: website to app sync
+- **Today:** the backend PUSHES to WordPress (`syncToWordpress`, `wordpressSync` status on records). Nothing flows back.
+- **To do:** an INBOUND path so website updates show in the app without a manual step: a signed webhook from the website (shared secret, replay protection) plus a scheduled pull as a safety net. Idempotent upserts keyed by an external id for opportunities, news, and ambassadors (including referral codes); a clear rule for who wins when both sides changed a record (proposal: the website is the source of truth for content, the app for ambassador activity); a sync status and last error per record; an admin screen or endpoint to see failures and retry. Field mapping documented in the repo.
+
+#### BE-027 — Product item 8: email verification
+- **Today:** `EmailVerificationCode` and the `requireEmailVerified` gate exist (HTTP 403 `EMAIL_VERIFICATION_REQUIRED`).
+- **To do:** make sure the app's screen has what it needs: `POST /auth/email/send` (cooldown 60 seconds), `POST /auth/email/resend`, `POST /auth/email/verify { code }` (6 digits, expires, 5 attempts then locked for a while), `emailVerified` in `GET /me`; the email itself through the configured provider (Resend). Tests for expiry, attempts and the gate.
+
+### Suggested order
+1. **BE-001, BE-018** (roles and audit): everything else depends on who may do what.
+2. **BE-002, BE-003, BE-005 to BE-011** (targets, thresholds and the data the KPIs count).
+3. **BE-004, BE-014, BE-015** (the KPI engine, the Overview, the Scorecard): switch the admin's Overview and Scorecard to the API and run the coherence tests.
+4. **BE-016, BE-012, BE-013** (settings, website audience, the reports).
+5. **BE-027, BE-024, BE-023** (email verification, ambassador registration, segments): the app-facing items.
+6. **BE-026, BE-021, BE-022, BE-025** (website sync, tally, news, AI).
+7. **BE-017, BE-019, BE-020** alongside every step.
+
+### Decisions needed from the product owner
+1. **Website views (BE-012):** pull from Google Analytics, or entered by hand each month?
+2. **Individual scorecards (BE-015):** keep desk-wide scores (people sharing a role share a score), or record who did each action so scores can be per person?
+3. **History (BE-006, BE-008):** reconstruct past pipeline and record counts from events, or only keep snapshots going forward? (Without either, a past month's pipeline gauge counts partners as they are now.)
+4. **Reports (BE-013):** should "Download PDF" store a real file, or only the log record plus the browser's print as now?
+5. **Website sync (BE-026):** which side wins when both changed the same record?
+6. **AI provider and budget (BE-025).**
+7. **Stakeholder segments (BE-023):** can a user be in both segments at once (proposal: an ambassador is also in the general community)?
+
+### Progress Log
+- 2026-10-08 — Backend work plan written (BE-001 to BE-027). No backend work started.

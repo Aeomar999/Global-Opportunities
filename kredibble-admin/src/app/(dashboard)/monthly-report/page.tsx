@@ -1,12 +1,10 @@
-"use client";
-
 /**
- * Monthly report (/monthly-report): placeholder, built in a later step. It is already in the nav and guarded by the
- * "monthly_report" screen (src/config/permissions.ts).
+ * Monthly report (/monthly-report): sends the reader to the Partner report (/monthly-report/partner), keeping the chosen ?month=. The two templates are
+ * separate routes: /monthly-report/partner and /monthly-report/team.
  */
-import { CalendarRange } from "lucide-react";
-import { StubPage } from "@/components/access/StubPage";
+import { redirect } from "next/navigation";
 
-export default function MonthlyreportPage() {
-  return <StubPage screen="monthly_report" title="Monthly report" subtitle="The desk's month in numbers." icon={CalendarRange} tone="neutral" />;
+export default async function MonthlyReportIndex({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+  const { month } = await searchParams;
+  redirect(`/monthly-report/partner${month ? `?month=${encodeURIComponent(month)}` : ""}`);
 }
