@@ -178,7 +178,7 @@ jobs:
               --output-dir /tmp/synthetic-backups \
               --no-upload
 
-            ARCHIVE="$(ls /tmp/synthetic-backups/god-production-*.archive.gz.age | head -n 1)"
+            ARCHIVE="$(find /tmp/synthetic-backups -type f -name 'god-production-*.archive.gz.age' | head -n 1)"
 
             # 4. Restore using god-restore into target test database
             ./deploy/bin/god-restore \
