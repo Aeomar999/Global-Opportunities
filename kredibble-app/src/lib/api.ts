@@ -575,5 +575,45 @@ export const getMyGrantApplications = async () => {
   return request<any[]>('/users/me/grant-applications');
 };
 
+export interface UploadResponse {
+  url: string;
+  publicId: string;
+  format: string;
+  bytes: number;
+  folder?: string;
+  originalName?: string;
+  mimeType?: string;
+}
+
+export const uploadFile = async (
+  file: { uri: string; name: string; mimeType?: string },
+  purpose: 'cvs' | 'avatars' | 'company-logos' | 'verification-docs' = 'cvs'
+): Promise<UploadResponse> => {
+  const token = await getMobileToken();
+  const formData = new FormData();
+
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType || 'application/octet-stream',
+  } as any);
+
+  const response = await fetch(`${API_BASE_URL}/upload?purpose=${encodeURIComponent(purpose)}`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const errorMsg = payload?.error?.message || `Upload failed with status ${response.status}`;
+    throw new Error(errorMsg);
+  }
+
+  return payload.data;
+};
+
 
 

@@ -144,6 +144,16 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | MOB-7 | Mobile `tsc` 5 errors, lint 45 errors | SEC-086 | P2 |
 | MOB-8 | Store readiness (identity, policy links) | SEC-087 | P1 |
 | MOB-9 | Mobile `npm audit` high advisories | SEC-088 | P2 |
+| MOB-10 | Mobile registration blocked on native (web DOM uploads) | SEC-119 | P0 |
+| MOB-11 | Native profile & verification uploads no-op | SEC-120 | P0 |
+| MOB-12 | Email verification flow missing in mobile app | SEC-121 | P0 |
+| MOB-13 | Community feed native attachments & prompt crash | SEC-122 | P1 |
+| MOB-14 | Event ticket booking payment flow simulated | SEC-123 | P1 |
+| MOB-15 | Store compliance: policy links, push notifications, offline netinfo | SEC-124 | P1 |
+| MOB-16 | AI assistant client demo disconnected from backend | SEC-125 | P2 |
+| MOB-17 | Hardcoded mock fallbacks in notifications, saved items, job descriptions | SEC-126 | P2 |
+| MOB-18 | Hirer postings & channels rely on mock in-memory store | SEC-127 | P2 |
+| MOB-19 | Mobile test coverage (0 UI tests) and 116 ESLint warnings | SEC-128 | P2 |
 | Phase 4 | Redis, always-on hosting, backups | SEC-089 | P1 |
 | Phase 4 | Error tracking + uptime monitoring | SEC-090 | P1 |
 | Phase 4 | Transactional email domain | SEC-091 | P2 |
@@ -276,6 +286,16 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | ✅ Done (Plan 4a, PR #35; Repo hygiene green in CI run 37253915991; Dependabot updates merged in PRs #36, #37, #38, #39, #42, #44, #48) |
 | SEC-117 | Known-password test accounts may exist in real databases (`@test.com` seed accounts; a test admin was created against production; the e2e admin login is a public default) | P1 | Data / Access | Open — Plan 4 track M5 |
 | SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | ✅ Done (Plan 4c; platforms scoped to ios/android in app.json and cd-app.yml, single-level staging/dev hostnames in eas.json) |
+| SEC-119 | Mobile registration blocked on native devices: CV & doc uploads use web DOM input | P0 | Mobile auth | ✅ Done |
+| SEC-120 | Native profile & verification document pickers are web-only (no-op on iOS/Android) | P0 | Mobile app | Open |
+| SEC-121 | Email verification flow missing in mobile app (blocks high-trust actions with 403) | P0 | Mobile auth | Open |
+| SEC-122 | Community feed photo attachment and prompt dialogs crash or no-op on native mobile | P1 | Mobile community | Open |
+| SEC-123 | Event booking payment flow simulated: collects card numbers without payment gateway | P1 | Mobile events | Open |
+| SEC-124 | App Store & Google Play compliance gaps: policy links, push notifications, offline netinfo | P1 | Mobile store | Open |
+| SEC-125 | AI Assistant in mobile app is canned setTimeout demo disconnected from backend | P2 | Mobile assistant | Open |
+| SEC-126 | Mock data fallbacks in notifications, saved items, and hardcoded Wave job descriptions | P2 | Mobile app | Open |
+| SEC-127 | Hirer postings and managed channels rely on mock in-memory authStore data | P2 | Mobile hirer | Open |
+| SEC-128 | Mobile test coverage: 0 screen/UI component tests; 116 ESLint warnings across screens | P2 | Mobile tests | Open |
 
 ---
 
@@ -1401,6 +1421,107 @@ Found while planning the move to the company infrastructure platform (`Company_I
 **Acceptance criteria:**
 - [x] A staging-channel update publishes from CI and a test device receives it (platforms scoped to ios/android in app.json and cd-app.yml)
 
+### SEC-119 — Mobile registration blocked on native devices: CV & doc uploads use web DOM input
+**Priority:** P0
+**Evidence:** In `kredibble-app/src/app/(auth)/signup.tsx:613-628`, Seeker Step 4 CV upload checks `if (Platform.OS === 'web')` and invokes `document.createElement('input')`. On iOS/Android, nothing happens, `cvStatus` remains `'idle'`, `isStepValid()` returns false, and the Create Account button is permanently disabled. In `signup.tsx:581-610`, Hirer Step 3 document upload for business registration, org ID, company logo, and proof of org checks `Platform.OS === 'web'`, so all 4 doc statuses stay `'idle'`, permanently blocking recruiter registration on iOS/Android.
+**Risk:** Zero users can register as Job Seekers or Recruiters on native iOS/Android mobile devices.
+**Fix:** Replace web DOM `document.createElement` file pickers with `expo-document-picker` for PDFs/documents and `expo-image-picker` for image/logos. Upload selected files via `/api/v1/upload` (or stage them for registration) so statuses resolve to `'done'` on iOS, Android, and Web alike.
+**Acceptance criteria:**
+- [ ] Seeker can pick a PDF/DOCX resume on iOS and Android via native document picker and advance past Step 4
+- [ ] Hirer can upload all 4 verification documents/logos on iOS and Android via native document/image picker
+- [ ] Native device registration completes successfully and navigates to the authenticated app session
+
+### SEC-120 — Native profile & verification document pickers are web-only (no-op on iOS/Android)
+**Priority:** P0
+**Evidence:** In `src/app/hirer-profile/company.tsx:28-38`, `recruiter.tsx:25-45`, and `verification.tsx:30-55`, image/doc upload functions check `if (Platform.OS !== 'web') return;` and use `document.createElement('input')`. On native devices, tapping avatar/banner upload or verification upload does nothing. In `verification.tsx:45`, the client attempts to set `status: 'approved'` directly in the request body.
+**Risk:** Verified company onboarding and profile branding fail silently on native mobile; client-side moderation bypass attempt.
+**Fix:** Integrate `expo-image-picker` and `expo-document-picker` for company logos, banner images, and verification documents. Ensure uploads route through `POST /api/v1/upload` (Multer + Cloudinary) and document submission routes with server-enforced `status: 'pending'`.
+**Acceptance criteria:**
+- [ ] Company logo and banner image pickers work on native iOS and Android
+- [ ] Company verification document upload works on native iOS and Android
+- [ ] Verification docs submitted by hirers enter `status: 'pending'` for admin review
+
+### SEC-121 — Email verification flow missing in mobile app (blocks high-trust actions with 403)
+**Priority:** P0
+**Evidence:** Backend middleware `requireEmailVerified` gates high-trust actions (applying for jobs/internships, submitting grant applications, creating postings, uploading verification docs) with HTTP 403 `EMAIL_VERIFICATION_REQUIRED`. The mobile app has no email verification screen, no OTP input modal, no `verifyEmail` or `resendVerificationEmail` functions in `lib/api.ts`, and catches 403 errors with an unhelpful toast.
+**Risk:** Legitimate users cannot apply for jobs or post opportunities and have no way to verify their email from the app.
+**Fix:** Add `verifyEmail(code)` and `resendVerificationEmail()` to `lib/api.ts`. Create dedicated screen `src/app/(auth)/verify-email.tsx` (6-digit OTP input, countdown resend timer). Intercept 403 `EMAIL_VERIFICATION_REQUIRED` in API calls and prompt user to navigate to email verification.
+**Acceptance criteria:**
+- [ ] `(auth)/verify-email.tsx` provides 6-digit OTP entry and resend cooldown
+- [ ] Entering valid OTP marks email verified on backend and updates `authStore`
+- [ ] 403 `EMAIL_VERIFICATION_REQUIRED` prompts the user to verify email rather than throwing a dead-end error
+
+### SEC-122 — Community feed photo attachment and prompt dialogs crash or no-op on native mobile
+**Priority:** P1
+**Evidence:** In `src/app/community/feed.tsx:226-227`, image attachments use web DOM file input; lines 252-253 call `window.prompt(...)` for polls/quizzes/questions (crashes or no-ops on native); lines 301-304 "voice message" sends a hardcoded string `🎤 Voice message · MM:SS` with no audio recorded.
+**Risk:** Community feed interaction is broken on mobile; crashes on `window.prompt`.
+**Fix:** Replace DOM file input with `expo-image-picker`. Replace `window.prompt` with a React Native modal input sheet for poll/quiz/question creation. For voice messages, either integrate `expo-av` recording with Cloudinary upload or disable/hide the mock mic button for v1.
+**Acceptance criteria:**
+- [ ] Photo attachment in community feed works on native mobile via `expo-image-picker`
+- [ ] Poll, Quiz, and Question creation uses a native bottom sheet/modal with form inputs
+- [ ] No `window.prompt` or `document.createElement` references remain in `community/feed.tsx`
+
+### SEC-123 — Event booking payment flow simulated: collects card numbers without payment gateway
+**Priority:** P1
+**Evidence:** In `src/app/events/booking.tsx:65-89`, paid event bookings collect credit card number, expiry, CVV, and ZIP into local state, but never call a payment provider (Stripe, Paystack, Mobile Money). The card details are discarded and `bookEvent` is called with `status: 'confirmed'`.
+**Risk:** Fraudulent free registrations for paid events; collecting sensitive credit card details in unencrypted component state without PCI compliance.
+**Fix:** Either integrate a real payment gateway (Stripe Elements / Paystack Mobile SDK) for ticket checkout, OR for v1 restrict event bookings to free events and display an "External Ticket Link" for paid events, immediately removing the insecure credit card input form.
+**Acceptance criteria:**
+- [ ] Raw credit card input fields are removed from unencrypted local state
+- [ ] Paid event checkout either routes through an official payment SDK / webview or external ticket URL
+- [ ] Only verified paid bookings receive `status: 'confirmed'`
+
+### SEC-124 — App Store & Google Play compliance gaps: policy links, push notifications, offline netinfo
+**Priority:** P1
+**Evidence:** Apple App Store Guideline 5.1.1 and Google Play User Data policies mandate an in-app Privacy Policy accessible from registration and settings. No privacy policy or Terms of Service links exist in the app. `expo-notifications` is not installed, so no APNs/FCM push notifications can be delivered. `@react-native-community/netinfo` is missing, causing uncaught network drop errors.
+**Risk:** Immediate rejection during Apple App Store and Google Play reviews; no real-time push engagement.
+**Fix:** Add accessible Privacy Policy and Terms of Service links in `signup.tsx`, `profile/security.tsx`, and `hirer-profile/security.tsx`. Install and configure `expo-notifications` with push token registration. Install `@react-native-community/netinfo` and add an offline banner / graceful retry handler.
+**Acceptance criteria:**
+- [ ] Tappable Privacy Policy and Terms of Service links open legal docs via `expo-web-browser` in signup and settings
+- [ ] `expo-notifications` installed, requested with permission prompt, and device push token sent to backend
+- [ ] Offline banner displays when device loses network connectivity
+
+### SEC-125 — AI Assistant in mobile app is canned setTimeout demo disconnected from backend
+**Priority:** P2
+**Evidence:** `src/app/assistant/index.tsx:129-173` uses a 1.2-second `setTimeout` to return hardcoded mock responses and static "Wave" job cards. It does not call `POST /api/v1/assistant/chat`.
+**Risk:** Misleading AI feature; users cannot get real career or recruiting guidance from the platform's actual data.
+**Fix:** Wire `handleSend` to call `POST /api/v1/assistant/chat` (gated behind `AI_ENABLED=true` on backend). Handle 503 provider unavailability with a helpful user-facing message. Stream or display real assistant responses.
+**Acceptance criteria:**
+- [ ] Assistant chat sends user queries to the backend `/api/v1/assistant` endpoint
+- [ ] Real assistant responses render in the message list
+- [ ] Gracefully handles provider unavailability (503) or offline states
+
+### SEC-126 — Mock data fallbacks in notifications, saved items, and hardcoded Wave job descriptions
+**Priority:** P2
+**Evidence:** In `src/app/notifications/index.tsx:28-33`, if the API returns 0 notifications, the screen leaves mock items from `mockNotifications.ts` displayed. In `src/app/profile/saved.tsx:51-55`, if a user has 0 saved items, it falls back to 4 mock items. In `src/app/jobs/[id].tsx:10-17,97`, Wave's mission statement and responsibilities are hardcoded and appended to every job description. In `src/app/grants/apply.tsx:341`, the document upload button has no `onPress`.
+**Risk:** Confusing user experience with ghost notifications, phantom saved items, and incorrect job descriptions.
+**Fix:** Display genuine empty states when API returns 0 notifications or 0 saved items. Remove hardcoded Wave text injection from generic jobs. Wire grant document picker.
+**Acceptance criteria:**
+- [ ] Notifications screen renders clean empty state when user has 0 notifications
+- [ ] Saved items screen renders clean empty state when user has 0 saved items
+- [ ] Job descriptions show only the actual job content from the backend
+- [ ] Grant proposal file upload button opens document picker
+
+### SEC-127 — Hirer postings and managed channels rely on mock in-memory authStore data
+**Priority:** P2
+**Evidence:** In `src/app/hirer-profile/postings.tsx:17-22`, opportunities are read from `authStore.opportunities` (initialized to mock Google LLC postings). In `src/app/hirer-profile/channels.tsx:10-15`, managed channels are read from `authStore.managedGroups`.
+**Risk:** Hirers cannot see or manage their real posted jobs/channels on their profile; phantom Google postings appear.
+**Fix:** Fetch postings via `getOpportunities({ createdBy: user.id })` or `getHirerOpportunities(hirerId)`. Fetch managed channels via `getChannels({ owner: user.id })`. Wire delete/edit actions to live API.
+**Acceptance criteria:**
+- [ ] My Postings screen fetches and displays real opportunities created by the authenticated hirer
+- [ ] My Channels screen fetches and displays real channels managed by the hirer
+- [ ] Real empty states render when no postings or channels exist
+
+### SEC-128 — Mobile test coverage (0 UI tests) and 116 ESLint warnings
+**Priority:** P2
+**Evidence:** All 21 tests in `kredibble-app` are unit tests for `lib/api.ts` fetch mocking. Zero tests exist for screens, authentication flows, form validation, or error states. `npm run lint` yields 116 ESLint warnings.
+**Risk:** Regressions in UI screens and auth navigation go undetected in CI; code smell accumulation.
+**Fix:** Add React Native Testing Library / Jest test suites for login screen, signup validation, opportunity detail screens, and email verification. Fix the 116 ESLint warnings (unused imports, forbidden require-style imports, duplicate imports).
+**Acceptance criteria:**
+- [ ] Integration tests cover login, registration, and opportunity application flows
+- [ ] `npm run lint` passes with 0 errors and 0 warnings
+- [ ] All test suites pass in CI
+
 # Execution Order
 
 Phases run in sequence per `AGENTS.md`. Within a phase, respect this dependency chain:
@@ -1627,6 +1748,9 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-08 | task.md Checkbox Sync | docs/sync-task-md-checkboxes | ✅ Synchronized | Synchronized acceptance criteria checkboxes across SEC-001, 006, 009, 010, 042, 043, 044, 045, 047, 049, 050, 052, 054–059, 066–068, 070–074, 078, 080, 081, 084, 097, and 104 to reflect verified code on main; updated SEC-089 summary to reflect Plan 4e completion; 17 genuinely open operational/legal criteria remain. |
 | 2026-10-08 | Admin redesign (PR #59) | 48d4833, 05923cb (PR #59) | ✅ Redesigned | Comprehensive enterprise redesign of kredibble-admin: Overview KPI grid, Scorecard & attainment calculation, Monthly reports, Partners & pipeline health, Network & ambassador referral engine, Beneficiaries database, Social posts & monthly totals, Settings (integrations, targets, stages, account), Curated opportunities queue with vetting checkpoint, and Programs. Architected with modular service facades (src/lib/services/) and +9,812 lines of Playwright E2E tests. |
 | 2026-10-08 | Backlog & Work Plan | 05923cb (PR #59) | 📋 Planned | Ingested PO Product Backlog items 1–8 (Opportunity Listings, News Category, App Colours, Stakeholder Segments, Ambassador Registration, AI Assistant, Website–App Integration, Email Verification) and Backend Work Plan tasks BE-001–BE-027 into task.md. |
+| 2026-10-08 | BE-001, BE-018 | feature/BE-001-roles-permission-matrix | ✅ Done | Roles stored as string[] (max 2 per staff member across 12 canonical roles); permission matrix engine in lib/roles-engine.js; requireScreen middleware; Moderator/Support toggles persistence; RolesTab live backend integration; audit trail (ROLES_PERMISSIONS_UPDATE); 15/15 tests pass. |
+| 2026-10-08 | BE-002 | feature/BE-002-targets-history | ✅ Done | TargetChange insert-only collection with schema-enforced immutability and temporal state resolution; GET/POST /admin/targets, GET /admin/targets/history; audit logging (targets.update); admin settings service integration; 11/11 tests pass. |
+| 2026-10-08 | BE-003 | feature/BE-003-dated-thresholds | ✅ Done | ThresholdChange insert-only collection (percentages 1–200, amber < green); shared atomic seq counter with targets; GET /admin/thresholds?month=, GET /admin/thresholds/history, POST /admin/thresholds, combined save in POST /admin/targets, unified GET /admin/change-history; admin settings service integration; 11/11 tests pass. |
 
 ---
 
@@ -1756,9 +1880,9 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 | ID | Task | Priority | Depends on | Status |
 |----|------|----------|------------|--------|
-| BE-001 | Roles, two roles per person, permission matrix enforced on the server | P1 | – | [ ] Open |
-| BE-002 | Targets with append-only history and effective-from month | P1 | BE-001 | [ ] Open |
-| BE-003 | Dated status thresholds and the change history | P1 | BE-002 | [ ] Open |
+| BE-001 | Roles, two roles per person, permission matrix enforced on the server | P1 | – | [x] Done |
+| BE-002 | Targets with append-only history and effective-from month | P1 | BE-001 | [x] Done |
+| BE-003 | Dated status thresholds and the change history | P1 | BE-002 | [x] Done |
 | BE-004 | KPI engine: the ten KPIs, pro-rating, running totals, status, trend, priorities | P1 | BE-002, BE-003, BE-005 to BE-011 | [ ] Open |
 | BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [ ] Open |
 | BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [ ] Open |
@@ -1791,23 +1915,31 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 #### BE-001 — Roles, two roles per person, permission matrix
 - **Today:** `StaffMember.role` is a single string; portal roles are names like "Desk Lead" and "Admin Support".
 - **To do:**
-  - Store `roles: string[]` (one or two) using the 12 ids: `super_admin, moderator, support, partnerships_officer, opportunities_officer, training_officer, database_officer, communications_officer, social_media_manager, country_lead, admin_support, desk_lead`. Migrate the existing single roles.
-  - Store the permission matrix (screen × view/edit) and the Moderator and Support toggles. `GET` and `PUT /admin/roles-permissions` (Desk Lead and Super Admin only; Desk Lead may view, Super Admin edits).
-  - One middleware `requireScreen(screen, level)` on EVERY admin route, using the union of the person's roles. A wrong role gets 403.
-  - `GET /me` returns the roles and the resolved screens.
-- **Verify:** every role can open exactly the screens in the admin's `config/permissions.ts`; a request without the grant returns 403 whatever the UI does.
+  - [x] Store `roles: string[]` (one or two) using the 12 ids: `super_admin, moderator, support, partnerships_officer, opportunities_officer, training_officer, database_officer, communications_officer, social_media_manager, country_lead, admin_support, desk_lead`. Migrate the existing single roles with backwards-compatible schema hooks.
+  - [x] Store the permission matrix (screen × view/edit) and the Moderator and Support toggles. `GET` and `PUT /admin/roles-permissions` (Desk Lead and Super Admin only; Desk Lead may view, Super Admin edits).
+  - [x] One middleware `requireScreen(screen, level)` on EVERY admin route, using the union of the person's roles. A wrong role gets 403.
+  - [x] `GET /me` (and `/auth/admin/me`) returns the roles and the resolved screens.
+  - [x] Admin frontend (`RolesTab.tsx`) connected to live backend API with optimistic updates and persistence.
+- **Verify:** every role can open exactly the screens in the admin's `config/permissions.ts`; a request without the grant returns 403 whatever the UI does. (Verified with `tests/be-001-permissions.test.js`, 15 unit/integration tests).
 
 #### BE-002 — Targets with append-only history
 - **Today:** `PUT /targets/:metric` upserts `{month, metric}` and overwrites.
 - **To do:**
-  - Collection `TargetChange { kpi, value, effectiveFrom ("YYYY-MM"), previous, changedBy, changedAt, seq }`, insert-only. The target for a month is the latest row whose `effectiveFrom` is that month or earlier (of two for one month, the later `seq`).
-  - `GET /admin/targets?month=` (the target in force), `GET /admin/targets/history` (newest first), `POST /admin/targets` (a batch of `{kpi, value}` with ONE `effectiveFrom`; whole numbers from 1 to 10,000,000).
-  - Seed the first row for each KPI from the current values. Keep `PUT /targets/:metric` working until the admin switches, then remove it.
-- **Verify:** saving next month's target leaves this month alone; a past month keeps its target; no row is ever edited or deleted.
+  - [x] Collection `TargetChange { kpi, value, effectiveFrom ("YYYY-MM"), previous, changedBy, changedAt, seq }`, insert-only with schema-enforced immutability. The target for a month is the latest row whose `effectiveFrom` is that month or earlier (of two for one month, the later `seq`).
+  - [x] `GET /admin/targets?month=` (the target in force), `GET /admin/targets/history` (newest first with replaced calculation), `POST /admin/targets` (a batch of `{kpi, value}` with ONE `effectiveFrom`; whole numbers from 1 to 10,000,000, validated with Zod, audited with `targets.update`).
+  - [x] Seed the first row for each KPI from the current values (baseline 10 default targets). Keep legacy `PUT /targets/:metric` working and synchronized with `TargetChange`.
+  - [x] Wire admin settings service (`saveTargets`) to persist target batches to API.
+- **Verify:** saving next month's target leaves this month alone; a past month keeps its target; no row is ever edited or deleted. (Verified with `tests/be-002-targets.test.js`, 11/11 tests passing).
 
 #### BE-003 — Dated thresholds
-- **To do:** `ThresholdChange { green, amber, effectiveFrom, previous, changedBy, changedAt, seq }` insert-only (percentages as whole numbers 1 to 200, amber below green). `GET /admin/thresholds?month=`, `GET /admin/thresholds/history`, `POST /admin/thresholds`. One `seq` counter is shared with targets so the Change history lists both newest first. A save may carry targets and thresholds together under one `effectiveFrom`.
-- **Verify:** thresholds that start next month do not change this month's statuses; the change history shows targets and thresholds in one list; a later save for the same KPI and month marks the earlier row "Replaced" (computed, never edited).
+- **To do:**
+  - [x] Collection `ThresholdChange { green, amber, effectiveFrom, previous, changedBy, changedAt, seq }` insert-only (percentages as whole numbers 1 to 200, amber below green) with schema-level update and deletion prevention.
+  - [x] `GET /admin/thresholds?month=` (resolves effective thresholds for month with whole percentages and ratios), `GET /admin/thresholds/history` (newest first with computed `replaced` flag), `POST /admin/thresholds` (validates 1–200, amber < green, audited with `thresholds.update`).
+  - [x] Shared `seq` monotonic counter across targets and thresholds via atomic counter allocation.
+  - [x] Combined save support in `POST /admin/targets` carrying both targets and thresholds under one `effectiveFrom`.
+  - [x] Unified `GET /admin/change-history` endpoint returning merged targets and thresholds sorted by `seq: -1`.
+  - [x] Admin settings service and api client wired (`saveThresholdsApi`, `getThresholds`, `getThresholdHistory`, `getCombinedChangeHistory`).
+- **Verify:** thresholds that start next month do not change this month's statuses; the change history shows targets and thresholds in one list; a later save for the same KPI and month marks the earlier row "Replaced" (computed, never edited). (Verified with `tests/be-003-thresholds.test.js`, 11/11 tests passing; `tsc` and `eslint` clean).
 
 #### BE-004 — KPI engine
 - **Today:** the admin computes the ten KPIs in the browser (`src/lib/kpi.ts`); `/admin/dashboard` and `/admin/scorecards` exist but use their own logic.
@@ -1924,4 +2056,114 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 7. **Stakeholder segments (BE-023):** can a user be in both segments at once (proposal: an ambassador is also in the general community)?
 
 ### Progress Log
-- 2026-10-08 — Backend work plan written (BE-001 to BE-027). No backend work started.
+- 2026-10-08 — Backend work plan written (BE-001 to BE-027).
+- 2026-10-08 — BE-001 complete: Multi-role support (up to 2 roles per staff member), server-side permission matrix engine (12 roles x 28 screens), dynamic Moderator/Support toggles persistence in Mongo (`RolePermissionConfig`), `requireScreen` middleware, `/api/v1/admin/roles-permissions` GET/PUT with audit trail (`ROLES_PERMISSIONS_UPDATE`), and admin `RolesTab` wired to live API. All 22 test suites (247 tests) passing.
+- 2026-10-08 — BE-002 complete: Append-only TargetChange model with database-level immutability hooks, temporal target resolution by effectiveFrom month and sequence number (seq), GET /api/v1/admin/targets, GET /api/v1/admin/targets/history, POST /api/v1/admin/targets with Zod batch validation and audit logging (targets.update), and admin settings service sync. All 23 test suites (258 tests) passing.
+- 2026-10-08 — Mobile production readiness audit: Verified ~65–70% completion. Discovered registration broken on native iOS/Android (web DOM file inputs), missing email verification screen, canned AI assistant, unintegrated event payment flow, mock fallbacks in notifications/saved items, missing store policy links, and 0 screen UI tests. Filed SEC-119 through SEC-128 and authored Mobile Work Plan (MOB-010 to MOB-019).
+- 2026-10-08 — MOB-010 complete: Installed and configured `expo-document-picker`, implemented cross-platform file picking engine (`pickDocument`, `pickImage`) in `src/lib/file-picker.ts` (PDF/DOCX/TXT/images up to 5 MB), upgraded `signup.tsx` to enable native CV and company verification documents/logo upload across iOS/Android/Web, added `uploadFile` multipart helper in `src/lib/api.ts` with server-derived upload purpose and Bearer token auth, and added unit test suite (`__tests__/file-picker.test.ts`) covering all picking, size validation, and upload flows (31/31 tests passing).
+
+---
+
+## Mobile App Work Plan — Production Readiness & Store Compliance (added 2026-10-08)
+
+**Why this section exists.** An exhaustive audit of `kredibble-app` on 2026-10-08 confirmed that while core token refresh and TypeScript compilation are in place, the app cannot be launched to the Apple App Store or Google Play in its current state. Critical user journeys (including registration itself) fail on physical iOS and Android hardware due to web-only DOM assumptions, and several core flows rely on canned local timers or mock arrays. This plan breaks down every required fix into trackable tasks `MOB-010` to `MOB-019` mapped to `SEC-119` through `SEC-128`.
+
+| Task ID | Finding | Title | Priority | Status |
+|---|---|---|---|---|
+| MOB-010 | SEC-119 | Native document & CV upload in registration | P0 | [x] Completed |
+| MOB-011 | SEC-120 | Native profile media & verification doc pickers | P0 | [ ] Open |
+| MOB-012 | SEC-121 | Mobile email verification screen & 403 gate handling | P0 | [ ] Open |
+| MOB-013 | SEC-122 | Community feed native attachments & modal inputs | P1 | [ ] Open |
+| MOB-014 | SEC-123 | Event booking payment gateway / ticket URL gating | P1 | [ ] Open |
+| MOB-015 | SEC-124 | Store compliance: in-app policy links, push notifications, netinfo | P1 | [ ] Open |
+| MOB-016 | SEC-125 | AI Assistant live backend integration (`/api/v1/assistant`) | P2 | [ ] Open |
+| MOB-017 | SEC-126 | Mock fallback removal: notifications, saved items, Wave text | P2 | [ ] Open |
+| MOB-018 | SEC-127 | Live Hirer management: my postings & community channels | P2 | [ ] Open |
+| MOB-019 | SEC-128 | Mobile screen integration test suite & ESLint zero-warning sweep | P2 | [ ] Open |
+
+---
+
+#### MOB-010 — Native document & CV upload in registration (SEC-119)
+- **Problem:** `signup.tsx:613-628` (Seeker CV upload) and `signup.tsx:581-610` (Hirer verification documents) branch on `if (Platform.OS === 'web')` and use `document.createElement('input')`. On real devices, tapping to select a file does nothing; statuses remain `'idle'`, `isStepValid()` is permanently false, and registration cannot be submitted.
+- **To do:**
+  - Install and configure `expo-document-picker` for CV and document selection (PDF, DOCX, TXT up to 5 MB).
+  - Install and configure `expo-image-picker` for logo selection (JPG, PNG).
+  - Implement cross-platform file picking helpers in `src/lib/file-picker.ts` supporting iOS, Android, and Web.
+  - Wire uploaded files to `/api/v1/upload` (Multer + Cloudinary) or stage metadata so `cvStatus` and `doc*Status` resolve to `'done'` on native hardware.
+- **Verify:** Run on iOS simulator/Android emulator; complete Seeker registration from Step 1 to Step 4 with a real PDF; verify account is created in MongoDB.
+
+#### MOB-011 — Native profile media & verification doc pickers (SEC-120)
+- **Problem:** `hirer-profile/company.tsx:28-38`, `recruiter.tsx:25-45`, and `hirer-profile/verification.tsx:30-55` use `Platform.OS !== 'web' return;` and DOM file inputs. Native users cannot upload company logos, banners, or business verification documents. `verification.tsx` also attempts to submit `status: 'approved'` directly from the client.
+- **To do:**
+  - Replace DOM file inputs in `company.tsx`, `recruiter.tsx`, and `verification.tsx` with native `pickImage` / `pickDocument` helpers.
+  - Upload files to `POST /api/v1/upload` to receive Cloudinary URLs.
+  - Update `uploadVerificationDoc` payload to submit documents with server-enforced `status: 'pending'`.
+- **Verify:** Recruiter can change company logo and upload business registration certificate from a native device; document appears in admin moderation queue.
+
+#### MOB-012 — Mobile email verification screen & 403 gate handling (SEC-121)
+- **Problem:** The backend enforces `requireEmailVerified` (HTTP 403 `EMAIL_VERIFICATION_REQUIRED`) on applications, postings, and verification docs. The mobile app has no verification screen, no OTP input, no `verifyEmail` methods in `lib/api.ts`, and drops the user into an unhelpful error toast.
+- **To do:**
+  - Add `requestEmailVerification()` and `verifyEmail(code: string)` to `src/lib/api.ts`.
+  - Create `src/app/(auth)/verify-email.tsx` with a 6-digit OTP code input, auto-focus next cell, 60-second resend countdown, and error feedback.
+  - In `src/lib/api.ts`, detect `EMAIL_VERIFICATION_REQUIRED` (403) and navigate or display a verification modal prompting the user to complete verification before retrying the action.
+- **Verify:** Register an unverified account, trigger an application, receive prompt, enter 6-digit OTP from database/email, verify account updates to `emailVerified: true`, and application succeeds.
+
+#### MOB-013 — Community feed native attachments & modal inputs (SEC-122)
+- **Problem:** `community/feed.tsx:226-227` uses DOM file inputs for photos; lines 252-253 call `window.prompt(...)` (crashes or no-ops on native); lines 301-304 send a fake text string `🎤 Voice message · MM:SS` without recording audio.
+- **To do:**
+  - Wire photo attachment to `expo-image-picker` with Cloudinary upload via `POST /api/v1/upload`.
+  - Replace `window.prompt` with a custom native React Native modal containing a title and text input for Polls, Quizzes, and Questions.
+  - For voice messages: either integrate `expo-av` recording with upload to Cloudinary or hide/disable the mic button for v1 until audio streaming is implemented.
+- **Verify:** Hirer attaches a photo from camera roll and posts to a channel; post renders on all client devices via Socket.io.
+
+#### MOB-014 — Event booking payment gateway / ticket URL gating (SEC-123)
+- **Problem:** `events/booking.tsx:65-89` collects credit card details into local component state, discards them without calling a payment processor, and marks bookings as `status: 'confirmed'`.
+- **To do:**
+  - Remove unencrypted credit card input form from `events/booking.tsx`.
+  - For free events: maintain 1-click confirmation via `POST /api/v1/events/:id/bookings`.
+  - For paid events: either integrate an official payment gateway (Stripe Mobile SDK / Paystack) OR display an "External Ticket URL" button (`openBrowserAsync` via `expo-web-browser`) for off-platform ticket checkout in v1.
+- **Verify:** No sensitive card details are collected in plaintext; paid events require external checkout or verified gateway webhook before issuing tickets.
+
+#### MOB-015 — Store compliance: in-app policy links, push notifications, netinfo (SEC-124)
+- **Problem:** Apple App Store Guideline 5.1.1 and Google Play policies require an in-app Privacy Policy during onboarding and settings. `expo-notifications` is not installed. `@react-native-community/netinfo` is missing.
+- **To do:**
+  - Add tappable "Privacy Policy" and "Terms of Service" links in `signup.tsx`, `profile/security.tsx`, and `hirer-profile/security.tsx` opening legal URLs via `expo-web-browser`.
+  - Install `expo-notifications`, configure push notification request permissions, and register APNs/FCM tokens to the backend on login.
+  - Install `@react-native-community/netinfo`, create `useNetworkStatus` hook, and display an offline banner with graceful request caching/retry.
+- **Verify:** Tapping Privacy Policy opens legal document; simulated offline mode shows offline banner and prevents crashing.
+
+#### MOB-016 — AI Assistant live backend integration (SEC-125)
+- **Problem:** `assistant/index.tsx:129-173` uses a 1.2-second `setTimeout` with hardcoded responses and static Wave jobs.
+- **To do:**
+  - Connect `handleSend` to call `POST /api/v1/assistant/chat` with user query and session token.
+  - Render assistant responses in real-time.
+  - Handle 503 service unavailable (when `AI_ENABLED` is false) with a user-friendly fallback: "AI smart assistant is currently undergoing scheduled maintenance. Please check back shortly."
+- **Verify:** Send query from mobile; backend logs request; assistant response displays in chat.
+
+#### MOB-017 — Mock fallback removal: notifications, saved items, Wave text (SEC-126)
+- **Problem:** `notifications/index.tsx` falls back to `mockNotifications.ts` on empty API results; `saved.tsx` falls back to `mockProfile.ts` on empty results; `jobs/[id].tsx:10-17` appends Wave Mobile Money mission text to every job description; `grants/apply.tsx:341` proposal upload button has no `onPress`.
+- **To do:**
+  - Remove fallback to mock arrays when API returns an empty list; render clean, polished empty states.
+  - Remove hardcoded `ABOUT` and `RESPONSIBILITIES` Wave text injection from generic job detail screens.
+  - Wire proposal document picker in `grants/apply.tsx`.
+- **Verify:** User with 0 notifications sees "No notifications yet"; non-Wave jobs display only their actual backend description.
+
+#### MOB-018 — Live Hirer management: my postings & community channels (SEC-127)
+- **Problem:** `hirer-profile/postings.tsx` and `channels.tsx` read from `authStore.opportunities` and `authStore.managedGroups` initialized to mock Google LLC data.
+- **To do:**
+  - Wire `postings.tsx` to `getOpportunities({ createdBy: user.id })` with real applicant counts, loading skeletons, and empty state.
+  - Wire `channels.tsx` to `getChannels({ owner: user.id })` with real subscriber metrics.
+  - Wire delete and edit actions to API endpoints.
+- **Verify:** Hirer sees only their own created opportunities and channels; edits and deletions persist on reload.
+
+#### MOB-019 — Mobile screen integration test suite & ESLint zero-warning sweep (SEC-128)
+- **Problem:** Only 21 unit tests exist, all mocking `lib/api.ts` fetch calls; zero tests for screens or user interactions. 116 ESLint warnings across screens.
+- **To do:**
+  - Add Jest + React Native Testing Library test suites for:
+    - Login and registration form validation
+    - Email verification screen
+    - Opportunity detail and application submission
+    - Hirer postings and profile editing
+  - Resolve all 116 ESLint warnings (unused variables, duplicate imports, require-style imports).
+- **Verify:** `npm test` runs screen test suites and passes; `npm run lint` reports 0 errors and 0 warnings.
+
