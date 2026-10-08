@@ -804,6 +804,53 @@ export const saveTargetsApi = async (effectiveFrom: string, targets: { kpi: stri
   });
 };
 
+// BE-003: Thresholds & Change History API
+export interface ThresholdApiItem {
+  green: number;
+  amber: number;
+  greenRatio: number;
+  amberRatio: number;
+  effectiveFrom: string;
+  seq: number;
+}
+
+export interface ThresholdHistoryApiItem {
+  id: string;
+  green: number;
+  amber: number;
+  effectiveFrom: string;
+  previous: { green: number; amber: number } | null;
+  changedBy?: string;
+  changedByName?: string;
+  changedAt: string;
+  seq: number;
+  replaced: boolean;
+}
+
+export type ChangeHistoryItem =
+  | (TargetHistoryApiItem & { type: "target" })
+  | (ThresholdHistoryApiItem & { type: "threshold" });
+
+export const getThresholds = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<ThresholdApiItem>(`/admin/thresholds${query}`);
+};
+
+export const getThresholdHistory = async () => {
+  return request<ThresholdHistoryApiItem[]>("/admin/thresholds/history");
+};
+
+export const saveThresholdsApi = async (green: number, amber: number, effectiveFrom: string) => {
+  return request<ThresholdApiItem>("/admin/thresholds", {
+    method: "POST",
+    body: JSON.stringify({ green, amber, effectiveFrom }),
+  });
+};
+
+export const getCombinedChangeHistory = async () => {
+  return request<ChangeHistoryItem[]>("/admin/change-history");
+};
+
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with
 // `npm run user:create-admin -- --email ... --name ...` in kredibble-backend.

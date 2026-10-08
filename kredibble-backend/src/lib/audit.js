@@ -25,6 +25,7 @@ export const AUDIT_ACTIONS = {
   ADMIN_OPPORTUNITY_MODERATE: 'admin.opportunity.moderate',
   ROLES_PERMISSIONS_UPDATE: 'ROLES_PERMISSIONS_UPDATE',
   TARGETS_UPDATE: 'targets.update',
+  THRESHOLDS_UPDATE: 'thresholds.update',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',
