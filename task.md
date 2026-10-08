@@ -287,7 +287,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-117 | Known-password test accounts may exist in real databases (`@test.com` seed accounts; a test admin was created against production; the e2e admin login is a public default) | P1 | Data / Access | Open — Plan 4 track M5 |
 | SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | ✅ Done (Plan 4c; platforms scoped to ios/android in app.json and cd-app.yml, single-level staging/dev hostnames in eas.json) |
 | SEC-119 | Mobile registration blocked on native devices: CV & doc uploads use web DOM input | P0 | Mobile auth | ✅ Done |
-| SEC-120 | Native profile & verification document pickers are web-only (no-op on iOS/Android) | P0 | Mobile app | Open |
+| SEC-120 | Native profile & verification document pickers are web-only (no-op on iOS/Android) | P0 | Mobile app | ✅ Done |
 | SEC-121 | Email verification flow missing in mobile app (blocks high-trust actions with 403) | P0 | Mobile auth | Open |
 | SEC-122 | Community feed photo attachment and prompt dialogs crash or no-op on native mobile | P1 | Mobile community | Open |
 | SEC-123 | Event booking payment flow simulated: collects card numbers without payment gateway | P1 | Mobile events | Open |
@@ -2061,6 +2061,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - 2026-10-08 — BE-002 complete: Append-only TargetChange model with database-level immutability hooks, temporal target resolution by effectiveFrom month and sequence number (seq), GET /api/v1/admin/targets, GET /api/v1/admin/targets/history, POST /api/v1/admin/targets with Zod batch validation and audit logging (targets.update), and admin settings service sync. All 23 test suites (258 tests) passing.
 - 2026-10-08 — Mobile production readiness audit: Verified ~65–70% completion. Discovered registration broken on native iOS/Android (web DOM file inputs), missing email verification screen, canned AI assistant, unintegrated event payment flow, mock fallbacks in notifications/saved items, missing store policy links, and 0 screen UI tests. Filed SEC-119 through SEC-128 and authored Mobile Work Plan (MOB-010 to MOB-019).
 - 2026-10-08 — MOB-010 complete: Installed and configured `expo-document-picker`, implemented cross-platform file picking engine (`pickDocument`, `pickImage`) in `src/lib/file-picker.ts` (PDF/DOCX/TXT/images up to 5 MB), upgraded `signup.tsx` to enable native CV and company verification documents/logo upload across iOS/Android/Web, added `uploadFile` multipart helper in `src/lib/api.ts` with server-derived upload purpose and Bearer token auth, and added unit test suite (`__tests__/file-picker.test.ts`) covering all picking, size validation, and upload flows (31/31 tests passing).
+- 2026-10-08 — MOB-011 complete: Replaced web DOM file inputs in `hirer-profile/company.tsx`, `recruiter.tsx`, and `verification.tsx` with native `pickImage` and `pickDocument` helpers with Cloudinary upload via `uploadFile`, enforced server-scoped `status: 'pending'` for verification documents, cleaned up require imports across profile screens (lowering ESLint warnings to 111 with 0 errors), and confirmed all 31 tests passing.
 
 ---
 
@@ -2071,7 +2072,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | Task ID | Finding | Title | Priority | Status |
 |---|---|---|---|---|
 | MOB-010 | SEC-119 | Native document & CV upload in registration | P0 | [x] Completed |
-| MOB-011 | SEC-120 | Native profile media & verification doc pickers | P0 | [ ] Open |
+| MOB-011 | SEC-120 | Native profile media & verification doc pickers | P0 | [x] Completed |
 | MOB-012 | SEC-121 | Mobile email verification screen & 403 gate handling | P0 | [ ] Open |
 | MOB-013 | SEC-122 | Community feed native attachments & modal inputs | P1 | [ ] Open |
 | MOB-014 | SEC-123 | Event booking payment gateway / ticket URL gating | P1 | [ ] Open |

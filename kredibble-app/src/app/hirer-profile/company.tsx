@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Image, ScrollView, StyleSheet, TextInput, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Image, ScrollView, StyleSheet, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Camera } from 'lucide-react-native';
 import { authStore } from '../../constants/authStore';
+import { pickImage } from '../../lib/file-picker';
+import { updateHirerProfile, uploadFile } from '../../lib/api';
 
 export default function CompanyProfileScreen() {
   const router = useRouter();
@@ -19,22 +21,50 @@ export default function CompanyProfileScreen() {
   const [description, setDescription] = useState(company?.description || '');
   const [logo, setLogo] = useState(company?.logo || '');
   const [bannerImage, setBannerImage] = useState(company?.bannerImage || '');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
   useEffect(() => {
     const unsubscribe = authStore.subscribe(() => setCompany(authStore.company ? { ...authStore.company } : null));
     return unsubscribe;
   }, []);
 
-  const pickImage = (onPicked: (url: string) => void) => {
-    if (Platform.OS !== 'web') return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    (input as any).onchange = (e: any) => {
-      const file = e.target?.files?.[0];
-      if (file) onPicked(URL.createObjectURL(file));
-    };
-    input.click();
+  const handlePickBanner = async () => {
+    try {
+      const file = await pickImage({ allowsEditing: true, aspect: [16, 9] });
+      if (!file) return;
+      setBannerImage(file.uri);
+      setIsUploadingBanner(true);
+      try {
+        const uploaded = await uploadFile(file, 'company-logos');
+        if (uploaded?.url) setBannerImage(uploaded.url);
+      } catch (err) {
+        console.warn('Upload to server failed, keeping local uri:', err);
+      } finally {
+        setIsUploadingBanner(false);
+      }
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to select banner image');
+    }
+  };
+
+  const handlePickLogo = async () => {
+    try {
+      const file = await pickImage({ allowsEditing: true, aspect: [1, 1] });
+      if (!file) return;
+      setLogo(file.uri);
+      setIsUploadingLogo(true);
+      try {
+        const uploaded = await uploadFile(file, 'company-logos');
+        if (uploaded?.url) setLogo(uploaded.url);
+      } catch (err) {
+        console.warn('Upload to server failed, keeping local uri:', err);
+      } finally {
+        setIsUploadingLogo(false);
+      }
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to select company logo');
+    }
   };
 
   const isValid = name.trim() && tagline.trim() && industry.trim() && location.trim();
@@ -47,7 +77,6 @@ export default function CompanyProfileScreen() {
     };
 
     try {
-      const { updateHirerProfile } = require('../../lib/api');
       const hirerId = (authStore as any).user?.hirer?.id;
       if (hirerId) {
         await updateHirerProfile(hirerId, {
@@ -59,7 +88,7 @@ export default function CompanyProfileScreen() {
       authStore.updateCompany(companyData);
       router.back();
     } catch (err) {
-      alert('Failed to save company profile');
+      Alert.alert('Error', 'Failed to save company profile');
       console.error(err);
     }
   };
@@ -77,18 +106,26 @@ export default function CompanyProfileScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Banner + Logo */}
         <View style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: '#FFFFFF', marginBottom: 24, borderWidth: 1, borderColor: '#E5E6F2' }}>
-          <TouchableOpacity activeOpacity={0.85} onPress={() => pickImage(setBannerImage)}>
-            <Image source={{ uri: bannerImage }} style={{ height: 100, width: '100%' }} />
+          <TouchableOpacity activeOpacity={0.85} onPress={handlePickBanner}>
+            <Image source={{ uri: bannerImage || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800' }} style={{ height: 100, width: '100%' }} />
             <View style={styles.imageEditBadge}>
-              <Camera size={14} color="#FFFFFF" />
+              {isUploadingBanner ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Camera size={14} color="#FFFFFF" />
+              )}
             </View>
           </TouchableOpacity>
 
           <View style={{ padding: 16, alignItems: 'center', marginTop: -40 }}>
-            <TouchableOpacity activeOpacity={0.85} onPress={() => pickImage(setLogo)}>
-              <Image source={{ uri: logo }} style={{ width: 80, height: 80, borderRadius: 20, borderWidth: 3, borderColor: '#FFFFFF', backgroundColor: '#FFFFFF' }} />
+            <TouchableOpacity activeOpacity={0.85} onPress={handlePickLogo}>
+              <Image source={{ uri: logo || 'https://via.placeholder.com/80' }} style={{ width: 80, height: 80, borderRadius: 20, borderWidth: 3, borderColor: '#FFFFFF', backgroundColor: '#FFFFFF' }} />
               <View style={[styles.imageEditBadge, { bottom: 0, right: 0, top: undefined, left: undefined }]}>
-                <Camera size={12} color="#FFFFFF" />
+                {isUploadingLogo ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Camera size={12} color="#FFFFFF" />
+                )}
               </View>
             </TouchableOpacity>
           </View>
