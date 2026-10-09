@@ -134,7 +134,7 @@ const ambassadorSchema = new mongoose.Schema({
 // A signed-in user's request to become an ambassador. The snapshot is built by the server from the
 // user's own records, never from the request body, so the review queue shows trustworthy details.
 const ambassadorRequestSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   role: { type: String, enum: ['seeker', 'hirer'], required: true },
   name: { type: String, required: true },
   email: { type: String, required: true, lowercase: true, trim: true },
