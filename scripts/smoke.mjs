@@ -40,7 +40,7 @@ export function matchReleaseSha(actual, expected) {
 export function getAdminOriginForEnv(env) {
   switch (env) {
     case 'staging':
-      return 'https://staging.admin.globalopportunitydesk.com';
+      return 'https://staging-admin.globalopportunitydesk.com';
     case 'development':
       return 'http://localhost:3000';
     case 'production':

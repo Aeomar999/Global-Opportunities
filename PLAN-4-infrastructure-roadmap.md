@@ -120,7 +120,7 @@ rollback any time: run the deploy workflow with an older sha
 | 4c | [Build-once promotion pipeline](PLAN-4c-build-once-promotion.md) | SEC-115, SEC-112 (rollback), SEC-118 (OTA publishing) | 4b; M1, M6, M7; D2, D9 | **Done (PR #51, main)** |
 | 4d | [Observability](PLAN-4d-observability.md) | SEC-090, SEC-095 | 4a (Sentry can start right away); 4b for logs; M8 | **Done (PR #54, main)** |
 | 4e | [Backups and disaster recovery](PLAN-4e-backups-dr.md) | SEC-089 (backups, restore drill) | 4b; M5, M9; D7, D8 | **Done (PR #56, main)** |
-| 4f | Cutover from Render, domain and decommission | SEC-111 (re-point), SEC-091, SEC-094, SEC-117 | 4b–4e; M10, M11 | Not written |
+| 4f | [Cutover from Render, domain and decommission](PLAN-4f-cutover-decommission.md) | SEC-111 (re-point), SEC-091, SEC-094, SEC-117 | 4b–4e; M10, M11 | 🟡 **Written / Ready for Execution** |
 | 4g | Ownership, access and the reusable app standard | SEC-114 | track M; written alongside 4b, finished after 4f | Not written |
 
 Plans 4d and 4g can run in parallel with 4b/4c. Plan 4f must come last: monitoring and backups exist **before** production moves.

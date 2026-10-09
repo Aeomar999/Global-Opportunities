@@ -15,7 +15,7 @@ test('matchReleaseSha: matches identical, short, and prefix SHAs', () => {
 });
 
 test('getAdminOriginForEnv: resolves origins per environment', () => {
-  assert.equal(getAdminOriginForEnv('staging'), 'https://staging.admin.globalopportunitydesk.com');
+  assert.equal(getAdminOriginForEnv('staging'), 'https://staging-admin.globalopportunitydesk.com');
   assert.equal(getAdminOriginForEnv('development'), 'http://localhost:3000');
   assert.equal(getAdminOriginForEnv('production'), 'https://admin.globalopportunitydesk.com');
   assert.equal(getAdminOriginForEnv(undefined), 'https://admin.globalopportunitydesk.com');
@@ -55,7 +55,7 @@ test('runSmokeTest: succeeds when all endpoints pass', async () => {
         status: 204,
         statusText: 'No Content',
         headers: new Headers({
-          'access-control-allow-origin': 'https://staging.admin.globalopportunitydesk.com',
+          'access-control-allow-origin': 'https://staging-admin.globalopportunitydesk.com',
           'access-control-allow-methods': 'GET,POST,PUT,DELETE,PATCH,OPTIONS',
         }),
       };
