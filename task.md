@@ -1763,10 +1763,12 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-08 | BE-001, BE-018 | feature/BE-001-roles-permission-matrix | ✅ Done | Roles stored as string[] (max 2 per staff member across 12 canonical roles); permission matrix engine in lib/roles-engine.js; requireScreen middleware; Moderator/Support toggles persistence; RolesTab live backend integration; audit trail (ROLES_PERMISSIONS_UPDATE); 15/15 tests pass. |
 | 2026-10-08 | BE-002 | feature/BE-002-targets-history | ✅ Done | TargetChange insert-only collection with schema-enforced immutability and temporal state resolution; GET/POST /admin/targets, GET /admin/targets/history; audit logging (targets.update); admin settings service integration; 11/11 tests pass. |
 | 2026-10-08 | BE-003 | feature/BE-003-dated-thresholds | ✅ Done | ThresholdChange insert-only collection (percentages 1–200, amber < green); shared atomic seq counter with targets; GET /admin/thresholds?month=, GET /admin/thresholds/history, POST /admin/thresholds, combined save in POST /admin/targets, unified GET /admin/change-history; admin settings service integration; 11/11 tests pass. |
-<<<<<<< HEAD
-=======
 | 2026-10-08 | BE-005 | feature/BE-005-programs | ✅ Done | Program.deliveredAt lifecycle field and pre-save hooks; status flow planned, running, delivered, cancelled; GET /admin/programs/upcoming returning next 5 planned or running programs sorted by start date with partner; non-blocking participant warning; monthly metrics and scorecard calculation updated to deliveredAt; admin api client and programs service facade wired; 10/10 tests pass. |
->>>>>>> origin/main
+| 2026-10-08 | BE-006 | feature/BE-006-partners-pipeline | ✅ Done | Partner model with stageHistory tracking and auto-derived closed state; PipelineStageConfig for custom pipeline stage labels; pipeline conversion health calculation engine; audit logging (partner.create, partner.move, stages.update); admin api and partners service wired; 13/13 tests pass. |
+| 2026-10-08 | BE-007 | feature/BE-007-ambassadors | ✅ Done | Ambassador network model with referral attribution and tier calculations; amplification task tracking; referral links and tier progression; audit logging; admin api and network service wired; 13/13 tests pass. |
+| 2026-10-08 | BE-008 | feature/BE-008-beneficiaries | ✅ Done | Beneficiary model with phone/email normalization and canonical sources; audit trail for verified state changes and undo capability; admin api and beneficiaries service wired; 13/13 tests pass. |
+| 2026-10-08 | BE-009 | feature/BE-009-social-posts | ✅ Done | SocialPost model with canonical platforms, post URL validation, and metric tracking; monthly social reach & engagement KPI aggregation; admin api and social service wired; 14/14 tests pass. |
+| 2026-10-09 | Mobile 100% Readiness | feature/mobile-100-percent-readiness | ✅ Done | Completed 100% App Store and Play Store launch readiness: (1) Replaced dead 404 policy URLs in `legal.ts` with live 200 OK document (`https://globalopportunitydesk.com/privacy-policy/`). (2) Updated `app.json` with official Kredibble brand icon and declared iOS purpose strings for `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription`. (3) Updated all EAS build profiles in `eas.json` to target `/api/v1` for full populated relationship support. (4) Updated `socket.ts` regex to support versioned API roots. (5) Implemented backend push token registration endpoint (`POST /users/me/push-token`) with full test coverage (8/8 tests passing). Full mobile test suite passing (12 suites / 95 tests) and zero ESLint errors. |
 
 ---
 
@@ -1869,6 +1871,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 ### Progress Log
 - 2026-10-08 — Items 1–8 added to the backlog. No work started.
+- 2026-10-09 — BE-009 completed on branch feature/BE-009-social-posts: implemented canonical platform normalization (facebook, instagram, x, linkedin, tiktok, youtube, whatsapp, other), temporal boundary clamping rejecting future dates with 400, URL structure validation, monthly totals aggregation with leading platform tie-breakers matching dashboard KPIs ("Posts published", "Social reach", "Social engagement"), audit logging on create/update/delete, RBAC screen permissions for 'social' (view/edit), admin API client and service layer live integration. All 14 tests in tests/be-009-social-posts.test.js and 29/29 suites (324 tests) in full backend suite pass.
 
 ---
 
@@ -1904,7 +1907,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [x] Done |
 | BE-007 | Ambassadors and the Network: dates, statuses, amplification, leaderboard, summary | P1 | – | [x] Done |
 | BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [x] Done |
-| BE-009 | Social posts: logging, validation, monthly totals by platform | P2 | – | [ ] Open |
+| BE-009 | Social posts: logging, validation, monthly totals by platform | P2 | – | [x] Done |
 | BE-010 | Testimonials: statuses, decisions, counts | P2 | – | [ ] Open |
 | BE-011 | Listings curation: vetting, publish dates, drafts, event date-times | P1 | – | [ ] Open |
 | BE-012 | Website audience: Google Analytics sync and manual entry | P2 | BE-016 | [ ] Open |

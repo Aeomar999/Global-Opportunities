@@ -21,7 +21,11 @@
       "bundleIdentifier": "com.kredibble.app",
       "supportsTablet": true,
       "buildNumber": "1",
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/icon.png",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Kredibble needs access to your camera to take profile photos and capture attachments for community posts.",
+        "NSPhotoLibraryUsageDescription": "Kredibble needs access to your photo library to select profile pictures, company verification documents, and post attachments."
+      }
     },
     "android": {
       "package": "com.kredibble.app",
@@ -56,6 +60,13 @@
         {
           "organization": "global-opportunities",
           "project": "god-mobile"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Kredibble needs access to your photo library to select profile pictures, company verification documents, and post attachments.",
+          "cameraPermission": "Kredibble needs access to your camera to take profile photos and capture attachments for community posts."
         }
       ]
     ],

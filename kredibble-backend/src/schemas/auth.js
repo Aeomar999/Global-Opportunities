@@ -100,3 +100,10 @@ export const deleteAccountSchema = z.object({
     confirmation: z.literal('DELETE MY ACCOUNT', { error: DELETE_CONFIRMATION_MESSAGE }),
   }),
 });
+
+export const pushTokenSchema = z.object({
+  body: z.object({
+    token: z.string({ required_error: 'Token is required' }).trim().min(1, 'Token is required').max(500, 'Token is too long'),
+    platform: z.enum(['ios', 'android', 'web', 'other']).optional(),
+  }),
+});

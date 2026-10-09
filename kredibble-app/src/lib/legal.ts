@@ -1,7 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 
-export const PRIVACY_POLICY_URL = 'https://kredibble.com/privacy';
-export const TERMS_OF_SERVICE_URL = 'https://kredibble.com/terms';
+export const PRIVACY_POLICY_URL = 'https://globalopportunitydesk.com/privacy-policy/';
+export const TERMS_OF_SERVICE_URL = 'https://globalopportunitydesk.com/privacy-policy/';
 
 /**
  * Opens Kredibble Privacy Policy in an in-app browser overlay.

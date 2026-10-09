@@ -1,9 +1,9 @@
 import { io, Socket } from 'socket.io-client';
 import { getMobileToken } from './api';
 
-// The socket server is the same origin as the API, minus the /api path.
+// The socket server is the same origin as the API, minus the /api or /api/v1 path.
 const SOCKET_URL = process.env.EXPO_PUBLIC_API_URL
-  ? process.env.EXPO_PUBLIC_API_URL.replace(/\/api\/?$/, '')
+  ? process.env.EXPO_PUBLIC_API_URL.replace(/\/api(\/v\d+)?\/?$/, '')
   : 'http://localhost:4000';
 
 class SocketService {
