@@ -18,6 +18,13 @@ import { currentMonth, kpiTarget, kpiValue, storeData } from "@/lib/kpi";
 import { getMockCollection, setMockCollection, subscribeMockStore } from "@/lib/mock-store";
 import { POST_PLATFORM_LABELS, SOCIAL_POST_PLATFORMS, type MonthKey, type PostPlatform, type SocialPost } from "@/lib/mock-entities";
 import { currentStaffMember, todayIsoDate } from "@/lib/services/listings";
+import { isMockMode } from "./mock-mode";
+import {
+  getSocialPostsApi,
+  getSocialMonthlyTotalsApi,
+  createSocialPostApi,
+  type PlatformRowApiRecord,
+} from "@/lib/api";
 
 const MOCK_DELAY_MS = 300;
 // The first load of a page takes a moment (a skeleton shows). Every later read is instant, so a change is on screen at once.
@@ -140,6 +147,34 @@ export function socialMonth(month: MonthKey, data = storeData()): SocialMonth {
   };
 }
 
+export async function loadMonthSocialTotals(month: MonthKey): Promise<SocialMonth> {
+  if (!isMockMode()) {
+    try {
+      const res = await getSocialMonthlyTotalsApi(month);
+      if (res && typeof res.posts === 'number') {
+        return {
+          month: res.month as MonthKey,
+          posts: res.posts,
+          reach: res.reach,
+          engagement: res.engagement,
+          targets: res.targets,
+          platforms: (res.platforms || []).map((p: PlatformRowApiRecord) => ({
+            platform: p.platform as PostPlatform,
+            label: p.label,
+            posts: p.posts,
+            reach: p.reach,
+            engagement: p.engagement,
+          })),
+          leading: (res.leading as PostPlatform) || null,
+        };
+      }
+    } catch {
+      // Fallback to local calculation
+    }
+  }
+  return socialMonth(month);
+}
+
 /** A post with the name of the opportunity it promotes. */
 export interface PostRow extends SocialPost {
   listingTitle?: string;
@@ -156,7 +191,30 @@ export const toPostRows = (posts: readonly SocialPost[], month: MonthKey): PostR
     .sort((a, b) => b.postedAt.localeCompare(a.postedAt) || b.id.localeCompare(a.id))
     .map(withTitle);
 
-export function loadMonthPosts(month: MonthKey): Promise<PostRow[]> {
+export async function loadMonthPosts(month: MonthKey): Promise<PostRow[]> {
+  if (!isMockMode()) {
+    try {
+      const res = await getSocialPostsApi({ month });
+      if (res.data && Array.isArray(res.data)) {
+        return res.data.map((record) => ({
+          id: record.id,
+          platform: record.platform as PostPlatform,
+          title: record.title,
+          url: record.url,
+          listingId: record.listingId,
+          listingTitle: record.listingTitle,
+          text: record.text || record.title,
+          status: record.status,
+          postedAt: record.postedAt,
+          reach: record.reach,
+          engagement: record.engagement,
+          authorId: record.authorId || record.createdBy || "",
+        }));
+      }
+    } catch {
+      // Fallback to local mock collection on API error
+    }
+  }
   return afterDelay(toPostRows(getMockCollection("socialPosts"), month));
 }
 
@@ -203,5 +261,21 @@ export function logPost(fields: PostFields): LogResult {
     authorId: currentStaffMember()?.id ?? existing[0]?.authorId ?? "",
   };
   setMockCollection("socialPosts", [post, ...existing], { always: true });
+
+  if (!isMockMode()) {
+    createSocialPostApi({
+      platform: fields.platform,
+      title: fields.title.trim(),
+      url: fields.url.trim(),
+      reach: Math.max(0, Math.round(fields.reach)),
+      engagement: Math.max(0, Math.round(fields.engagement)),
+      postedAt: fields.postedAt,
+      listingId: fields.listingId || undefined,
+      status: "published",
+    }).catch(() => {
+      // Background persistence catch
+    });
+  }
+
   return { ok: true, post };
 }
