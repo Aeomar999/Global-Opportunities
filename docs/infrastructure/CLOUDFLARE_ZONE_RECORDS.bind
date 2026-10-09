@@ -1,0 +1,73 @@
+; ==============================================================================
+; Cloudflare DNS Zone Export / Import File (RFC 1035 / BIND Format)
+; Zone: globalopportunitydesk.com
+; Purpose: Complete pre-staged DNS records for Track M3 Zero-Downtime Cutover
+; Generated: 2026-10-09
+;
+; INSTRUCTIONS FOR IT ADMINISTRATOR:
+; 1. In Cloudflare Dashboard -> Add Site -> globalopportunitydesk.com (Free plan).
+; 2. Under DNS -> Records -> Click "Import and Export" -> "Import DNS records".
+; 3. Upload this file. All records (including active WordPress and Titan email)
+;    will be populated before nameservers are switched.
+; 4. Replace <VPS_IP> with the actual IPv4 address of the Hostinger VPS.
+; ==============================================================================
+
+$ORIGIN globalopportunitydesk.com.
+$TTL 300
+
+; ------------------------------------------------------------------------------
+; ACTIVE WORDPRESS HOSTING (Hostinger Origin)
+; Keeps the existing live website operational without interruption.
+; ------------------------------------------------------------------------------
+@               IN  A       147.79.116.134
+@               IN  A       77.37.50.148
+www             IN  CNAME   www.globalopportunitydesk.com.cdn.hstgr.net.
+
+; ------------------------------------------------------------------------------
+; ACTIVE TITAN BUSINESS EMAIL (Hostinger Mail Service)
+; Critical: Never modify or drop these records during nameserver cutover!
+; ------------------------------------------------------------------------------
+@               IN  MX  10  mx1.titan.email.
+@               IN  MX  20  mx2.titan.email.
+
+; SPF Record: Authorizes Titan mail servers to send email for this domain
+@               IN  TXT     "v=spf1 include:spf.titan.email ~all"
+
+; DKIM Record: Cryptographic signature verification for outbound Titan email
+titan1._domainkey IN TXT    "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCEFNi6R+vY3DySp1KGDfKaLP6QGuGkXVSOklQ8CER8MgDlsvJ8kFxrWMaROm5wrGxg/uMOT79pzC2XJLSBzEd7nbzGJdDne+W2gf2VLj3K94QWLSjL0K0c3abHU3MrOQ4qYyJWXpTbcwudDCMnBJ2NR0Aqh2dW809FazxFxH2QkwIDAQAB"
+
+; DMARC Policy (Recommended initial monitoring policy)
+_dmarc          IN  TXT     "v=DMARC1; p=none; sp=none; rua=mailto:dmarc-reports@globalopportunitydesk.com; aspf=r"
+
+; ------------------------------------------------------------------------------
+; GOOGLE SEARCH CONSOLE & SITE VERIFICATIONS
+; ------------------------------------------------------------------------------
+@               IN  TXT     "google-site-verification=9syomOs2cEapHPtmRNvGTzJb5tcwuEiRF5KjX18_dSo"
+
+; ------------------------------------------------------------------------------
+; TRANSACTIONAL EMAIL (Resend - Track M10 / SEC-091)
+; Replace <resend-dkim-value> when generated in Resend console
+; ------------------------------------------------------------------------------
+resend._domainkey IN TXT    "k=rsa; p=<resend-dkim-public-key>"
+bounces         IN  MX  10  feedback-smtp.us-east-1.amazonses.com.
+bounces         IN  TXT     "v=spf1 include:amazonses.com ~all"
+
+; ------------------------------------------------------------------------------
+; APPLICATION SERVICES (Plan 4b / Plan 4f - Single-level subdomains)
+; Covered under Cloudflare Universal SSL (*.globalopportunitydesk.com)
+; Proxied through Cloudflare edge (Orange Cloud enabled in Cloudflare dashboard)
+; ------------------------------------------------------------------------------
+; Production API (Hostinger VPS Caddy Edge Proxy)
+api             IN  A       <VPS_IP>
+
+; Staging API (Hostinger VPS Caddy Edge Proxy)
+staging-api     IN  A       <VPS_IP>
+
+; Development / Preview API (Hostinger VPS Caddy Edge Proxy)
+dev-api         IN  A       <VPS_IP>
+
+; Production Admin Dashboard (Vercel Team Deployment)
+admin           IN  CNAME   cname.vercel-dns.com.
+
+; Staging Admin Dashboard (Vercel Preview / Staging Deployment)
+staging-admin   IN  CNAME   cname.vercel-dns.com.
