@@ -14,12 +14,13 @@
  * Access (the "roles_permissions" screen): edit (super admin) can change the toggles; view (desk lead) sees everything
  * read-only, with the switches disabled and no save bar; with no access the Team page does not show this tab at all.
  */
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Lock } from "lucide-react";
 import { useRoles, VIEW_ONLY_TOOLTIP } from "@/components/access/RoleProvider";
 import { FIXED_PERMISSIONS, SCREENS } from "@/config/permissions";
 import { ROLES, type Role } from "@/config/roles";
 import { EDITABLE_ROLES, PERMISSIONS, rolePermissionsStore, type EditableRole, type PermissionKey, type RoleGrants } from "@/lib/role-permissions";
+import { getRolesPermissions, updateRolesPermissions } from "@/lib/api";
 import { Card } from "@/components/ui/Card";
 import { StickyActionBar } from "@/components/ui/form/StickyActionBar";
 import { Switch } from "@/components/ui/form/Switch";
@@ -36,9 +37,28 @@ const LEVEL_TEXT = { edit: "Edit", view: "View" } as const;
 export function RolesTab() {
   const [saved, setSaved] = useState<RoleGrants>(() => rolePermissionsStore.grants);
   const [draft, setDraft] = useState<RoleGrants>(() => rolePermissionsStore.grants);
+  const [saving, setSaving] = useState(false);
   const toast = useToast();
   const { can } = useRoles();
   const canEdit = can("roles_permissions", "edit");
+
+  useEffect(() => {
+    let active = true;
+    getRolesPermissions()
+      .then((payload) => {
+        if (!active || !payload?.toggles) return;
+        const liveToggles = payload.toggles as unknown as RoleGrants;
+        rolePermissionsStore.load(liveToggles);
+        setSaved(liveToggles);
+        setDraft(liveToggles);
+      })
+      .catch(() => {
+        // Keeps default in-memory store grants on error or offline
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const changes = EDITABLE_ROLES.reduce(
     (total, role) => total + PERMISSIONS.filter((permission) => draft[role][permission.key] !== saved[role][permission.key]).length,
@@ -49,13 +69,20 @@ export function RolesTab() {
   const toggle = (role: EditableRole, key: PermissionKey, value: boolean) =>
     setDraft((current) => ({ ...current, [role]: { ...current[role], [key]: value } }));
 
-  const save = (event: FormEvent) => {
+  const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (!canEdit) return;
-    // TODO(backend): persist this change. Today this only updates local state and the in-memory store.
-    rolePermissionsStore.save(draft);
-    setSaved(draft);
-    toast.success("Role permissions were saved.");
+    if (!canEdit || saving) return;
+    setSaving(true);
+    try {
+      await updateRolesPermissions(draft);
+      rolePermissionsStore.save(draft);
+      setSaved(draft);
+      toast.success("Role permissions were saved.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save permissions.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

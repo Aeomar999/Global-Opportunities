@@ -14,6 +14,8 @@
  */
 import { getMockCollection, setMockCollection, subscribeMockStore } from "@/lib/mock-store";
 import type { Program, ProgramStatus } from "@/lib/mock-entities";
+import { createProgramApi, updateProgramApi, hasAdminSession } from "@/lib/api";
+import { isMockMode } from "@/lib/services/mock-mode";
 
 const MOCK_DELAY_MS = 300;
 const afterDelay = <T>(value: T) => new Promise<T>((resolve) => setTimeout(() => resolve(value), MOCK_DELAY_MS));
@@ -71,6 +73,32 @@ const withDeliveredDay = (fields: ProgramFields): Program["deliveredAt"] => (fie
 export function createProgram(fields: ProgramFields): Program {
   const program: Program = { ...fields, id: `prg-new-${Date.now()}`, deliveredAt: withDeliveredDay(fields) };
   write([program, ...getMockCollection("programs")]);
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    createProgramApi({
+      name: program.name,
+      title: program.name,
+      type: program.type,
+      programType: program.type,
+      status: program.status,
+      format: program.format,
+      country: program.country,
+      location: program.location,
+      partnerId: program.partnerId,
+      participants: program.participants,
+      participantCount: program.participants,
+      target: program.target,
+      participantTarget: program.target,
+      facilitators: program.facilitators,
+      notes: program.notes,
+      startAt: program.startAt,
+      endAt: program.endAt,
+      deliveredAt: program.deliveredAt,
+    }).catch((err) => {
+      console.warn("Could not persist program to backend API", err);
+    });
+  }
+
   return program;
 }
 
@@ -79,6 +107,32 @@ export function updateProgram(id: string, fields: ProgramFields): Program | unde
   if (!current) return undefined;
   const next: Program = { ...fields, id, deliveredAt: withDeliveredDay(fields) };
   write(getMockCollection("programs").map((program) => (program.id === id ? next : program)));
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updateProgramApi(id, {
+      name: next.name,
+      title: next.name,
+      type: next.type,
+      programType: next.type,
+      status: next.status,
+      format: next.format,
+      country: next.country,
+      location: next.location,
+      partnerId: next.partnerId,
+      participants: next.participants,
+      participantCount: next.participants,
+      target: next.target,
+      participantTarget: next.target,
+      facilitators: next.facilitators,
+      notes: next.notes,
+      startAt: next.startAt,
+      endAt: next.endAt,
+      deliveredAt: next.deliveredAt,
+    }).catch((err) => {
+      console.warn("Could not persist program update to backend API", err);
+    });
+  }
+
   return next;
 }
 
@@ -89,4 +143,10 @@ export function cancelProgram(id: string) {
       program.id === id ? { ...program, status: "cancelled" as ProgramStatus, deliveredAt: undefined } : program,
     ),
   );
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updateProgramApi(id, { status: "cancelled" }).catch((err) => {
+      console.warn("Could not persist program cancellation to backend API", err);
+    });
+  }
 }
