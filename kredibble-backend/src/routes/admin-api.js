@@ -1184,16 +1184,24 @@ adminApiRouter.post('/ambassador-requests/:id/approve', requireAdminAuth, valida
   }
 
   // Saved through the model (not an upsert) so its save hook issues the GOD-XXXXXX referral code and the joinedAt date,
-  // exactly as for an ambassador added from the Network page.
-  const ambassador = (await Ambassador.findOne({ linkedUserId: user._id })) || new Ambassador({ linkedUserId: user._id, createdBy: req.auth.sub });
+  // exactly as for an ambassador added from the Network page. Check by linkedUserId OR email so pre-existing ambassador
+  // records get linked rather than duplicated.
+  const normalizedEmail = user.email ? String(user.email).trim().toLowerCase() : undefined;
+  const ambassador = (await Ambassador.findOne({
+    $or: [
+      { linkedUserId: user._id },
+      ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+    ],
+  })) || new Ambassador({ linkedUserId: user._id, createdBy: req.auth.sub });
   ambassador.set({
+    linkedUserId: user._id,
     fullName: user.name,
-    email: user.email,
-    phone: request.phone,
-    country: request.country,
-    city: request.city,
-    // The Network registry only knows student, graduate, staff and volunteer; the team can edit this on the ambassador page.
-    memberType: request.role === 'hirer' ? 'volunteer' : 'student',
+    email: normalizedEmail || ambassador.email,
+    phone: request.phone || ambassador.phone,
+    country: request.country || ambassador.country,
+    city: request.city || ambassador.city,
+    // The Network registry only knows student, graduate, staff and volunteer; preserve if already set, else map by role.
+    memberType: ambassador.memberType || (request.role === 'hirer' ? 'volunteer' : 'student'),
     status: 'onboarding',
   });
   await ambassador.save();
