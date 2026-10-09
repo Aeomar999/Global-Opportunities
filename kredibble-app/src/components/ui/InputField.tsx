@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TextInputProps, TouchableOpacity } from "react-native";
 import { Eye, EyeOff } from "lucide-react-native";
+import { Colors } from "../../constants/design";
 
 export interface InputFieldProps extends TextInputProps {
   label?: string;
@@ -26,17 +27,17 @@ export function InputField({
         </Text>
       )}
       <View
-        className={`flex-row items-center h-14 bg-background-card border rounded-xl px-4 ${
+        className={`flex-row items-center h-control bg-background-card border rounded-control px-4 ${
           error
             ? "border-error"
             : isFocused
             ? "border-primary"
-            : "border-border"
+            : "border-border-input"
         }`}
       >
         <TextInput
           className="flex-1 font-sans text-base text-text h-full"
-          placeholderTextColor="#A1A1AA"
+          placeholderTextColor={Colors.textPlaceholder}
           secureTextEntry={isSecure}
           onFocus={(e) => {
             setIsFocused(true);
@@ -54,9 +55,9 @@ export function InputField({
             className="ml-2 p-1"
           >
             {isSecure ? (
-              <EyeOff size={20} color="#A1A1AA" />
+              <EyeOff size={20} color={Colors.textMuted} />
             ) : (
-              <Eye size={20} color="#A1A1AA" />
+              <Eye size={20} color={Colors.textMuted} />
             )}
           </TouchableOpacity>
         )}

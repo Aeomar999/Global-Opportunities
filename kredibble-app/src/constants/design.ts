@@ -1,107 +1,116 @@
 /**
- * Kredibble Design System
- * Single source of truth for all design tokens used across the app.
- * Import from here when building new screens — never hardcode values.
+ * Kredibble Design System (TypeScript view of the tokens)
+ * The values live in ./tokens.js (the single source of truth, shared with tailwind.config.js).
+ * This file keeps the names existing screens import and adds the new ones. Never hard-code values in screens.
  */
 
+import tokens from './tokens';
+
+const { purple, accent, neutral, status } = tokens;
+
 // ─── Colors ───────────────────────────────────────────────────────────────────
+// Orange (accent) is for icons, dots and badges. A filled orange button is accent600 with white text; orange text is accent700.
+// Never orange text on white and never white text on accent500 (3.10:1).
 
 export const Colors = {
-  // Brand
-  primary: '#6671E4',
-  primaryLight: '#8B95FF',
-  primaryDark: '#3654FF',
-  primaryTransparent: 'rgba(102, 113, 228, 0.1)',
-  primaryChip: 'rgba(102, 113, 228, 0.12)',  // multi-select chip background
+  // Brand (purple = structure)
+  primary: purple[500],
+  primaryLight: purple[400],
+  primaryDark: purple[700],
+  primaryPressed: purple[600],
+  primaryTransparent: purple[50],   // tinted background (selected row)
+  primaryChip: purple[100],         // multi-select chip background (text purple700)
+  purple50: purple[50],
+  purple100: purple[100],
+  purple200: purple[200],
+  purple400: purple[400],
+  purple500: purple[500],
+  purple600: purple[600],
+  purple700: purple[700],
+  primary10: tokens.purple10,        // primary at 10 % opacity: disabled primary button, soft secondary buttons
+
+  // Accent (orange)
+  accent500: accent[500],           // icons, dots, badges ONLY
+  accent600: accent[600],           // filled button (white label)
+  accent700: accent[700],           // orange text
+  accent50: accent[50],
+  accent100: accent[100],
 
   // Backgrounds
-  bgScreen: '#F7F7F9',       // auth + main screen background
-  bgOnboarding: '#6671E4',   // onboarding screen background
-  bgDefault: '#F3F3F3',
-  bgAlt: '#F6F7F9',
-  bgCard: '#FFFFFF',
-  bgAdsBanner: '#EBEBEE',    // ads placeholder banner
-  bgAdsBannerInner: '#E0E0E6',
+  bgScreen: neutral.page,           // auth + main screen background
+  bgOnboarding: purple[500],        // onboarding screen background
+  bgDefault: neutral.page,
+  bgAlt: neutral.surface2,
+  bgCard: neutral.surface,
+  bgAdsBanner: neutral.surface2,    // ads placeholder banner
+  bgAdsBannerInner: neutral.border,
 
   // Text
-  textDefault: '#000000',
-  textBody: '#1A1A1A',
-  textMuted: '#8A8D9F',      // subtitles, helper text, secondary labels
-  textSecondary: '#595959',
-  textPlaceholder: '#A1A1AA',
-  textOnPrimary: '#FFFFFF',
-  textAds: '#B0B0BC',        // ads banner label
-  textHeading: '#1A1A1A',    // screen-level header titles
+  textDefault: neutral.text,
+  textBody: neutral.text,
+  textMuted: neutral.muted,         // subtitles, helper text, secondary labels
+  textSecondary: neutral.muted,
+  textPlaceholder: neutral.muted,
+  textOnPrimary: neutral.white,
+  textAds: neutral.muted,           // ads banner label
+  textHeading: neutral.text,        // screen-level header titles
 
   // Borders
-  borderDefault: '#E5E6F2',
-  borderInput: '#EBEBEE',
+  borderDefault: neutral.border,    // decorative card edge
+  borderInput: neutral.borderInput, // control edge (3:1)
 
-  // States
-  success: '#16A34A',
-  error: '#ED4C5C',
-  warning: '#F6B612',
+  // States: success/error/warning are safe as TEXT; the *Dot values are for icons and dots.
+  success: status.success.text,
+  successDot: status.success.dot,
+  successTint: status.success.tint,
+  error: status.danger.text,
+  errorDot: status.danger.dot,
+  errorTint: status.danger.tint,
+  warning: status.warning.text,
+  warningDot: status.warning.dot,
+  warningTint: status.warning.tint,
+  warningSoft: status.warning.soft, // soft background with dark text only
 
   // Tab Bar (purple background, all icons white)
-  tabBar: '#6671E4',
-  tabIcon: '#FFFFFF',
-  tabIndicator: '#FFFFFF',   // active underline
+  tabBar: purple[500],
+  tabIcon: neutral.white,
+  tabIconActive: accent[500],       // active tab icon (orange, as in the approved home design)
+  tabIndicator: accent[500],        // active underline (orange)
 
   // Role selector cards (signup)
-  radioUnselected: '#C4C4C4',
+  radioUnselected: neutral.borderInput,
 
   // Utility
-  divider: '#EBEBEE',
-  white: '#FFFFFF',
-  black: '#000000',
+  divider: neutral.border,
+  white: neutral.white,
+  black: neutral.black,
   transparent: 'transparent',
 } as const;
 
 // ─── Typography ───────────────────────────────────────────────────────────────
 
 export const FontFamily = {
-  sans: 'Inter',             // primary font — use className="font-sans" with NativeWind
+  sans: tokens.fontFamily.body,         // 'Inter' (base name; src/lib/typography.tsx picks the loaded weight)
+  heading: tokens.fontFamily.heading,   // 'PlusJakartaSans'
 } as const;
 
-export const FontSize = {
-  xs: 12,    // captions, helper text, chip labels, ads text
-  sm: 13,    // form labels, footer links, search placeholder
-  base: 14,  // body text, input values
-  md: 15,    // card titles, primary button text, forgot password heading
-  screenTitle: 17,  // home / tab screen header title
-  lg: 22,    // auth screen headings ("Welcome")
-  xl: 36,    // hero/display headings (onboarding)
-} as const;
+export const FontFaces = tokens.fontFaces;
 
-export const LineHeight = {
-  body: 18,      // paired with FontSize.sm (13)
-  card: 22,      // paired with FontSize.md (15) on feature cards
-  subtext: 20,   // signup/login subtitle paragraphs
-  heading: 42,   // paired with FontSize.xl (36) for hero headings
-} as const;
+export const FontSize = tokens.fontSize;
+
+export const LineHeight = tokens.lineHeight;
 
 export const FontWeight = {
   regular: '400' as const,
   medium: '500' as const,    // card titles, form labels
   semibold: '600' as const,  // screen header titles
   bold: 'bold' as const,     // auth headings, buttons, links
-} as const;
+};
 
 // ─── Spacing ──────────────────────────────────────────────────────────────────
 // Base unit is 4px. Scale follows 2/4/8/16/20/24/32/40/48/64.
 
-export const Spacing = {
-  0.5: 2,
-  1: 4,
-  2: 8,
-  3: 16,
-  4: 20,    // home screen padding + feature card gap
-  5: 24,    // auth screen horizontal padding
-  6: 32,
-  7: 40,
-  8: 48,
-  9: 64,
-} as const;
+export const Spacing = tokens.spacing;
 
 export const Layout = {
   screenPaddingH: 24,     // auth screens horizontal edge padding
@@ -119,49 +128,50 @@ export const Layout = {
 } as const;
 
 // ─── Border Radius ────────────────────────────────────────────────────────────
+// ONE radius for controls (buttons, inputs, pickers): 12. md and lg are kept so existing imports compile; both are 12.
 
 export const Radius = {
-  sm: 4,      // checkboxes, small chips
-  md: 8,      // buttons, text inputs
-  lg: 12,     // ads banner, pickers, role selector cards
-  searchBar: 15,  // home search bar
-  card: 16,   // feature cards, sheet corners
-  full: 9999, // pills, avatar circles, ellipse decorations
+  sm: tokens.radius.check,       // checkboxes, small chips
+  check: tokens.radius.check,
+  inset: tokens.radius.inset,
+  control: tokens.radius.control, // buttons, text inputs, pickers
+  md: tokens.radius.control,      // legacy name (was 8) -> control
+  lg: tokens.radius.control,      // legacy name -> control
+  searchBar: tokens.radius.searchBar,
+  card: tokens.radius.card,       // cards, sheet corners
+  full: tokens.radius.pill,       // pills, avatar circles
+  pill: tokens.radius.pill,
 } as const;
 
 // ─── Sizing ───────────────────────────────────────────────────────────────────
 
 export const Size = {
-  // Buttons & inputs
-  buttonHeight: 52,       // signup/auth primary button height
-  inputHeight: 52,        // all text inputs (signup/login)
-  searchBarHeight: 50,    // home screen search bar
+  // Buttons & inputs: ONE height (48)
+  controlHeight: tokens.size.controlHeight,
+  buttonHeight: tokens.size.controlHeight,
+  inputHeight: tokens.size.controlHeight,
+  searchBarHeight: tokens.size.searchBarHeight,
 
-  // Logo
-  logoSize: 56,           // auth screen logo (signup/login)
-  logoSizeHome: 40,       // home header logo
+  logoSize: tokens.size.logoSize,
+  logoSizeHome: tokens.size.logoSizeHome,
 
-  // Tab bar
-  tabBarHeight: 64,       // tab bar total height
-  tabIconSize: 24,        // tab icon size
-  tabIndicatorW: 20,      // active tab underline width
-  tabIndicatorH: 3,       // active tab underline height
+  tabBarHeight: tokens.size.tabBarHeight,
+  tabIconSize: tokens.size.tabIconSize,
+  tabIndicatorW: tokens.size.tabIndicatorW,
+  tabIndicatorH: tokens.size.tabIndicatorH,
 
-  // Home screen
-  adsBannerHeight: 59,    // ads placeholder banner
-  featureCardHeight: 121.7, // home screen feature card height
+  adsBannerHeight: tokens.size.adsBannerHeight,
+  featureCardHeight: tokens.size.featureCardHeight,
 
-  // Progress bar (signup)
-  progressBarHeight: 4,
+  progressBarHeight: tokens.size.progressBarHeight,
 
-  // Misc
-  paginationDotActive: 6,
-  paginationDotInactive: 4,
-  paginationDotGap: 6,
-  borderWidth: 1,
-  checkboxSize: 16,
-  checkboxIconSize: 12,
-  socialIconSize: 18,
+  paginationDotActive: tokens.size.paginationDotActive,
+  paginationDotInactive: tokens.size.paginationDotInactive,
+  paginationDotGap: tokens.size.paginationDotGap,
+  borderWidth: tokens.size.borderWidth,
+  checkboxSize: tokens.size.checkboxSize,
+  checkboxIconSize: tokens.size.checkboxIconSize,
+  socialIconSize: tokens.size.socialIconSize,
 } as const;
 
 // ─── Feature Card Decoration ──────────────────────────────────────────────────
@@ -172,24 +182,7 @@ export const CardDecor = {
   ellipseW: 37.93,
   ellipseH: 45.32,
   blur: '12px',           // CSS filter: blur() — web only
-  color: '#FFFFFF',
+  color: Colors.white,
 } as const;
 
-// ─── Shadows ──────────────────────────────────────────────────────────────────
-
-export const Shadow = {
-  primaryButton: {
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  searchBar: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-} as const;
+// Buttons and search bars have no drop shadow (design decision, 2026-10-08), so there is no Shadow token.

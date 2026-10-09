@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Switch, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -133,7 +134,7 @@ export default function HirerSecurityScreen() {
           <Switch
             value={security.publicCompanyProfile}
             onValueChange={() => handleToggle('publicCompanyProfile')}
-            trackColor={{ false: '#E5E6F2', true: '#6671E4' }}
+            trackColor={{ false: '#E5E6F2', true: Colors.primary }}
             thumbColor="#FFFFFF"
             ios_backgroundColor="#E5E6F2"
           />
@@ -240,7 +241,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 16, fontSize: 14, color: '#1A1A1A',
   },
   updateButton: {
-    height: 52, backgroundColor: '#6671E4', borderRadius: 12,
+    height: 52, backgroundColor: Colors.primary, borderRadius: 12,
     justifyContent: 'center', alignItems: 'center', marginTop: 8, marginBottom: 32,
   },
   disabledButton: { backgroundColor: '#EBEBEE' },

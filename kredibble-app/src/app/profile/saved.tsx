@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -65,7 +66,7 @@ export default function SavedOpportunitiesScreen() {
             title: o.title,
             location: o.location || 'Remote',
             company: o.company || 'Company',
-            logoColor: o.logoColor || (isIntern ? '#34D399' : '#6671E4'),
+            logoColor: o.logoColor || (isIntern ? '#34D399' : Colors.primary),
             initial: (o.company || 'C').charAt(0).toUpperCase(),
             description: o.description || '',
             applied: `${o.applicantsCount || 0} applied`,
@@ -96,7 +97,7 @@ export default function SavedOpportunitiesScreen() {
           organizer: e.organizer || e.company || '',
           price: e.eventTicketType === 'Paid' ? 'Paid' : 'Free',
           priceNum: Number(e.priceNum) || 0,
-          logoColor: '#6671E4',
+          logoColor: Colors.primary,
         }));
         setAllEvents(mappedEvents);
 
@@ -105,7 +106,7 @@ export default function SavedOpportunitiesScreen() {
           id: String(g.id || g._id),
           title: g.title,
           org: g.org || g.funder || 'Foundation',
-          logoColor: g.logoColor || '#3D2A6B',
+          logoColor: g.logoColor || Colors.purple700,
           initial: (g.org || g.funder || 'G').charAt(0).toUpperCase(),
           description: g.description || '',
           applied: `${g.applicantsCount || 0} applied`,
@@ -183,7 +184,7 @@ export default function SavedOpportunitiesScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-            <ActivityIndicator size="small" color="#6671E4" />
+            <ActivityIndicator size="small" color={Colors.primary} />
             <Text style={{ marginTop: 12, color: '#8A8D9F', fontSize: 13 }} className="font-sans">Loading saved opportunities...</Text>
           </View>
         ) : currentList.length === 0 ? (
@@ -276,8 +277,8 @@ const styles = StyleSheet.create({
     borderColor: '#E5E6F2',
   },
   activeTabButton: {
-    backgroundColor: '#6671E4',
-    borderColor: '#6671E4',
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   tabButtonText: {
     fontSize: 13,
@@ -441,7 +442,7 @@ const styles = StyleSheet.create({
   },
   freeBadgeText: {
     fontSize: 11,
-    color: '#6671E4',
+    color: Colors.primary,
     fontWeight: '600',
   },
   emptyContainer: {

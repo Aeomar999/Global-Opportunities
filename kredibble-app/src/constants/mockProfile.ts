@@ -145,7 +145,7 @@ class ProfileStateStore {
       const userId = authStore.user?.id;
       if (userId) {
         let itemType = type === 'jobs' ? 'opportunities' : type;
-        toggleSavedItem(userId, { itemId: id, itemType: itemType }).catch((err: any) => {
+        toggleSavedItem({ itemId: id, itemType: itemType }).catch((err: any) => {
           console.warn('Failed to persist bookmark to server', err);
         });
       }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,7 +7,7 @@ import { ChevronLeft, ChevronRight, Users, Briefcase, GraduationCap, Calendar, A
 import { authStore, PostedOpportunity } from '../../constants/authStore';
 
 const TYPE_META: Record<PostedOpportunity['type'], { label: string; Icon: any; color: string }> = {
-  jobs: { label: 'Job', Icon: Briefcase, color: '#6671E4' },
+  jobs: { label: 'Job', Icon: Briefcase, color: Colors.primary },
   internships: { label: 'Internship', Icon: GraduationCap, color: '#F59E0B' },
   events: { label: 'Event', Icon: Calendar, color: '#10B981' },
   grants: { label: 'Grant', Icon: Award, color: '#EF4444' },

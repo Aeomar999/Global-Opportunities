@@ -93,7 +93,7 @@ export default function ExpertProfileDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen }} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.white }} edges={['top', 'left', 'right']}>
       {/* Toast Feedback Banner */}
       {showToast && (
         <View style={styles.toastContainer}>
@@ -124,6 +124,7 @@ export default function ExpertProfileDetailScreen() {
       </View>
 
       <ScrollView
+        style={{ backgroundColor: Colors.bgScreen }}
         contentContainerStyle={[styles.scrollContent, role === 'hirer' && { paddingBottom: 100 }]}
         showsVerticalScrollIndicator={false}
       >
@@ -303,7 +304,7 @@ export default function ExpertProfileDetailScreen() {
               <Text style={{ fontSize: 13, fontWeight: FontWeight.semibold, color: Colors.textHeading }} className="font-sans">
                 {edu.degree}
               </Text>
-              <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 2 }} className="font-sans">
+              <Text style={{ fontSize: 12, color: Colors.textBody, fontWeight: '300', marginTop: 2 }} className="font-sans">
                 {edu.institution} • {edu.duration}
               </Text>
             </View>
@@ -406,7 +407,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.bgScreen,
+    backgroundColor: Colors.white,
   },
   circleHeaderButton: {
     width: 38,
@@ -462,8 +463,11 @@ const styles = StyleSheet.create({
   },
   profileHeaderContainer: {
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 24,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderDefault,
+    paddingTop: 12,
+    paddingBottom: 20,
     paddingHorizontal: 20,
   },
   avatarImage: {
@@ -505,7 +509,8 @@ const styles = StyleSheet.create({
   },
   expertProfession: {
     fontSize: 13,
-    color: Colors.textMuted,
+    color: Colors.textBody,
+    fontWeight: '300',
     textAlign: 'center',
   },
   websiteLink: {
@@ -515,7 +520,8 @@ const styles = StyleSheet.create({
   },
   expertLocation: {
     fontSize: 12,
-    color: Colors.textMuted,
+    color: Colors.textBody,
+    fontWeight: '300',
     marginTop: 6,
     textAlign: 'center',
   },
@@ -534,7 +540,8 @@ const styles = StyleSheet.create({
   },
   statsLabel: {
     fontSize: 11,
-    color: Colors.textMuted,
+    color: Colors.textBody,
+    fontWeight: '300',
   },
   statsValue: {
     fontSize: 12,
@@ -567,13 +574,14 @@ const styles = StyleSheet.create({
   },
   subSectionTitle: {
     fontSize: 11,
-    color: Colors.textMuted,
+    color: Colors.textBody,
+    fontWeight: '300',
     marginBottom: 8,
-    fontWeight: FontWeight.medium,
   },
   bodyText: {
     fontSize: 13,
-    color: Colors.textMuted,
+    color: Colors.textBody,
+    fontWeight: '300',
     lineHeight: 18,
   },
   readMoreButton: {
@@ -617,7 +625,8 @@ const styles = StyleSheet.create({
   },
   experienceDuration: {
     fontSize: 11,
-    color: Colors.textMuted,
+    color: Colors.textBody,
+    fontWeight: '300',
     marginTop: 2,
   },
   bulletRow: {
@@ -627,14 +636,16 @@ const styles = StyleSheet.create({
   },
   bulletDot: {
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: Colors.textBody,
+    fontWeight: '300',
     marginRight: 6,
     lineHeight: 18,
   },
   bulletText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.textSecondary,
+    color: Colors.textBody,
+    fontWeight: '300',
     lineHeight: 18,
   },
   footer: {
@@ -687,7 +698,8 @@ const styles = StyleSheet.create({
   },
   modalSubtitle: {
     fontSize: 13,
-    color: Colors.textMuted,
+    color: Colors.textBody,
+    fontWeight: '300',
     textAlign: 'center',
     marginBottom: 16,
     lineHeight: 18,

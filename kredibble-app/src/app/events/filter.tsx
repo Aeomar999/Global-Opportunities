@@ -6,7 +6,7 @@ import {
   Calendar, MapPin, Grid, Ticket, Globe
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 
 type Section = 'date' | 'region' | 'category' | 'ticketType' | 'eventType' | null;
 
@@ -182,7 +182,6 @@ export default function FilterEventsScreen() {
             paddingHorizontal: 16,
             height: 50,
             marginBottom: 16,
-            ...Shadow.searchBar,
           }}
         >
           <Search size={18} color={Colors.textPlaceholder} style={{ marginRight: 10 }} />

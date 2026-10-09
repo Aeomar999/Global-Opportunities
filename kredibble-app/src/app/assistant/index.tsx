@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, StyleSheet, Keyboard, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Send, Sparkles } from 'lucide-react-native';
+import { ChevronLeft, Send } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import Svg, { Circle, Ellipse, Polygon, Rect } from 'react-native-svg';
+import Svg, { Circle, Ellipse, Polygon } from 'react-native-svg';
 import { authStore } from '../../constants/authStore';
 
 // ─── Wave Penguin Logo SVG ───────────────────────────────────────────────────
@@ -24,15 +25,8 @@ const WaveLogoSVG = () => (
 
 // ─── Kredibble AI Assistant Avatar ──────────────────────────────────────────
 const AssistantAvatar = () => (
-  <Svg width="36" height="36" viewBox="0 0 75 75" fill="none">
-    <Rect width="75" height="75" rx="37.5" fill="#818CF8" />
-    <Rect x="18.8096" y="22.5435" width="16.6667" height="16.6667" transform="rotate(19.8238 18.8096 22.5435)" fill="white" />
-    <Rect x="35.873" y="14.5217" width="16.6667" height="16.6667" transform="rotate(19.8238 35.873 14.5217)" fill="white" />
-    <Rect x="43.8945" y="31.5867" width="16.6667" height="16.6667" transform="rotate(19.8238 43.8945 31.5867)" fill="white" />
-    <Rect x="27.3984" y="38.0403" width="16.6667" height="16.6667" transform="rotate(19.8238 27.3984 38.0403)" fill="white" />
-  </Svg>
+  <Image source={require('../../../assets/images/logo.png')} style={{ width: 36, height: 36, borderRadius: 18 }} resizeMode="contain" />
 );
-
 // ─── Mock Job Data matching index.tsx ────────────────────────────────────────
 interface Job {
   id: string;
@@ -172,14 +166,10 @@ export default function AssistantScreen() {
     }, 1200);
   };
 
-  const handleSuggestionPress = (text: string) => {
-    setInputText(text);
-  };
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={{ flex: 1, backgroundColor: '#F8F9FA' }}
+      style={{ flex: 1, backgroundColor: Colors.bgScreen }}
       keyboardVerticalOffset={0}
     >
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
@@ -189,7 +179,7 @@ export default function AssistantScreen() {
           onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
           style={styles.backButton}
         >
-          <ChevronLeft size={20} color="#1A1A1A" />
+          <ChevronLeft size={24} color={Colors.textMuted} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} className="font-sans">
           AI smart assistant
@@ -251,7 +241,7 @@ export default function AssistantScreen() {
                             <WaveLogoSVG />
                           </View>
                           <View style={styles.jobInfo}>
-                            <Text numberOfLines={1} style={styles.jobTitle} className="font-sans">
+                            <Text numberOfLines={2} style={styles.jobTitle} className="font-sans">
                               {job.title} <Text style={styles.jobDot}>·</Text> <Text style={styles.jobLoc}>{job.location}</Text>
                             </Text>
                             <Text style={styles.jobCompany} className="font-sans">
@@ -280,7 +270,7 @@ export default function AssistantScreen() {
                         <View style={styles.jobCardRow}>
                           <Image source={{ uri: candidate.image }} style={styles.candidateAvatar} />
                           <View style={styles.jobInfo}>
-                            <Text numberOfLines={1} style={styles.jobTitle} className="font-sans">
+                            <Text numberOfLines={2} style={styles.jobTitle} className="font-sans">
                               {candidate.name} <Text style={styles.jobDot}>·</Text> <Text style={styles.jobLoc}>{candidate.matchScore}% match</Text>
                             </Text>
                             <Text style={styles.jobCompany} className="font-sans">
@@ -316,31 +306,13 @@ export default function AssistantScreen() {
           )}
         </ScrollView>
 
-        {/* Suggestion Chips */}
-        {messages.length === 1 && !isTyping && (
-          <View style={styles.suggestionsContainer}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => handleSuggestionPress(
-                isHirer ? 'Show me candidates that match my open roles' : 'What are available jobs out there that suits me'
-              )}
-              style={styles.suggestionChip}
-            >
-              <Sparkles size={13} color="#6671E4" style={{ marginRight: 6 }} />
-              <Text style={styles.suggestionText} className="font-sans">
-                {isHirer ? 'Find candidates for me' : 'Available jobs for me'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Bottom Input Area */}
         <View style={[styles.inputWrapper, { paddingBottom: keyboardVisible ? 8 : (insets.bottom > 0 ? insets.bottom : 16) }]}>
           <View style={styles.inputContainer}>
             <TextInput
               style={[styles.input, { outline: 'none' } as any]}
               placeholder={isHirer ? 'Ask about candidates, hiring, or postings' : 'Ask about companies, pay, or jobs'}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={Colors.textMuted}
               value={inputText}
               onChangeText={setInputText}
               onSubmitEditing={handleSend}
@@ -351,7 +323,7 @@ export default function AssistantScreen() {
               activeOpacity={0.8}
               style={styles.sendButton}
             >
-              <Send size={16} color="#FFFFFF" />
+              <Send size={18} color={Colors.white} fill={Colors.white} />
             </TouchableOpacity>
           </View>
         </View>
@@ -369,21 +341,17 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: '#E5E6F2',
-    backgroundColor: '#FFFFFF',
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#1A1A1A',
+    fontSize: 18,
+    fontWeight: '500',
+    color: Colors.textBody,
   },
   headerSpacer: {
     width: 40,
@@ -410,36 +378,28 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   bubble: {
-    borderRadius: 18,
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    maxWidth: '82%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    maxWidth: '86%',
   },
   userBubble: {
-    backgroundColor: '#6671E4',
-    borderTopRightRadius: 4,
+    // Approved design: orange user bubble. White text on #FC5E24 is 3.10:1 (see docs/mobile-design-brief.md).
+    backgroundColor: Colors.accent500,
   },
   aiBubble: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+    backgroundColor: Colors.bgCard,
   },
   bubbleText: {
-    fontSize: 14.5,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 21,
   },
   userText: {
     color: '#FFFFFF',
     fontWeight: '400',
   },
   aiText: {
-    color: '#1A1A1A',
+    color: Colors.textBody,
     fontWeight: '400',
   },
   jobsContainer: {
@@ -450,12 +410,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: Colors.borderDefault,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.02,
-    shadowRadius: 2,
   },
   jobCardRow: {
     flexDirection: 'row',
@@ -475,8 +431,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   jobTitle: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '500',
     color: '#1A1A1A',
   },
   jobDot: {
@@ -488,12 +444,12 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   jobCompany: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#8A8D9F',
     marginTop: 1,
   },
   jobDesc: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#8A8D9F',
     marginTop: 6,
     lineHeight: 15,
@@ -507,46 +463,46 @@ const styles = StyleSheet.create({
   suggestionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: Colors.primaryTransparent,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#E0E7FF',
+    borderColor: Colors.purple100,
   },
   suggestionText: {
     fontSize: 12,
-    color: '#6671E4',
+    color: Colors.primary,
     fontWeight: '500',
   },
   inputWrapper: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: Colors.bgScreen,
     paddingHorizontal: 16,
     paddingTop: 4,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F0F3',
-    borderRadius: 25,
-    paddingLeft: 12,
+    backgroundColor: 'transparent',
+    borderRadius: 30,
+    paddingLeft: 16,
     paddingRight: 6,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: Colors.borderDefault,
   },
   input: {
     flex: 1,
-    height: 38,
+    height: 40,
     fontSize: 14,
-    color: '#1A1A1A',
+    color: Colors.textBody,
     paddingHorizontal: 4,
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#6671E4',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },

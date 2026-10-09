@@ -6,7 +6,7 @@ import {
   Plus, Keyboard, Camera, Mic, Image as ImageIcon, BarChart3, ClipboardList, HelpCircle, Trash2,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { authStore } from '../../constants/authStore';
 import { getChannel, getChannelPosts, createChannelPost } from '../../lib/api';
 
@@ -397,7 +397,6 @@ export default function ChannelFeedScreen() {
             paddingVertical: 4,
             minWidth: 160,
             zIndex: 99,
-            ...Shadow.searchBar,
             borderWidth: 1,
             borderColor: Colors.divider,
           }}
@@ -445,7 +444,7 @@ export default function ChannelFeedScreen() {
       >
         {/* Date / System Indicators */}
         <View style={{ alignItems: 'center', marginVertical: 12 }}>
-          <View style={{ backgroundColor: '#EEF2FF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}>
+          <View style={{ backgroundColor: Colors.primaryTransparent, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}>
             <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '500' }} className="font-sans">
               9 Feb 2025
             </Text>
@@ -463,7 +462,6 @@ export default function ChannelFeedScreen() {
                 backgroundColor: Colors.white,
                 borderRadius: 16,
                 padding: 16,
-                ...Shadow.searchBar,
                 borderWidth: 1,
                 borderColor: Colors.divider,
               }}
@@ -557,7 +555,7 @@ export default function ChannelFeedScreen() {
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: '#EEF2FF',
+                    backgroundColor: Colors.primaryTransparent,
                     borderRadius: 20,
                     paddingHorizontal: 12,
                     paddingVertical: 6,
@@ -738,7 +736,6 @@ export default function ChannelFeedScreen() {
             paddingVertical: 10,
             paddingHorizontal: 24,
             zIndex: 999,
-            ...Shadow.searchBar,
           }}
         >
           <Text style={{ color: Colors.white, fontSize: 12, fontWeight: '600' }} className="font-sans">
@@ -780,7 +777,7 @@ export default function ChannelFeedScreen() {
                 style={{
                   flexDirection: 'row',
                   justifyContent: 'center',
-                  backgroundColor: '#EEF2FF',
+                  backgroundColor: Colors.primaryTransparent,
                   paddingVertical: 10,
                   borderTopLeftRadius: 20,
                   borderTopRightRadius: 20,
@@ -826,7 +823,7 @@ export default function ChannelFeedScreen() {
                 {/* Admins can share response tips banner */}
                 <View
                   style={{
-                    backgroundColor: '#EEF2FF',
+                    backgroundColor: Colors.primaryTransparent,
                     borderRadius: 10,
                     paddingVertical: 10,
                     paddingHorizontal: 16,

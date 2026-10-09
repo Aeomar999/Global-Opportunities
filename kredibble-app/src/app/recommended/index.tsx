@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Sparkles } from 'lucide-react-native';
@@ -26,7 +27,7 @@ export default function RecommendedScreen() {
         title: j.title,
         location: j.location || 'Remote',
         company: j.company || 'Company',
-        logoColor: j.logoColor || '#6671E4',
+        logoColor: j.logoColor || Colors.primary,
         initial: (j.company || 'J').charAt(0).toUpperCase(),
         description: j.description || '',
         applied: `${j.applicantsCount || 0} applied`,
@@ -79,7 +80,7 @@ export default function RecommendedScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-            <ActivityIndicator size="small" color="#6671E4" />
+            <ActivityIndicator size="small" color={Colors.primary} />
             <Text style={{ marginTop: 12, color: '#8A8D9F', fontSize: 13 }} className="font-sans">Finding tailored recommendations...</Text>
           </View>
         ) : (

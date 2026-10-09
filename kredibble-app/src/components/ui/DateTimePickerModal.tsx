@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { ChevronLeft, ChevronRight, X, Clock, Calendar } from 'lucide-react-native';
+import { Colors, Radius, Size, FontFamily } from '../../constants/design';
 
 interface DateTimePickerModalProps {
   isVisible: boolean;
@@ -173,11 +174,11 @@ export function DateTimePickerModal({
           {/* Header */}
           <View style={styles.header}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Calendar size={18} color="#6671E4" />
+              <Calendar size={18} color={Colors.primary} />
               <Text style={styles.headerTitle}>Select Date & Time</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <X size={18} color="#8A8D9F" />
+              <X size={18} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -186,11 +187,11 @@ export function DateTimePickerModal({
             <View style={styles.calendarContainer}>
               <View style={styles.monthHeader}>
                 <TouchableOpacity onPress={handlePrevMonth} style={styles.monthNavBtn}>
-                  <ChevronLeft size={16} color="#5E6175" />
+                  <ChevronLeft size={16} color={Colors.textMuted} />
                 </TouchableOpacity>
                 <Text style={styles.monthLabel}>{MONTHS[viewMonth]} {viewYear}</Text>
                 <TouchableOpacity onPress={handleNextMonth} style={styles.monthNavBtn}>
-                  <ChevronRight size={16} color="#5E6175" />
+                  <ChevronRight size={16} color={Colors.textMuted} />
                 </TouchableOpacity>
               </View>
 
@@ -212,7 +213,7 @@ export function DateTimePickerModal({
             {/* Time Picker Component */}
             <View style={styles.timeContainer}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                <Clock size={16} color="#6671E4" />
+                <Clock size={16} color={Colors.primary} />
                 <Text style={styles.sectionLabel}>Select Time</Text>
               </View>
               
@@ -296,16 +297,16 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.card + 8, // sheet corner
     maxHeight: Dimensions.get('window').height * 0.85,
-    shadowColor: '#000000',
+    shadowColor: Colors.black,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#E5E6F2',
+    borderColor: Colors.borderDefault,
     overflow: 'hidden',
   },
   header: {
@@ -315,13 +316,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 18,
     borderBottomWidth: 1,
-    borderColor: '#F0F0F3',
+    borderColor: Colors.borderDefault,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1A1A1A',
-    fontFamily: 'Outfit_700Bold',
+    color: Colors.textBody,
+    fontFamily: FontFamily.heading, // was Outfit_700Bold (never loaded); Plus Jakarta Sans bold via src/lib/typography.tsx
   },
   closeBtn: {
     padding: 4,
@@ -329,7 +330,7 @@ const styles = StyleSheet.create({
   calendarContainer: {
     padding: 20,
     borderBottomWidth: 1,
-    borderColor: '#F0F0F3',
+    borderColor: Colors.borderDefault,
   },
   monthHeader: {
     flexDirection: 'row',
@@ -342,14 +343,14 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E6F2',
+    borderColor: Colors.borderDefault,
     justifyContent: 'center',
     alignItems: 'center',
   },
   monthLabel: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: Colors.textBody,
   },
   daysOfWeekContainer: {
     flexDirection: 'row',
@@ -360,7 +361,7 @@ const styles = StyleSheet.create({
     width: 36,
     textAlign: 'center',
     fontSize: 12,
-    color: '#8A8D9F',
+    color: Colors.textMuted,
     fontWeight: '600',
   },
   calendarGrid: {
@@ -373,19 +374,19 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: Radius.control,
     marginVertical: 2,
   },
   selectedCell: {
-    backgroundColor: '#6671E4',
+    backgroundColor: Colors.primary,
   },
   calendarCellText: {
     fontSize: 13,
-    color: '#1A1A1A',
+    color: Colors.textBody,
     fontWeight: '500',
   },
   selectedCellText: {
-    color: '#FFFFFF',
+    color: Colors.white,
     fontWeight: '700',
   },
   timeContainer: {
@@ -394,7 +395,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: Colors.textBody,
   },
   pickerRow: {
     flexDirection: 'row',
@@ -410,7 +411,7 @@ const styles = StyleSheet.create({
   selectLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#8A8D9F',
+    color: Colors.textMuted,
     marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -418,63 +419,64 @@ const styles = StyleSheet.create({
   selectScroll: {
     height: 120,
     borderWidth: 1,
-    borderColor: '#E5E6F2',
-    borderRadius: 12,
-    backgroundColor: '#F7F7F9',
+    borderColor: Colors.borderDefault,
+    borderRadius: Radius.control,
+    backgroundColor: Colors.bgAlt,
   },
   selectOption: {
     paddingVertical: 10,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderColor: '#E5E6F2',
+    borderColor: Colors.borderDefault,
   },
   selectedOptionActive: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: Colors.primaryTransparent,
   },
   selectOptionText: {
     fontSize: 13,
-    color: '#5E6175',
+    color: Colors.textMuted,
     fontWeight: '500',
   },
   selectOptionTextActive: {
-    color: '#6671E4',
+    color: Colors.primary,
     fontWeight: '700',
   },
   ampmGroup: {
     gap: 8,
   },
   ampmBtn: {
-    height: 56,
-    borderRadius: 12,
+    height: Size.controlHeight,
+    borderRadius: Radius.control,
     borderWidth: 1,
-    borderColor: '#E5E6F2',
+    borderColor: Colors.borderDefault,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F7F7F9',
+    backgroundColor: Colors.bgAlt,
   },
   ampmBtnActive: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#6671E4',
+    backgroundColor: Colors.primaryTransparent,
+    borderColor: Colors.primary,
   },
   ampmText: {
     fontSize: 13,
-    color: '#5E6175',
+    color: Colors.textMuted,
     fontWeight: '600',
   },
   ampmTextActive: {
-    color: '#6671E4',
+    color: Colors.primary,
     fontWeight: '700',
   },
   confirmBtn: {
-    backgroundColor: '#6671E4',
-    paddingVertical: 16,
+    backgroundColor: Colors.primary,
+    height: Size.controlHeight,
+    justifyContent: 'center',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderColor: '#EEF2FF',
+    borderColor: Colors.primaryTransparent,
   },
   confirmBtnText: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: Colors.white,
   },
 });

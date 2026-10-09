@@ -13,7 +13,7 @@ export default function OrderConfirmationScreen() {
       <View style={styles.container}>
         {/* Verification Checkmark Graphic */}
         <View style={styles.checkmarkCircle}>
-          <ShieldCheck size={64} color="#6671E4" fill="rgba(102, 113, 228, 0.15)" />
+          <ShieldCheck size={64} color={Colors.primary} fill="rgba(121, 46, 164, 0.15)" />
         </View>
 
         {/* Confirmation Messages */}
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: 'rgba(102, 113, 228, 0.1)',
+    backgroundColor: 'rgba(121, 46, 164, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,

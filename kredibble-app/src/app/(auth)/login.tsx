@@ -1,4 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
+import { Colors, Radius, Size } from '../../constants/design';
+import { GoogleLogo } from '../../components/ui/GoogleLogo';
 import {
   View,
   Text,
@@ -34,7 +36,7 @@ const SuccessBadge = () => (
     <G clipPath="url(#clip_badge)">
       <Path
         d="M44.0435 3.80619C42.8659 2.60105 41.4593 1.64345 39.9063 0.989664C38.3533 0.335875 36.6854 -0.000915527 35.0004 -0.000915527C33.3154 -0.000915527 31.6474 0.335875 30.0945 0.989664C28.5415 1.64345 27.1349 2.60105 25.9573 3.80619L23.236 6.59744L19.3423 6.54931C17.6568 6.52937 15.9843 6.84663 14.4233 7.48245C12.8622 8.11827 11.444 9.05981 10.2521 10.2517C9.06026 11.4436 8.11872 12.8618 7.4829 14.4228C6.84708 15.9839 6.52981 17.6563 6.54976 19.3418L6.59351 23.2356L3.81101 25.9568C2.60587 27.1344 1.64828 28.5411 0.994486 30.094C0.340697 31.647 0.00390625 33.315 0.00390625 34.9999C0.00390625 36.6849 0.340697 38.3529 0.994486 39.9059C1.64828 41.4588 2.60587 42.8654 3.81101 44.0431L6.59789 46.7643L6.54976 50.6581C6.52981 52.3435 6.84708 54.016 7.4829 55.577C8.11872 57.1381 9.06026 58.5563 10.2521 59.7482C11.444 60.9401 12.8622 61.8816 14.4233 62.5174C15.9843 63.1532 17.6568 63.4705 19.3423 63.4506L23.236 63.4068L25.9573 66.1893C27.1349 67.3944 28.5415 68.3521 30.0945 69.0058C31.6474 69.6596 33.3154 69.9964 35.0004 69.9964C36.6854 69.9964 38.3533 69.6596 39.9063 69.0058C41.4593 68.3521 42.8659 67.3944 44.0435 66.1893L46.7648 63.4024L50.6585 63.4506C52.344 63.4705 54.0164 63.1532 55.5775 62.5174C57.1386 61.8816 58.5567 60.9401 59.7486 59.7482C60.9405 58.5563 61.8821 57.1381 62.5179 55.577C63.1537 54.016 63.471 52.3435 63.451 50.6581L63.4073 46.7643L66.1898 44.0431C67.3949 42.8654 68.3525 41.4588 69.0063 39.9059C69.6601 38.3529 69.9969 36.6849 69.9969 34.9999C69.9969 33.315 69.6601 31.647 69.0063 30.094C68.3525 28.5411 67.3949 27.1344 66.1898 25.9568L63.4029 23.2356L63.451 19.3418C63.471 17.6563 63.1537 15.9839 62.5179 14.4228C61.8821 12.8618 60.9405 11.4436 59.7486 10.2517C58.5567 9.05981 57.1386 8.11827 55.5775 7.48245C54.0164 6.84663 52.344 6.52937 50.6585 6.54931L46.7648 6.59306L44.0435 3.80619ZM45.2991 29.9862L32.1741 43.1112C31.9709 43.3149 31.7295 43.4765 31.4638 43.5868C31.198 43.6971 30.9131 43.7538 30.6254 43.7538C30.3377 43.7538 30.0527 43.6971 29.787 43.5868C29.5212 43.4765 29.2798 43.3149 29.0766 43.1112L22.5141 36.5487C22.3107 36.3453 22.1494 36.1039 22.0393 35.8381C21.9293 35.5724 21.8726 35.2876 21.8726 34.9999C21.8726 34.7123 21.9293 34.4275 22.0393 34.1618C22.1494 33.896 22.3107 33.6546 22.5141 33.4512C22.7175 33.2478 22.959 33.0865 23.2247 32.9764C23.4904 32.8663 23.7753 32.8097 24.0629 32.8097C24.3505 32.8097 24.6353 32.8663 24.9011 32.9764C25.1668 33.0865 25.4083 33.2478 25.6116 33.4512L30.6254 38.4693L42.2016 26.8887C42.6124 26.4779 43.1695 26.2472 43.7504 26.2472C44.3313 26.2472 44.8884 26.4779 45.2991 26.8887C45.7099 27.2994 45.9406 27.8565 45.9406 28.4374C45.9406 29.0183 45.7099 29.5754 45.2991 29.9862Z"
-        fill="#6671E4"
+        fill={Colors.primary}
       />
     </G>
     <Defs>
@@ -217,7 +219,7 @@ export default function LoginScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
           scrollEnabled={!showForgotSheet}
         >
@@ -227,7 +229,7 @@ export default function LoginScreen() {
           </View>
 
           <Text
-            style={{ fontSize: 24, color: '#6671E4', fontWeight: 'bold', fontStyle: 'italic', marginBottom: 4 }}
+            style={{ fontSize: 24, color: Colors.primary, fontWeight: 'bold', fontStyle: 'italic', marginBottom: 4 }}
             className="font-sans"
           >
             Welcome Back
@@ -250,18 +252,13 @@ export default function LoginScreen() {
                 alignItems: 'center',
                 backgroundColor: role === 'seeker' ? '#FFFFFF' : 'transparent',
                 borderRadius: 8,
-                shadowColor: '#000000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: role === 'seeker' ? 0.1 : 0,
-                shadowRadius: 2,
-                elevation: role === 'seeker' ? 2 : 0,
               }}
             >
               <Text
                 style={{
                   fontSize: 13,
                   fontWeight: '600',
-                  color: role === 'seeker' ? '#6671E4' : '#8A8D9F',
+                  color: role === 'seeker' ? Colors.primary : '#8A8D9F',
                 }}
                 className="font-sans"
               >
@@ -277,18 +274,15 @@ export default function LoginScreen() {
                 alignItems: 'center',
                 backgroundColor: role === 'hirer' ? '#FFFFFF' : 'transparent',
                 borderRadius: 8,
-                shadowColor: '#000000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: role === 'hirer' ? 0.1 : 0,
-                shadowRadius: 2,
-                elevation: role === 'hirer' ? 2 : 0,
+
+
               }}
             >
               <Text
                 style={{
                   fontSize: 13,
                   fontWeight: '600',
-                  color: role === 'hirer' ? '#6671E4' : '#8A8D9F',
+                  color: role === 'hirer' ? Colors.primary : '#8A8D9F',
                 }}
                 className="font-sans"
               >
@@ -346,9 +340,9 @@ export default function LoginScreen() {
             >
               <View style={{
                 width: 16, height: 16, borderWidth: 1,
-                borderColor: rememberMe ? '#6671E4' : '#C4C4C4',
+                borderColor: rememberMe ? Colors.primary : '#C4C4C4',
                 borderRadius: 4,
-                backgroundColor: rememberMe ? '#6671E4' : 'transparent',
+                backgroundColor: rememberMe ? Colors.primary : 'transparent',
                 justifyContent: 'center', alignItems: 'center', marginRight: 8,
               }}>
                 {rememberMe && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
@@ -359,7 +353,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity onPress={openForgotSheet}>
-              <Text style={{ fontSize: 13, color: '#6671E4', textDecorationLine: 'underline' }} className="font-sans">
+              <Text style={{ fontSize: 13, color: Colors.primary, textDecorationLine: 'underline' }} className="font-sans">
                 Forgot password?
               </Text>
             </TouchableOpacity>
@@ -376,10 +370,9 @@ export default function LoginScreen() {
             disabled={!isLoginActive}
             onPress={handleLogin}
             style={{
-              height: 48, backgroundColor: isLoginActive ? '#6671E4' : '#C5C9F0', borderRadius: 8,
+              height: Size.controlHeight, backgroundColor: isLoginActive ? Colors.primary : Colors.primary10, borderRadius: Radius.control,
               justifyContent: 'center', alignItems: 'center', marginBottom: 18,
-              shadowColor: '#6671E4', shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
+
             }}
           >
             <Text style={{ fontSize: 15, color: '#FFFFFF', fontWeight: 'bold' }} className="font-sans">
@@ -389,42 +382,41 @@ export default function LoginScreen() {
 
           {/* OR Divider */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
-            <View style={{ flex: 1, height: 1, backgroundColor: '#EBEBEE' }} />
-            <Text style={{ marginHorizontal: 16, fontSize: 13, color: '#000000', fontWeight: 'bold', fontStyle: 'italic' }} className="font-sans">
+            <View style={{ flex: 1, height: 1, backgroundColor: Colors.divider }} />
+            <Text style={{ marginHorizontal: 16, fontSize: 13, color: Colors.textBody, fontWeight: 'bold', fontStyle: 'italic' }} className="font-sans">
               OR
             </Text>
-            <View style={{ flex: 1, height: 1, backgroundColor: '#EBEBEE' }} />
+            <View style={{ flex: 1, height: 1, backgroundColor: Colors.divider }} />
           </View>
 
           {/* Google Login */}
-          <TouchableOpacity style={{ height: 48, backgroundColor: '#EBEBEE', borderRadius: 8, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
-            <Image
-              source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/120px-Google_%22G%22_logo.svg.png' }}
-              style={{ width: 18, height: 18, marginRight: 12 }}
-            />
-            <Text style={{ fontSize: 14, color: '#6671E4', fontWeight: 'bold' }} className="font-sans">
+          <TouchableOpacity style={{ height: Size.controlHeight, backgroundColor: Colors.primary10, borderRadius: Radius.control, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ marginRight: 12 }}>
+              <GoogleLogo size={20} />
+            </View>
+            <Text style={{ fontSize: 14, color: Colors.primary, fontWeight: 'bold' }} className="font-sans">
               Login with google
             </Text>
           </TouchableOpacity>
 
           {/* Apple Login */}
-          <TouchableOpacity style={{ height: 48, backgroundColor: '#EBEBEE', borderRadius: 8, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 14 }}>
+          <TouchableOpacity style={{ height: Size.controlHeight, backgroundColor: Colors.primary10, borderRadius: Radius.control, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 14 }}>
             <Image
               source={{ uri: 'https://cdn-icons-png.flaticon.com/512/0/747.png' }}
-              style={{ width: 18, height: 18, marginRight: 12, tintColor: '#000000' }}
+              style={{ width: 18, height: 18, marginRight: 12, tintColor: Colors.black }}
             />
-            <Text style={{ fontSize: 14, color: '#6671E4', fontWeight: 'bold' }} className="font-sans">
+            <Text style={{ fontSize: 14, color: Colors.primary, fontWeight: 'bold' }} className="font-sans">
               Login with Apple
             </Text>
           </TouchableOpacity>
 
           {/* Sign Up Footer */}
           <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 }}>
-            <Text style={{ fontSize: 13, color: '#8A8D9F' }} className="font-sans">
+            <Text style={{ fontSize: 13, color: Colors.textMuted }} className="font-sans">
               Don&apos;t have an account?{' '}
             </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
-              <Text style={{ fontSize: 13, color: '#6671E4', fontWeight: 'bold' }} className="font-sans">
+              <Text style={{ fontSize: 13, color: Colors.primary, fontWeight: 'bold' }} className="font-sans">
                 Sign up
               </Text>
             </TouchableOpacity>
@@ -441,7 +433,7 @@ export default function LoginScreen() {
             <SuccessBadge />
           </View>
 
-          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#6671E4', textAlign: 'center', marginBottom: 10 }} className="font-sans">
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: Colors.primary, textAlign: 'center', marginBottom: 10 }} className="font-sans">
             Password Reset Successful
           </Text>
           <Text style={{ fontSize: 14, color: '#8A8D9F', textAlign: 'center', lineHeight: 22, marginBottom: 40 }} className="font-sans">
@@ -450,7 +442,7 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             onPress={closeForgotSheet}
-            style={{ width: '100%', height: 52, borderRadius: 12, backgroundColor: '#6671E4', justifyContent: 'center', alignItems: 'center' }}
+            style={{ width: '100%', height: 52, borderRadius: 12, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' }}
           >
             <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">Continue to Login</Text>
           </TouchableOpacity>
@@ -494,7 +486,7 @@ export default function LoginScreen() {
 
             {forgotStep === 'email' ? (
               <>
-                <Text style={{ fontSize: 15, fontWeight: 'bold', fontStyle: 'italic', color: '#6671E4', marginBottom: 8 }} className="font-sans">
+                <Text style={{ fontSize: 15, fontWeight: 'bold', fontStyle: 'italic', color: Colors.primary, marginBottom: 8 }} className="font-sans">
                   Forgot Password?
                 </Text>
 
@@ -528,7 +520,7 @@ export default function LoginScreen() {
                 <TouchableOpacity
                   disabled={!isForgotValid}
                   onPress={handleSendCode}
-                  style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isForgotValid ? '#6671E4' : '#C5C9F0' }}
+                  style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isForgotValid ? Colors.primary : Colors.primary10 }}
                 >
                   <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">
                     {isForgotSubmitting ? 'Sending...' : 'Send'}
@@ -537,7 +529,7 @@ export default function LoginScreen() {
               </>
             ) : forgotStep === 'verify' ? (
               <>
-                <Text style={{ fontSize: 15, fontWeight: 'bold', fontStyle: 'italic', color: '#6671E4', marginBottom: 8 }} className="font-sans">
+                <Text style={{ fontSize: 15, fontWeight: 'bold', fontStyle: 'italic', color: Colors.primary, marginBottom: 8 }} className="font-sans">
                   Enter Verification code
                 </Text>
 
@@ -561,7 +553,7 @@ export default function LoginScreen() {
                         width: 44,
                         height: 52,
                         borderWidth: 1,
-                        borderColor: val ? '#6671E4' : '#EBEBEE',
+                        borderColor: val ? Colors.primary : '#EBEBEE',
                         borderRadius: 10,
                         textAlign: 'center',
                         fontSize: 20,
@@ -587,7 +579,7 @@ export default function LoginScreen() {
                     disabled={timeLeft > 0 || isForgotSubmitting}
                     onPress={handleResendCode}
                   >
-                    <Text style={{ fontSize: 13, color: timeLeft > 0 || isForgotSubmitting ? '#8A8D9F' : '#6671E4', fontWeight: 'bold' }} className="font-sans">
+                    <Text style={{ fontSize: 13, color: timeLeft > 0 || isForgotSubmitting ? '#8A8D9F' : Colors.primary, fontWeight: 'bold' }} className="font-sans">
                       {timeLeft > 0 ? `(${countdownLabel})` : isForgotSubmitting ? '(Sending...)' : 'Resend'}
                     </Text>
                   </TouchableOpacity>
@@ -599,14 +591,14 @@ export default function LoginScreen() {
                     setForgotError('');
                     setForgotStep('reset');
                   }}
-                  style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isVerifyActive ? '#6671E4' : '#C5C9F0' }}
+                  style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isVerifyActive ? Colors.primary : Colors.primary10 }}
                 >
                   <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">Verify</Text>
                 </TouchableOpacity>
               </>
             ) : forgotStep === 'reset' ? (
               <>
-                <Text style={{ fontSize: 15, fontWeight: 'bold', fontStyle: 'italic', color: '#6671E4', marginBottom: 8 }} className="font-sans">
+                <Text style={{ fontSize: 15, fontWeight: 'bold', fontStyle: 'italic', color: Colors.primary, marginBottom: 8 }} className="font-sans">
                   Create New Password
                 </Text>
 
@@ -675,7 +667,7 @@ export default function LoginScreen() {
                 <TouchableOpacity
                   disabled={!isResetActive}
                   onPress={handleResetPassword}
-                  style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isResetActive ? '#6671E4' : '#C5C9F0' }}
+                  style={{ height: 52, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: isResetActive ? Colors.primary : Colors.primary10 }}
                 >
                   <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">
                     {isForgotSubmitting ? 'Resetting...' : 'Reset password'}

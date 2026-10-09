@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, Image, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -30,7 +31,7 @@ export default function MyChannelsScreen() {
           activeOpacity={0.8}
           style={styles.createBanner}
         >
-          <Plus size={18} color="#6671E4" strokeWidth={3} />
+          <Plus size={18} color={Colors.primary} strokeWidth={3} />
           <Text style={styles.createBannerText} className="font-sans">Create a new channel in Community</Text>
         </TouchableOpacity>
 
@@ -78,9 +79,9 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
   createBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#EEF2FF', borderRadius: 12, paddingVertical: 14, marginBottom: 20,
+    backgroundColor: Colors.primaryTransparent, borderRadius: 12, paddingVertical: 14, marginBottom: 20,
   },
-  createBannerText: { fontSize: 13, color: '#6671E4', fontWeight: 'bold' },
+  createBannerText: { fontSize: 13, color: Colors.primary, fontWeight: 'bold' },
   sectionHeader: { fontSize: 13, color: '#8A8D9F', fontWeight: '500', marginBottom: 12 },
   emptyState: { paddingVertical: 40, alignItems: 'center' },
   emptyText: { fontSize: 13, color: '#8A8D9F' },

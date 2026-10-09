@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Modal, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -315,7 +316,7 @@ export default function EditProfileScreen() {
               style={styles.addButtonInline}
               activeOpacity={0.7}
             >
-              <Plus size={16} color="#6671E4" />
+              <Plus size={16} color={Colors.primary} />
               <Text style={styles.addButtonInlineText} className="font-sans">Add Skill</Text>
             </TouchableOpacity>
           </View>
@@ -410,7 +411,7 @@ export default function EditProfileScreen() {
                 onPress={() => addExperienceBullet(idx)}
                 activeOpacity={0.7}
               >
-                <Plus size={14} color="#6671E4" />
+                <Plus size={14} color={Colors.primary} />
                 <Text style={styles.addBulletText} className="font-sans">Add Bullet Item</Text>
               </TouchableOpacity>
             </View>
@@ -515,7 +516,7 @@ export default function EditProfileScreen() {
                 onPress={() => addProjectBullet(idx)}
                 activeOpacity={0.7}
               >
-                <Plus size={14} color="#6671E4" />
+                <Plus size={14} color={Colors.primary} />
                 <Text style={styles.addBulletText} className="font-sans">Add Project Detail</Text>
               </TouchableOpacity>
             </View>
@@ -569,7 +570,7 @@ export default function EditProfileScreen() {
               style={styles.addButtonInline}
               activeOpacity={0.7}
             >
-              <Plus size={16} color="#6671E4" />
+              <Plus size={16} color={Colors.primary} />
               <Text style={styles.addButtonInlineText} className="font-sans">Add Tool</Text>
             </TouchableOpacity>
           </View>
@@ -759,7 +760,7 @@ const styles = StyleSheet.create({
   addButtonInlineText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6671E4',
+    color: Colors.primary,
   },
   skillLabel: {
     fontSize: 12,
@@ -844,13 +845,13 @@ const styles = StyleSheet.create({
   addBulletText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6671E4',
+    color: Colors.primary,
   },
   addNewItemButton: {
     height: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#6671E4',
+    borderColor: Colors.primary,
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
@@ -860,20 +861,15 @@ const styles = StyleSheet.create({
   addNewItemText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#6671E4',
+    color: Colors.primary,
   },
   saveButton: {
     height: 52,
-    backgroundColor: '#6671E4',
+    backgroundColor: Colors.primary,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
-    shadowColor: '#6671E4',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
   },
   saveButtonText: {
     fontSize: 15,
@@ -919,7 +915,7 @@ const styles = StyleSheet.create({
   },
   modalItemCheck: {
     fontSize: 12,
-    color: '#6671E4',
+    color: Colors.primary,
     fontWeight: '600',
   },
 });

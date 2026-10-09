@@ -6,6 +6,7 @@ import { Settings, Bookmark, Target, Bell, Shield, LogOut, ChevronRight, Check }
 import { profileStore } from '../../constants/mockProfile';
 import { authStore } from '../../constants/authStore';
 import { getMe } from '../../lib/api';
+import { AmbassadorCta } from '../../components/ui/AmbassadorCta';
 
 // Reuse LogoSVG from index
 const LogoSVG = () => (
@@ -95,6 +96,8 @@ export default function ProfileScreen() {
               <Text className="font-sans text-[#8A8D9F]">Loading profile...</Text>
             </View>
           )}
+
+          <AmbassadorCta />
 
           {/* Quick Info Menu Card */}
           <View style={styles.menuCard}>
@@ -272,6 +275,8 @@ export default function ProfileScreen() {
           <Text style={styles.userName} className="font-sans">{authUser?.name || 'User'}</Text>
           <Text style={styles.userProfession} className="font-sans">{(authUser?.seeker as any)?.profession || 'Opportunity Seeker'}</Text>
         </View>
+
+        <AmbassadorCta />
 
         {/* Menu Card 1 */}
         <View style={styles.menuCard}>
@@ -460,11 +465,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 8,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
   },
   menuItem: {
     flexDirection: 'row',

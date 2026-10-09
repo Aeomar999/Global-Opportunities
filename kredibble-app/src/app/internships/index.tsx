@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { Colors } from '../../constants/design';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, SlidersHorizontal, Search, Bookmark, Sparkles } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -70,11 +71,6 @@ export const InternshipCard = ({ item, onPress }: { item: Internship; onPress: (
         borderRadius: 16,
         padding: 16,
         marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        elevation: 3,
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
@@ -101,8 +97,8 @@ export const InternshipCard = ({ item, onPress }: { item: Internship; onPress: (
           onPress={handleToggleSave}
           style={{
             width: 34, height: 34, borderRadius: 17,
-            borderWidth: 1, borderColor: isSaved ? '#6671E4' : '#E5E6F2',
-            backgroundColor: isSaved ? '#6671E4' : 'transparent',
+            borderWidth: 1, borderColor: isSaved ? Colors.primary : '#E5E6F2',
+            backgroundColor: isSaved ? Colors.primary : 'transparent',
             justifyContent: 'center', alignItems: 'center',
           }}
         >
@@ -202,8 +198,6 @@ export default function InternshipsScreen() {
             flexDirection: 'row', alignItems: 'center',
             backgroundColor: '#FFFFFF', borderRadius: 15,
             paddingHorizontal: 16, height: 50, marginBottom: 20,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
           }}
         >
           <TouchableOpacity
@@ -219,11 +213,11 @@ export default function InternshipsScreen() {
 
           <TouchableOpacity onPress={() => router.push('/internships/filter' as any)}>
             <View>
-              <SlidersHorizontal size={18} color="#6671E4" />
+              <SlidersHorizontal size={18} color={Colors.primary} />
               {filterCount > 0 && (
                 <View style={{
                   position: 'absolute', top: -5, right: -5,
-                  backgroundColor: '#6671E4', borderRadius: 9999,
+                  backgroundColor: Colors.primary, borderRadius: 9999,
                   width: 14, height: 14, justifyContent: 'center', alignItems: 'center',
                 }}>
                   <Text style={{ color: '#FFF', fontSize: 8, fontWeight: 'bold' }}>{filterCount}</Text>

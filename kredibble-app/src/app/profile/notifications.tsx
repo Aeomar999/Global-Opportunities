@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -26,7 +27,7 @@ export default function ManageNotificationsScreen() {
       <Switch
         value={value}
         onValueChange={() => handleToggle(key)}
-        trackColor={{ false: '#E5E6F2', true: '#6671E4' }}
+        trackColor={{ false: '#E5E6F2', true: Colors.primary }}
         thumbColor="#FFFFFF"
         ios_backgroundColor="#E5E6F2"
       />

@@ -3,6 +3,8 @@ import { View, Text, Image, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Colors, Radius, Size } from '../../constants/design';
+import { BrushHighlight } from '../../components/ui/BrushHighlight';
 import * as SecureStore from 'expo-secure-store';
 
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
@@ -16,11 +18,11 @@ export default function Onboarding3Screen() {
     } catch {
       // Ignore storage errors
     }
-    router.replace('/(auth)/welcome' as any);
+    router.replace('/(auth)/login' as any);
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#6671E4' }}>
+    <View style={{ flex: 1, backgroundColor: Colors.bgOnboarding }}>
       <SafeAreaView className="flex-1">
         {/* Top Header: Pagination & Skip */}
         <View className="flex-row items-center justify-between px-6 pt-4 h-[42px]">
@@ -44,12 +46,12 @@ export default function Onboarding3Screen() {
           <View 
             style={{
               position: 'absolute',
-              width: 301,
-              height: 539,
-              bottom: 0,
+              width: 520, // glow behind the photo: much wider and taller than the original 301 x 539 (soft edges run past the screen sides) ...
+              height: 760,
+              bottom: -53, // ... and its centre sits ~57 px higher (was 269 from the bottom, now 327)
             }}
           >
-            <Svg width="100%" height="100%" viewBox="0 0 301 539">
+            <Svg width="100%" height="100%" viewBox="0 0 301 539" preserveAspectRatio="none">
               <Defs>
                 <RadialGradient
                   id="glowGrad"
@@ -58,8 +60,9 @@ export default function Onboarding3Screen() {
                   rx="50%"
                   ry="50%"
                 >
-                  <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.85" />
-                  <Stop offset="45%" stopColor="#FFFFFF" stopOpacity="0.5" />
+                  <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
+                  <Stop offset="35%" stopColor="#FFFFFF" stopOpacity="0.7" />
+                  <Stop offset="70%" stopColor="#FFFFFF" stopOpacity="0.25" />
                   <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
                 </RadialGradient>
               </Defs>
@@ -79,7 +82,7 @@ export default function Onboarding3Screen() {
 
           {/* Seamless fade to hide the horizontal line */}
           <LinearGradient
-            colors={['rgba(102, 113, 228, 0)', '#6671E4']}
+            colors={['rgba(121, 46, 164, 0)', Colors.bgOnboarding]}
             style={{
               position: 'absolute',
               bottom: 78, // Sits exactly on the edge of the bottom container
@@ -96,25 +99,27 @@ export default function Onboarding3Screen() {
           className="px-6 pb-12 pt-8" 
           style={{ 
             zIndex: 10,
-            backgroundColor: '#6671E4',
+            backgroundColor: Colors.bgOnboarding,
           } as any}
         >
           {/* Typography */}
           <View className="mb-4">
             <Text 
-              className="text-white font-sans font-bold"
+              className="text-white font-heading font-extrabold"
               style={{ fontSize: 36, lineHeight: 42 }}
             >
               Get AI-Powered
             </Text>
+            <BrushHighlight>
+              <Text 
+                className="text-white font-heading font-extrabold italic"
+                style={{ fontSize: 36, lineHeight: 42 }}
+              >
+                Opportunity
+              </Text>
+            </BrushHighlight>
             <Text 
-              className="text-white font-sans font-bold italic"
-              style={{ fontSize: 36, lineHeight: 42 }}
-            >
-              Opportunity
-            </Text>
-            <Text 
-              className="text-white font-sans font-bold"
+              className="text-white font-heading font-extrabold"
               style={{ fontSize: 36, lineHeight: 42 }}
             >
               Matches
@@ -131,11 +136,11 @@ export default function Onboarding3Screen() {
           {/* Call to Action */}
           <TouchableOpacity
             onPress={handleGetStarted}
-            className="bg-white w-full items-center shadow-sm"
-            style={{ height: 47, borderRadius: 8, justifyContent: 'center' }}
+            className="bg-white w-full items-center"
+            style={{ height: Size.controlHeight, borderRadius: Radius.control, justifyContent: 'center' }}
           >
             <Text 
-              className="text-[#6671E4] font-sans font-bold"
+              className="text-primary font-sans font-bold"
               style={{ fontSize: 15 }}
             >
               Get Started

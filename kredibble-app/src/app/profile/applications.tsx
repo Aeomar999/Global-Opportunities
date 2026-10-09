@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -187,7 +188,7 @@ export default function ApplicationsStatusScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.emptyContainer}>
-            <ActivityIndicator size="large" color="#6671E4" />
+            <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={[styles.emptyText, { marginTop: 12 }]} className="font-sans">Loading applications...</Text>
           </View>
         ) : error ? (
@@ -205,7 +206,7 @@ export default function ApplicationsStatusScreen() {
           currentList.map((app) => {
             const statusStyle = getStatusStyles(app.status);
             // Deduce logo details based on company (mock setup matching other items)
-            let logoColor = '#6671E4';
+            let logoColor = Colors.primary;
             if (app.company.toLowerCase() === 'wave mobile money') logoColor = '#00BCD4';
             if (app.company.toLowerCase() === 'pinterest') logoColor = '#E60023';
             if (app.company.toLowerCase() === 'openseea') logoColor = '#2081E2';
@@ -299,7 +300,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   activeParentTab: {
-    borderBottomColor: '#6671E4',
+    borderBottomColor: Colors.primary,
   },
   parentTabText: {
     fontSize: 14,
@@ -307,7 +308,7 @@ const styles = StyleSheet.create({
     color: '#8A8D9F',
   },
   activeParentTabText: {
-    color: '#6671E4',
+    color: Colors.primary,
     fontWeight: '600',
   },
   subFiltersContainer: {
@@ -326,8 +327,8 @@ const styles = StyleSheet.create({
     borderColor: '#E5E6F2',
   },
   activeSubFilterPill: {
-    backgroundColor: '#6671E4',
-    borderColor: '#6671E4',
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   subFilterText: {
     fontSize: 12,

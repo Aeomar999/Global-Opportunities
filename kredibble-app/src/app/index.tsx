@@ -1,34 +1,28 @@
 import { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import { Image } from 'react-native';
+import LogoIntro, { LOGO_INTRO_DURATION } from '../components/ui/LogoIntro';
 
-const LogoSVG = () => (
-  <Image
-    source={require('@/assets/images/logo.png')}
-    style={{ width: 100, height: 100, borderRadius: 50 }}
-    resizeMode="contain"
-  />
-);
+// Let the finished logo rest for a moment before moving on.
+const HOLD_MS = 400;
 
 export default function SplashScreen() {
   const router = useRouter();
 
   useEffect(() => {
     const checkFirstLaunch = async () => {
+      const minimumShown = new Promise<void>(resolve => setTimeout(resolve, LOGO_INTRO_DURATION + HOLD_MS));
+      let target = '/(auth)/login';
       try {
         const hasSeenOnboarding = await SecureStore.getItemAsync('hasSeenOnboarding');
-        if (hasSeenOnboarding === 'true') {
-          router.replace('/(auth)/welcome' as any);
-        } else {
-          router.replace('/(onboarding)/1' as any);
-        }
+        if (hasSeenOnboarding !== 'true') target = '/(onboarding)/1';
       } catch {
         // Fallback to auth if storage fails
-        router.replace('/(auth)/welcome' as any);
       }
+      await minimumShown;
+      router.replace(target as any);
     };
 
     checkFirstLaunch();
@@ -37,8 +31,7 @@ export default function SplashScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#F7F7F9', justifyContent: 'center', alignItems: 'center' }}>
       <StatusBar style="dark" />
-      <LogoSVG />
-      <ActivityIndicator size="large" color="#6671E4" style={{ marginTop: 24 }} />
+      <LogoIntro />
     </View>
   );
 }

@@ -1,4 +1,4 @@
-export type NotificationType = 'applicant' | 'message' | 'channel' | 'verification' | 'system';
+export type NotificationType = 'applicant' | 'message' | 'channel' | 'verification' | 'system' | 'opportunity' | 'application' | 'event' | 'ambassador';
 
 export interface NotificationItem {
   id: string;
@@ -60,8 +60,25 @@ const initialHirerNotifications: NotificationItem[] = [
   },
 ];
 
+const initialSeekerNotifications: NotificationItem[] = [
+  { id: 's-1', type: 'opportunity', title: 'New match for you', body: 'Junior Frontend Developer at Flutterwave matches your skills.', time: '10m ago', read: false },
+  { id: 's-2', type: 'application', title: 'Application update', body: 'Your application for UX Research Intern was moved to Under review.', time: '2h ago', read: false },
+  { id: 's-3', type: 'event', title: 'Event tomorrow', body: 'Accra Tech Career Fair starts at 9:00 AM. Tap to see the details.', time: '5h ago', read: false },
+  { id: 's-4', type: 'opportunity', title: 'Grant closing soon', body: 'The Women in Tech Grant closes in 3 days. Do not miss the deadline.', time: '1d ago', read: true },
+  { id: 's-5', type: 'message', title: 'New message', body: 'A recruiter replied to your question in Product Designers Ghana.', time: '2d ago', read: true },
+  { id: 's-6', type: 'system', title: 'Welcome to Kredibble', body: 'Complete your profile to get better opportunity matches.', time: '4d ago', read: true },
+];
+
 class NotificationStateStore {
   items: NotificationItem[] = [...initialHirerNotifications];
+  private role: 'seeker' | 'hirer' = 'hirer';
+
+  /** Loads the starter list for a role (only when the role changes). */
+  init(role: 'seeker' | 'hirer') {
+    if (role === this.role) return;
+    this.role = role;
+    this.items = [...(role === 'seeker' ? initialSeekerNotifications : initialHirerNotifications)];
+  }
 
   private listeners: (() => void)[] = [];
 

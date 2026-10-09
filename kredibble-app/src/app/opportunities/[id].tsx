@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, Image, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Sparkles, Check, FileText } from 'lucide-react-native';
@@ -129,11 +130,6 @@ export default function OpportunityDetailScreen() {
             alignItems: 'center',
             borderWidth: 1,
             borderColor: '#E5E6F2',
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.04,
-            shadowRadius: 6,
-            elevation: 1,
           }}
         >
           <ChevronLeft size={20} color="#8A8D9F" />
@@ -167,7 +163,7 @@ export default function OpportunityDetailScreen() {
             </Text>
             <View style={{ flexDirection: 'row', gap: 16 }}>
               <TouchableOpacity onPress={() => router.push({ pathname: '/opportunities/create', params: { editId: opp.id } })}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#6671E4' }} className="font-sans">Edit</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: Colors.primary }} className="font-sans">Edit</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleDelete}>
                 <Text style={{ fontSize: 13, fontWeight: '600', color: '#EF4444' }} className="font-sans">Delete</Text>
@@ -179,7 +175,7 @@ export default function OpportunityDetailScreen() {
           <Text style={{ fontSize: 13, color: '#5E6175', lineHeight: 18 }} className="font-sans">
             {isDescriptionExpanded ? opp.description : `${opp.description.slice(0, 150)}...`}
             {!isDescriptionExpanded && opp.description.length > 150 && (
-              <Text onPress={() => setIsDescriptionExpanded(true)} style={{ color: '#6671E4', fontWeight: '500' }}>
+              <Text onPress={() => setIsDescriptionExpanded(true)} style={{ color: Colors.primary, fontWeight: '500' }}>
                 See More
               </Text>
             )}
@@ -212,8 +208,8 @@ export default function OpportunityDetailScreen() {
                     <Text style={{ fontSize: 13, color: '#8A8D9F' }} className="font-sans">Experience Level</Text>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                       {opp.experienceLevels.map((lvl) => (
-                        <View key={lvl} style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-                          <Text style={{ fontSize: 11, color: '#6671E4', fontWeight: '600' }} className="font-sans">{lvl}</Text>
+                        <View key={lvl} style={{ backgroundColor: Colors.primaryTransparent, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                          <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '600' }} className="font-sans">{lvl}</Text>
                         </View>
                       ))}
                     </View>
@@ -235,7 +231,7 @@ export default function OpportunityDetailScreen() {
                       width: 72,
                       height: 72,
                       borderRadius: 36,
-                      backgroundColor: '#EEF2FF',
+                      backgroundColor: Colors.primaryTransparent,
                       borderWidth: 2,
                       borderColor: '#E5E6F2',
                     }}
@@ -305,7 +301,7 @@ export default function OpportunityDetailScreen() {
                     height: 160,
                     borderRadius: 14,
                     marginBottom: 16,
-                    backgroundColor: '#EEF2FF',
+                    backgroundColor: Colors.primaryTransparent,
                   }}
                   resizeMode="cover"
                 />
@@ -426,7 +422,7 @@ export default function OpportunityDetailScreen() {
                               paddingHorizontal: 10,
                               paddingVertical: 6,
                               borderRadius: 6,
-                              backgroundColor: isActive ? '#6671E4' : '#F3F4F6',
+                              backgroundColor: isActive ? Colors.primary : '#F3F4F6',
                             }}
                           >
                             <Text style={{

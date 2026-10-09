@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, Image, ScrollView, StyleSheet, Clipboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -63,7 +64,7 @@ export default function ManageProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* User Card */}
         <View style={styles.userContainer}>
           <Image source={{ uri: user.image }} style={styles.avatar} />
@@ -239,7 +240,7 @@ export default function ManageProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F7F9',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
@@ -270,22 +271,28 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     fontSize: 14,
-    color: '#6671E4',
+    color: Colors.primary,
     fontWeight: '600',
   },
+  scroll: {
+    backgroundColor: '#F7F7F9',
+  },
   scrollContent: {
-    paddingHorizontal: 20,
     paddingBottom: 40,
   },
   userContainer: {
     alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 20,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9E8F0',
+    paddingTop: 12,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 24,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: '#EBEBEE',
     marginBottom: 12,
   },
@@ -311,21 +318,21 @@ const styles = StyleSheet.create({
   },
   userProfession: {
     fontSize: 13,
-    color: '#8A8D9F',
-    fontWeight: '400',
+    color: '#17121F',
+    fontWeight: '300',
     marginBottom: 4,
   },
   websiteLink: {
     fontSize: 13,
-    color: '#6671E4',
+    color: Colors.primary,
     fontWeight: '500',
     textDecorationLine: 'underline',
     marginBottom: 4,
   },
   locationText: {
     fontSize: 13,
-    color: '#8A8D9F',
-    fontWeight: '400',
+    color: '#17121F',
+    fontWeight: '300',
   },
   toast: {
     backgroundColor: '#333333',
@@ -333,7 +340,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     alignSelf: 'center',
-    marginBottom: 12,
+    marginTop: 12,
   },
   toastText: {
     color: '#FFFFFF',
@@ -343,15 +350,11 @@ const styles = StyleSheet.create({
   contactCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9E8F0',
+    paddingVertical: 16,
     paddingHorizontal: 12,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    marginBottom: 12,
   },
   contactColumn: {
     flex: 1,
@@ -365,8 +368,8 @@ const styles = StyleSheet.create({
   },
   contactLabel: {
     fontSize: 10,
-    color: '#8A8D9F',
-    fontWeight: '500',
+    color: '#17121F',
+    fontWeight: '300',
   },
   contactValue: {
     fontSize: 12,
@@ -380,9 +383,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   section: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
     paddingVertical: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#EBEBEE',
+    borderBottomColor: '#E9E8F0',
   },
   sectionHeader: {
     fontSize: 15,
@@ -392,13 +397,14 @@ const styles = StyleSheet.create({
   },
   subSectionHeader: {
     fontSize: 12,
-    fontWeight: '500',
-    color: '#8A8D9F',
+    color: '#17121F',
+    fontWeight: '300',
     marginBottom: 8,
   },
   bodyText: {
     fontSize: 12,
-    color: '#8A8D9F',
+    color: '#17121F',
+    fontWeight: '300',
     lineHeight: 18,
   },
   tagContainer: {
@@ -416,8 +422,8 @@ const styles = StyleSheet.create({
   },
   tagText: {
     fontSize: 11,
-    color: '#8A8D9F',
-    fontWeight: '500',
+    color: '#17121F',
+    fontWeight: '300',
   },
   experienceItem: {
     marginBottom: 16,
@@ -435,7 +441,8 @@ const styles = StyleSheet.create({
   },
   itemSubtitle: {
     fontSize: 11,
-    color: '#8A8D9F',
+    color: '#17121F',
+    fontWeight: '300',
     marginTop: 2,
     marginBottom: 8,
   },
@@ -447,13 +454,15 @@ const styles = StyleSheet.create({
   },
   bulletPoint: {
     fontSize: 12,
-    color: '#8A8D9F',
+    color: '#17121F',
+    fontWeight: '300',
     marginRight: 6,
     marginTop: -1,
   },
   bulletText: {
     fontSize: 11,
-    color: '#8A8D9F',
+    color: '#17121F',
+    fontWeight: '300',
     lineHeight: 16,
     flex: 1,
   },
