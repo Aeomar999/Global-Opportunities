@@ -428,6 +428,55 @@ export const socialPostUpdateSchema = z.object({
   }),
 });
 
+export const TESTIMONIAL_STATUS_VALUES = ['pending', 'approved', 'unpublished', 'rejected'];
+export const TESTIMONIAL_ACTION_VALUES = ['approve', 'reject', 'unpublish', 'reapprove'];
+
+export const testimonialCreateSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100).optional(),
+    author: z.string().trim().min(2, 'Author must be at least 2 characters').max(100).optional(),
+    email: z.string().trim().email('Valid email address is required').max(200),
+    comment: z.string().trim().min(5, 'Comment must be at least 5 characters').max(2000).optional(),
+    quote: z.string().trim().min(5, 'Quote must be at least 5 characters').max(2000).optional(),
+    role: z.string().trim().max(100).optional(),
+    photo: z.string().trim().url('Photo must be a valid URL').optional().or(z.literal('')),
+    status: z.enum(TESTIMONIAL_STATUS_VALUES).default('pending'),
+    submittedAt: notFutureDateSchema.optional(),
+  }).refine((data) => Boolean(data.name || data.author), {
+    message: 'name or author is required',
+    path: ['name'],
+  }).refine((data) => Boolean(data.comment || data.quote), {
+    message: 'comment or quote is required',
+    path: ['comment'],
+  }),
+});
+
+export const testimonialModerateSchema = z.object({
+  body: z.object({
+    status: z.enum(TESTIMONIAL_STATUS_VALUES).optional(),
+    action: z.enum(TESTIMONIAL_ACTION_VALUES).optional(),
+    rejectionReason: z.string().trim().max(500).optional(),
+  }).refine((data) => Boolean(data.status || data.action), {
+    message: 'Either status or action must be provided',
+    path: ['status'],
+  }),
+});
+
+export const testimonialUpdateSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(2).max(100).optional(),
+    author: z.string().trim().min(2).max(100).optional(),
+    email: z.string().trim().email().max(200).optional(),
+    comment: z.string().trim().min(5).max(2000).optional(),
+    quote: z.string().trim().min(5).max(2000).optional(),
+    role: z.string().trim().max(100).optional(),
+    photo: z.string().trim().url().optional().or(z.literal('')),
+    status: z.enum(TESTIMONIAL_STATUS_VALUES).optional(),
+    action: z.enum(TESTIMONIAL_ACTION_VALUES).optional(),
+    rejectionReason: z.string().trim().max(500).optional(),
+  }),
+});
+
 
 
 

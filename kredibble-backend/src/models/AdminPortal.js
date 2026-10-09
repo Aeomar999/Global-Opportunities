@@ -439,15 +439,80 @@ const monthlyTargetSchema = new mongoose.Schema({
 }, { timestamps: true });
 monthlyTargetSchema.index({ month: 1, metric: 1 }, { unique: true });
 
+export const TESTIMONIAL_STATUSES = ['pending', 'approved', 'unpublished', 'rejected'];
+
+export const ALLOWED_TESTIMONIAL_TRANSITIONS = {
+  pending: ['approved', 'rejected'],
+  approved: ['unpublished'],
+  unpublished: ['approved'],
+  rejected: ['approved'],
+};
+
+export const TESTIMONIAL_ACTIONS_MAP = {
+  approve: 'approved',
+  reject: 'rejected',
+  unpublish: 'unpublished',
+  reapprove: 'approved',
+};
+
 const testimonialSchema = new mongoose.Schema({
-  name: { type: String, required: true },
+  name: { type: String, required: true, trim: true },
   email: { type: String, required: true, lowercase: true, trim: true },
-  comment: { type: String, required: true },
-  photo: String,
-  status: { type: String, enum: ['pending', 'approved', 'unpublished', 'rejected'], default: 'pending', index: true },
+  comment: { type: String, required: true, trim: true },
+  role: { type: String, trim: true, default: '' },
+  photo: { type: String, trim: true },
+  status: { type: String, enum: TESTIMONIAL_STATUSES, default: 'pending', index: true },
+  submittedAt: { type: Date, default: Date.now, index: true },
+  submittedAtDate: { type: String, index: true },
+  decidedAt: { type: Date },
+  decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  moderatedAt: { type: Date },
   moderatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  moderatedAt: Date,
+  rejectionReason: { type: String, trim: true },
 }, { timestamps: true });
+
+testimonialSchema.virtual('id').get(function() {
+  return this._id.toHexString();
+});
+
+testimonialSchema.virtual('author').get(function() {
+  return this.name;
+});
+
+testimonialSchema.virtual('quote').get(function() {
+  return this.comment;
+});
+
+testimonialSchema.set('toJSON', { virtuals: true });
+testimonialSchema.set('toObject', { virtuals: true });
+
+testimonialSchema.pre('validate', function() {
+  if (!this.name && this.author) {
+    this.name = String(this.author).trim();
+  }
+  if (!this.comment && this.quote) {
+    this.comment = String(this.quote).trim();
+  }
+  if (!this.submittedAt) {
+    this.submittedAt = this.createdAt || new Date();
+  }
+  if (this.submittedAt instanceof Date && !isNaN(this.submittedAt.getTime())) {
+    this.submittedAtDate = this.submittedAt.toISOString().slice(0, 10);
+  }
+  if (this.decidedAt && !this.moderatedAt) {
+    this.moderatedAt = this.decidedAt;
+  } else if (this.moderatedAt && !this.decidedAt) {
+    this.decidedAt = this.moderatedAt;
+  }
+  if (this.decidedBy && !this.moderatedBy) {
+    this.moderatedBy = this.decidedBy;
+  } else if (this.moderatedBy && !this.decidedBy) {
+    this.decidedBy = this.moderatedBy;
+  }
+});
+
+testimonialSchema.index({ status: 1, submittedAt: -1 });
+testimonialSchema.index({ status: 1, createdAt: -1 });
 
 const activitySchema = new mongoose.Schema({
   actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

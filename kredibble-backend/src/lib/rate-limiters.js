@@ -251,6 +251,15 @@ export const strictLimiter = createRateLimiter({
   message: { error: { message: 'Too many requests, please try again after an hour' } },
 });
 
+/** Rate limit for public testimonial submissions (10 per hour per IP / user). */
+export const testimonialLimiter = createRateLimiter({
+  prefix: 'testimonials',
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  message: { error: { message: 'Too many testimonial submissions, please try again after an hour' } },
+  keyGenerator: (req) => req.auth?.sub || ipKeyGenerator(req.ip, { ipv6Subnet: 56 }),
+});
+
 /**
  * 100 requests per 15 minutes across the whole API.
  * SEC-105: If an admin cookie or bearer token is present, key on its hash

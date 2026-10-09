@@ -704,6 +704,7 @@ const PUBLIC_CONTENT_ROUTES = [
   'POST /opportunities/64b7f1c2a1b2c3d4e5f60718/views',
   'GET /opportunity-types',
   'GET /testimonials',
+  'POST /testimonials',
   'GET /news',
   'GET /community/channels',
   'GET /community/channels/64b7f1c2a1b2c3d4e5f60718',

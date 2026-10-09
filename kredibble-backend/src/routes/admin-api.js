@@ -29,6 +29,9 @@ import {
   CANONICAL_SOCIAL_PLATFORMS,
   SOCIAL_PLATFORM_LABELS,
   normalizeSocialPlatform,
+  TESTIMONIAL_STATUSES,
+  ALLOWED_TESTIMONIAL_TRANSITIONS,
+  TESTIMONIAL_ACTIONS_MAP,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
@@ -59,6 +62,9 @@ import {
   beneficiaryUndoVerifySchema,
   socialPostCreateSchema,
   socialPostUpdateSchema,
+  testimonialCreateSchema,
+  testimonialModerateSchema,
+  testimonialUpdateSchema,
 } from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
 import { postChannelMessage, listChannelMessages, getThread, findPost, setAllowReplies } from '../lib/chat.js';
@@ -81,6 +87,8 @@ const PROGRAM_ROLES = ['Training and Capacity Development Officer', 'Desk Lead']
 const PARTNER_ROLES = ['Partnerships Officer', 'Desk Lead'];
 const AMBASSADOR_ROLES = ['Communications Officer', 'Social Media Manager', 'Country Lead', 'Desk Lead'];
 const SOCIAL_ROLES = ['Communications Officer', 'Social Media Manager', 'Desk Lead'];
+const TESTIMONIAL_VIEW_ROLES = ['Communications Officer', 'Social Media Manager', 'Desk Lead'];
+const TESTIMONIAL_EDIT_ROLES = ['Communications Officer', 'Desk Lead'];
 const configured = (value) => Boolean(value && !value.includes('placeholder'));
 const escapedRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const pageOptions = (query) => {
@@ -2682,23 +2690,243 @@ adminApiRouter.get('/leaderboard', requireAdminOrStaffAuth, requirePortalRoles(.
   itemResponse(res, { month, entries });
 }));
 
-adminApiRouter.get('/testimonials', requireAdminOrStaffAuth, requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
-  const filter = req.query.status ? { status: req.query.status } : {};
-  const records = await Testimonial.find(filter).sort({ createdAt: -1 });
-  listResponse(res, records.map(toClientObject));
+export const toTestimonialAdminObject = (document) => {
+  if (!document) return null;
+  const value = document.toJSON ? document.toJSON({ virtuals: true }) : document;
+  const decider = value.decidedBy || value.moderatedBy;
+  const deciderName = decider && typeof decider === 'object' ? (decider.name || decider.fullName) : undefined;
+  const deciderId = decider && typeof decider === 'object'
+    ? (decider._id?.toString() || decider.id)
+    : (decider ? decider.toString() : undefined);
+
+  const rawSubmitted = value.submittedAt || value.createdAt;
+  const submittedAt = rawSubmitted
+    ? (typeof rawSubmitted === 'string' ? rawSubmitted : new Date(rawSubmitted).toISOString())
+    : new Date().toISOString();
+
+  return {
+    id: value.id || value._id?.toString(),
+    name: value.name,
+    author: value.name,
+    email: value.email,
+    role: value.role || '',
+    comment: value.comment,
+    quote: value.comment,
+    photo: value.photo || null,
+    status: value.status || 'pending',
+    submittedAt,
+    decidedAt: value.decidedAt ? new Date(value.decidedAt).toISOString() : (value.moderatedAt ? new Date(value.moderatedAt).toISOString() : null),
+    decidedBy: deciderId || null,
+    decidedByName: deciderName || null,
+    moderatedAt: value.moderatedAt ? new Date(value.moderatedAt).toISOString() : (value.decidedAt ? new Date(value.decidedAt).toISOString() : null),
+    moderatedBy: deciderId || null,
+    rejectionReason: value.rejectionReason || undefined,
+    createdAt: value.createdAt ? new Date(value.createdAt).toISOString() : submittedAt,
+    updatedAt: value.updatedAt ? new Date(value.updatedAt).toISOString() : submittedAt,
+  };
+};
+
+export const resolveTestimonialTransition = (currentStatus, target) => {
+  const norm = String(target || '').trim().toLowerCase();
+  const targetStatus = TESTIMONIAL_ACTIONS_MAP[norm] || norm;
+
+  if (!TESTIMONIAL_STATUSES.includes(targetStatus)) {
+    throw new ApiError(400, `Invalid status or action: "${target}". Status must be one of: ${TESTIMONIAL_STATUSES.join(', ')}`);
+  }
+
+  const allowed = ALLOWED_TESTIMONIAL_TRANSITIONS[currentStatus] || [];
+  if (!allowed.includes(targetStatus)) {
+    throw new ApiError(400, `Cannot transition testimonial from "${currentStatus}" to "${targetStatus}". Allowed target statuses from "${currentStatus}": ${allowed.join(', ')}`);
+  }
+
+  return targetStatus;
+};
+
+adminApiRouter.get('/testimonials/pending-count', requireAdminOrStaffAuth, requireScreen('testimonials', 'view'), requirePortalRoles(...TESTIMONIAL_VIEW_ROLES), asyncHandler(async (req, res) => {
+  const count = await Testimonial.countDocuments({ status: 'pending' });
+  itemResponse(res, { count });
 }));
 
-adminApiRouter.post('/testimonials/:id/moderate', requireAdminOrStaffAuth, requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
-  const status = req.body.status;
-  if (!['approved', 'unpublished', 'rejected'].includes(status)) throw new ApiError(400, 'status must be approved, unpublished, or rejected');
+adminApiRouter.get('/testimonials', requireAdminOrStaffAuth, requireScreen('testimonials', 'view'), requirePortalRoles(...TESTIMONIAL_VIEW_ROLES), asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.status && TESTIMONIAL_STATUSES.includes(String(req.query.status).toLowerCase())) {
+    filter.status = String(req.query.status).toLowerCase();
+  }
+
+  if (req.query.search) {
+    const regex = new RegExp(escapedRegex(req.query.search.trim()), 'i');
+    filter.$or = [{ name: regex }, { email: regex }, { comment: regex }, { role: regex }];
+  }
+
+  if (req.query.page || req.query.limit) {
+    const { page, skip, limit } = pageOptions(req.query);
+    const [total, records] = await Promise.all([
+      Testimonial.countDocuments(filter),
+      Testimonial.find(filter)
+        .populate('decidedBy', 'name fullName email')
+        .populate('moderatedBy', 'name fullName email')
+        .sort({ submittedAt: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
+    return listResponse(res, records.map(toTestimonialAdminObject), total, page, limit);
+  }
+
+  const records = await Testimonial.find(filter)
+    .populate('decidedBy', 'name fullName email')
+    .populate('moderatedBy', 'name fullName email')
+    .sort({ submittedAt: -1, createdAt: -1 });
+  listResponse(res, records.map(toTestimonialAdminObject));
+}));
+
+adminApiRouter.get('/testimonials/:id', requireAdminOrStaffAuth, requireScreen('testimonials', 'view'), requirePortalRoles(...TESTIMONIAL_VIEW_ROLES), asyncHandler(async (req, res) => {
+  const record = await Testimonial.findById(validId(req.params.id, 'Testimonial'))
+    .populate('decidedBy', 'name fullName email')
+    .populate('moderatedBy', 'name fullName email');
+  if (!record) throw notFound('Testimonial');
+  itemResponse(res, toTestimonialAdminObject(record));
+}));
+
+adminApiRouter.post('/testimonials/:id/moderate', requireAdminOrStaffAuth, requireScreen('testimonials', 'edit'), requirePortalRoles(...TESTIMONIAL_EDIT_ROLES), validate(testimonialModerateSchema), asyncHandler(async (req, res) => {
   const record = await Testimonial.findById(validId(req.params.id, 'Testimonial'));
   if (!record) throw notFound('Testimonial');
-  record.status = status;
+
+  const previousStatus = record.status;
+  const target = req.body.action || req.body.status;
+  const nextStatus = resolveTestimonialTransition(previousStatus, target);
+
+  const now = new Date();
+  record.status = nextStatus;
+  record.decidedAt = now;
+  record.decidedBy = req.auth.sub;
+  record.moderatedAt = now;
   record.moderatedBy = req.auth.sub;
-  record.moderatedAt = new Date();
+  if (req.body.rejectionReason !== undefined) {
+    record.rejectionReason = req.body.rejectionReason;
+  }
   await record.save();
-  await logActivity(req.auth.sub, status, 'testimonials', record);
-  itemResponse(res, toClientObject(record));
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.TESTIMONIAL_MODERATE,
+    resourceType: AUDIT_RESOURCE_TYPES.TESTIMONIAL,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: {
+      previousStatus,
+      status: nextStatus,
+      action: req.body.action,
+    },
+  });
+
+  await logActivity(req.auth.sub, nextStatus, 'testimonials', record);
+  itemResponse(res, toTestimonialAdminObject(record));
+}));
+
+adminApiRouter.post('/testimonials', requireAdminOrStaffAuth, requireScreen('testimonials', 'edit'), requirePortalRoles(...TESTIMONIAL_EDIT_ROLES), validate(testimonialCreateSchema), asyncHandler(async (req, res) => {
+  const name = String(req.body.name || req.body.author).trim();
+  const email = String(req.body.email).trim().toLowerCase();
+  const comment = String(req.body.comment || req.body.quote).trim();
+  const role = req.body.role ? String(req.body.role).trim() : '';
+  const photo = req.body.photo ? String(req.body.photo).trim() : undefined;
+  const status = req.body.status || 'pending';
+  const submittedAt = req.body.submittedAt ? new Date(req.body.submittedAt) : new Date();
+
+  const record = await Testimonial.create({
+    name,
+    email,
+    comment,
+    role,
+    photo,
+    status,
+    submittedAt,
+  });
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.TESTIMONIAL_CREATE,
+    resourceType: AUDIT_RESOURCE_TYPES.TESTIMONIAL,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: {
+      name,
+      email,
+      status,
+    },
+  });
+
+  await logActivity(req.auth.sub, 'created', 'testimonials', record);
+  res.status(201).json({ data: toTestimonialAdminObject(record) });
+}));
+
+adminApiRouter.patch('/testimonials/:id', requireAdminOrStaffAuth, requireScreen('testimonials', 'edit'), requirePortalRoles(...TESTIMONIAL_EDIT_ROLES), validate(testimonialUpdateSchema), asyncHandler(async (req, res) => {
+  const record = await Testimonial.findById(validId(req.params.id, 'Testimonial'));
+  if (!record) throw notFound('Testimonial');
+
+  const previousStatus = record.status;
+  if (req.body.status || req.body.action) {
+    const target = req.body.action || req.body.status;
+    const nextStatus = resolveTestimonialTransition(previousStatus, target);
+    const now = new Date();
+    record.status = nextStatus;
+    record.decidedAt = now;
+    record.decidedBy = req.auth.sub;
+    record.moderatedAt = now;
+    record.moderatedBy = req.auth.sub;
+  }
+
+  if (req.body.name !== undefined || req.body.author !== undefined) {
+    record.name = String(req.body.name || req.body.author).trim();
+  }
+  if (req.body.email !== undefined) {
+    record.email = String(req.body.email).trim().toLowerCase();
+  }
+  if (req.body.comment !== undefined || req.body.quote !== undefined) {
+    record.comment = String(req.body.comment || req.body.quote).trim();
+  }
+  if (req.body.role !== undefined) {
+    record.role = String(req.body.role).trim();
+  }
+  if (req.body.photo !== undefined) {
+    record.photo = req.body.photo ? String(req.body.photo).trim() : null;
+  }
+  if (req.body.rejectionReason !== undefined) {
+    record.rejectionReason = req.body.rejectionReason ? String(req.body.rejectionReason).trim() : undefined;
+  }
+
+  await record.save();
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.TESTIMONIAL_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.TESTIMONIAL,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: {
+      status: record.status,
+      previousStatus,
+    },
+  });
+
+  itemResponse(res, toTestimonialAdminObject(record));
+}));
+
+adminApiRouter.delete('/testimonials/:id', requireAdminOrStaffAuth, requireScreen('testimonials', 'edit'), requirePortalRoles(...TESTIMONIAL_EDIT_ROLES), asyncHandler(async (req, res) => {
+  const record = await Testimonial.findById(validId(req.params.id, 'Testimonial'));
+  if (!record) throw notFound('Testimonial');
+
+  await Testimonial.findByIdAndDelete(record._id);
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.TESTIMONIAL_DELETE,
+    resourceType: AUDIT_RESOURCE_TYPES.TESTIMONIAL,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: {
+      name: record.name,
+      status: record.status,
+    },
+  });
+
+  await logActivity(req.auth.sub, 'deleted', 'testimonials', record);
+  itemResponse(res, { deleted: true, id: req.params.id });
 }));
 
 adminApiRouter.get('/reports/monthly', requireAdminOrStaffAuth, requirePortalRoles(...ALL_PORTAL_ROLES), asyncHandler(async (req, res) => {

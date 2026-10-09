@@ -32,7 +32,7 @@ import { Channel, ChannelPost, CommunityMembership, Report } from '../models/Com
 import { Article, Notification } from '../models/Content.js';
 import { Ambassador, AmbassadorRequest, OpportunityEngagement, Testimonial, Beneficiary } from '../models/AdminPortal.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
-import { searchLimiter, chatLimiter } from '../lib/rate-limiters.js';
+import { searchLimiter, chatLimiter, testimonialLimiter } from '../lib/rate-limiters.js';
 import { normalizeLegacyRole } from '../lib/permissions.js';
 import { postChannelMessage, listChannelMessages, getThread, findPost } from '../lib/chat.js';
 import { evictFromChannelRoom } from '../socket.js';
@@ -600,8 +600,25 @@ const CHANNEL_POST_FIELDS = ['body', 'title', 'bannerImage', 'link', 'linkText',
 const CHANNEL_UPDATE_FIELDS = ['name', 'category', 'bio', 'avatar', 'visibility', 'status', 'requiresApproval'];
 
 const publicTestimonial = (testimonial) => {
-  const { email, ...visible } = toClientObject(testimonial);
-  return visible;
+  if (!testimonial) return null;
+  const raw = testimonial.toJSON ? testimonial.toJSON({ virtuals: true }) : testimonial;
+  const rawSubmitted = raw.submittedAt || raw.createdAt;
+  const submittedAt = rawSubmitted
+    ? (typeof rawSubmitted === 'string' ? rawSubmitted : new Date(rawSubmitted).toISOString())
+    : new Date().toISOString();
+
+  return {
+    id: raw.id || raw._id?.toString(),
+    name: raw.name,
+    author: raw.name,
+    role: raw.role || '',
+    comment: raw.comment,
+    quote: raw.comment,
+    photo: raw.photo || null,
+    status: raw.status || 'approved',
+    submittedAt,
+    createdAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : submittedAt,
+  };
 };
 
 const ADMIN_USER_FIELDS = 'name email avatarUrl emailVerified createdAt';
@@ -891,6 +908,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       totalGrantApplications,
       pendingAmbassadorRequests,
       pendingRecords,
+      pendingTestimonials,
     ] = await Promise.all([
       CompanyVerification.countDocuments({ overallStatus: 'pending' }),
       Opportunity.countDocuments({ moderationStatus: 'pending' }),
@@ -907,6 +925,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       GrantApplication.countDocuments(),
       AmbassadorRequest.countDocuments({ status: 'pending' }),
       Beneficiary.countDocuments({ verified: false }),
+      Testimonial.countDocuments({ status: 'pending' }),
     ]);
 
     itemResponse(res, {
@@ -915,6 +934,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       pendingAmbassadorRequests,
       pendingOpportunities,
       pendingRecords,
+      pendingTestimonials,
       activeSeekers,
       activeHirers,
       openReports,
@@ -960,16 +980,38 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
 
   // Only approved testimonials are public, and never with the submitter's email.
   router.get('/testimonials', asyncHandler(async (req, res) => {
-    const testimonials = await Testimonial.find({ status: 'approved' }).sort({ createdAt: -1 });
+    const testimonials = await Testimonial.find({ status: 'approved' }).sort({ submittedAt: -1, createdAt: -1 });
     listResponse(res, testimonials.map(publicTestimonial));
   }));
 
-  router.post('/testimonials', requireAuth, asyncHandler(async (req, res) => {
-    const name = String(req.body.name || '').trim();
-    const email = String(req.body.email || '').trim().toLowerCase();
-    const comment = String(req.body.comment || '').trim();
-    if (!name || !/^\S+@\S+\.\S+$/.test(email) || !comment) throw new ApiError(400, 'name, a valid email, and comment are required');
-    const testimonial = await Testimonial.create({ name, email, comment, photo: req.body.photo });
+  // Public submission of testimonials (rate limited with testimonialLimiter)
+  router.post('/testimonials', optionalAuth, testimonialLimiter, asyncHandler(async (req, res) => {
+    const name = String(req.body.name || req.body.author || '').trim();
+    const email = String(req.body.email || (req.auth?.email) || '').trim().toLowerCase();
+    const comment = String(req.body.comment || req.body.quote || '').trim();
+    const role = req.body.role ? String(req.body.role).trim() : '';
+    const photo = req.body.photo ? String(req.body.photo).trim() : undefined;
+
+    if (!name || name.length < 2) {
+      throw new ApiError(400, 'name is required and must be at least 2 characters');
+    }
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      throw new ApiError(400, 'a valid email is required');
+    }
+    if (!comment || comment.length < 5) {
+      throw new ApiError(400, 'comment is required and must be at least 5 characters');
+    }
+
+    const testimonial = await Testimonial.create({
+      name,
+      email,
+      comment,
+      role,
+      photo,
+      status: 'pending',
+      submittedAt: new Date(),
+    });
+
     res.status(201).json({ data: publicTestimonial(testimonial) });
   }));
 

@@ -42,6 +42,10 @@ export const AUDIT_ACTIONS = {
   SOCIAL_POST_CREATE: 'social_post.create',
   SOCIAL_POST_UPDATE: 'social_post.update',
   SOCIAL_POST_DELETE: 'social_post.delete',
+  TESTIMONIAL_CREATE: 'testimonial.create',
+  TESTIMONIAL_MODERATE: 'testimonial.moderate',
+  TESTIMONIAL_UPDATE: 'testimonial.update',
+  TESTIMONIAL_DELETE: 'testimonial.delete',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',
@@ -62,6 +66,7 @@ export const AUDIT_RESOURCE_TYPES = {
   AMBASSADOR: 'ambassador',
   BENEFICIARY: 'beneficiary',
   SOCIAL_POST: 'social_post',
+  TESTIMONIAL: 'testimonial',
   SEEKER_PROFILE: 'seeker_profile',
   HIRER_ACCOUNT: 'hirer_account',
   OPPORTUNITY: 'opportunity',

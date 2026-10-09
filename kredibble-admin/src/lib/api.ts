@@ -1406,6 +1406,99 @@ export const getSocialMonthlyTotalsApi = async (month?: string) => {
   return request<SocialMonthlyTotalsApiRecord>(`/admin/social-posts/monthly-totals${query}`);
 };
 
+// --- Testimonials ---------------------------------------------------------------------------------
+
+export type TestimonialStatusApi = "pending" | "approved" | "unpublished" | "rejected";
+export type TestimonialActionApi = "approve" | "reject" | "unpublish" | "reapprove";
+
+export interface TestimonialApiRecord {
+  id: string;
+  name: string;
+  author: string;
+  email: string;
+  role: string;
+  comment: string;
+  quote: string;
+  photo: string | null;
+  status: TestimonialStatusApi;
+  submittedAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TestimonialModeratePayload {
+  action?: TestimonialActionApi;
+  status?: TestimonialStatusApi;
+  rejectionReason?: string;
+}
+
+export interface TestimonialPayload {
+  name?: string;
+  author?: string;
+  email?: string;
+  comment?: string;
+  quote?: string;
+  role?: string;
+  photo?: string;
+  status?: TestimonialStatusApi;
+  submittedAt?: string;
+}
+
+export const getTestimonialsApi = async (params?: {
+  status?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<TestimonialApiRecord>(`/admin/testimonials${queryString}`);
+};
+
+export const getTestimonialByIdApi = async (id: string) => {
+  return request<TestimonialApiRecord>(`/admin/testimonials/${id}`);
+};
+
+export const getTestimonialPendingCountApi = async () => {
+  return request<{ count: number }>("/admin/testimonials/pending-count");
+};
+
+export const moderateTestimonialApi = async (id: string, data: TestimonialModeratePayload) => {
+  return request<TestimonialApiRecord>(`/admin/testimonials/${id}/moderate`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const createTestimonialApi = async (data: TestimonialPayload) => {
+  return request<TestimonialApiRecord>("/admin/testimonials", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateTestimonialApi = async (id: string, data: Partial<TestimonialPayload>) => {
+  return request<TestimonialApiRecord>(`/admin/testimonials/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteTestimonialApi = async (id: string) => {
+  return request<{ id: string; deleted: boolean }>(`/admin/testimonials/${id}`, {
+    method: "DELETE",
+  });
+};
+
+
 
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with

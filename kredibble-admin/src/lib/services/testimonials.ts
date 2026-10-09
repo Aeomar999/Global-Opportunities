@@ -12,6 +12,8 @@
  */
 import { getMockCollection, setMockCollection, subscribeMockStore } from "@/lib/mock-store";
 import { TESTIMONIAL_STATUSES, type Testimonial, type TestimonialStatus } from "@/lib/mock-entities";
+import { isMockMode } from "./mock-mode";
+import { getTestimonialsApi, moderateTestimonialApi } from "@/lib/api";
 
 const MOCK_DELAY_MS = 300;
 let loadedOnce = false;
@@ -52,7 +54,27 @@ export const publicPreview = (item: Pick<Testimonial, "author" | "quote">): { na
 /** Newest first. */
 export const sortTestimonials = (list: readonly Testimonial[]): Testimonial[] => [...list].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt) || b.id.localeCompare(a.id));
 
-export function loadTestimonials(): Promise<Testimonial[]> {
+export async function loadTestimonials(): Promise<Testimonial[]> {
+  if (!isMockMode()) {
+    try {
+      const res = await getTestimonialsApi({ limit: 100 });
+      if (res?.data && Array.isArray(res.data)) {
+        const mapped: Testimonial[] = res.data.map((record) => ({
+          id: record.id,
+          author: record.author || record.name,
+          email: record.email,
+          role: record.role || "",
+          quote: record.quote || record.comment,
+          status: record.status as TestimonialStatus,
+          submittedAt: record.submittedAt,
+        }));
+        setMockCollection("testimonials", mapped, { always: true });
+        return sortTestimonials(mapped);
+      }
+    } catch {
+      // Fall back to local mock collection on API error
+    }
+  }
   return afterDelay(sortTestimonials(getMockCollection("testimonials")));
 }
 
@@ -63,5 +85,12 @@ export function applyTestimonialAction(id: string, action: TestimonialAction): T
   if (!current || !ACTIONS_BY_STATUS[current.status].includes(action)) return undefined;
   const next: Testimonial = { ...current, status: ACTION_RESULT[action] };
   setMockCollection("testimonials", list.map((item) => (item.id === id ? next : item)), { always: true });
+
+  if (!isMockMode()) {
+    moderateTestimonialApi(id, { action }).catch(() => {
+      // Background persistence catch
+    });
+  }
+
   return next;
 }

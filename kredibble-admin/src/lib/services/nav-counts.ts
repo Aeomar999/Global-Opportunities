@@ -15,7 +15,7 @@ import { isMockMode } from "./mock-mode";
 
 export type NavCounts = Partial<Record<CountKey, number>>;
 
-const COUNT_KEYS: CountKey[] = ["pendingVerifications", "openReports", "pendingRecords", "pendingAmbassadorRequests"];
+const COUNT_KEYS: CountKey[] = ["pendingVerifications", "openReports", "pendingRecords", "pendingAmbassadorRequests", "pendingTestimonials"];
 
 let inflight: Promise<NavCounts> | null = null;
 
