@@ -32,6 +32,11 @@ export const AUDIT_ACTIONS = {
   AMBASSADOR_UPDATE: 'ambassador.update',
   AMBASSADOR_DELETE: 'ambassador.delete',
   AMBASSADOR_AMPLIFICATION: 'ambassador.amplification',
+  BENEFICIARY_CREATE: 'beneficiary.create',
+  BENEFICIARY_UPDATE: 'beneficiary.update',
+  BENEFICIARY_DELETE: 'beneficiary.delete',
+  BENEFICIARY_VERIFY: 'beneficiary.verify',
+  BENEFICIARY_UNDO_VERIFY: 'beneficiary.undo_verify',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',
@@ -50,6 +55,7 @@ export const AUDIT_RESOURCE_TYPES = {
   SETTINGS: 'settings',
   PARTNER: 'partner',
   AMBASSADOR: 'ambassador',
+  BENEFICIARY: 'beneficiary',
   SEEKER_PROFILE: 'seeker_profile',
   HIRER_ACCOUNT: 'hirer_account',
   OPPORTUNITY: 'opportunity',

@@ -21,6 +21,14 @@ import { getMockCollection, setMockCollection, subscribeMockStore } from "@/lib/
 import { RECORD_SOURCES, RECORD_SOURCE_LABELS, type DatabaseRecord, type KpiThresholds, type MonthKey, type RecordSource } from "@/lib/mock-entities";
 import { currentStaffMember, todayIsoDate } from "@/lib/services/listings";
 import type { AccessLevel, Screen } from "@/config/permissions";
+import { isMockMode } from "./mock-mode";
+import {
+  getBeneficiaries,
+  getBeneficiaryById,
+  createBeneficiaryApi,
+  verifyBeneficiaryApi,
+  undoVerifyBeneficiaryApi,
+} from "@/lib/api";
 
 const MOCK_DELAY_MS = 300;
 // The first load of a page takes a moment (a skeleton shows). Every later read is instant, so a change is on screen at once.
@@ -216,11 +224,62 @@ export const toRecordRows = (records: readonly DatabaseRecord[]): RecordRow[] =>
   [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)).map(withNames);
 
 /** Newest first. */
-export function loadRecordRows(): Promise<RecordRow[]> {
+export async function loadRecordRows(): Promise<RecordRow[]> {
+  if (!isMockMode()) {
+    try {
+      const res = await getBeneficiaries({ limit: 100 });
+      if (res && res.data) {
+        const records: DatabaseRecord[] = res.data.map((b) => ({
+          id: b.id,
+          name: b.name || b.fullName || "",
+          email: b.email,
+          phone: b.phone,
+          country: b.country,
+          institution: b.institution,
+          source: (b.source as RecordSource) || "organic",
+          verified: Boolean(b.verified),
+          createdAt: b.createdAt,
+          addedById: b.addedById || b.addedBy,
+          verifiedAt: b.verifiedAt,
+          ambassadorId: b.ambassadorId,
+          listingId: b.listingId || b.opportunityId,
+        }));
+        setMockCollection("databaseRecords", records, { always: true });
+        return records.map(withNames);
+      }
+    } catch {
+      // Fallback to store on error
+    }
+  }
   return afterDelay(toRecordRows(getMockCollection("databaseRecords")));
 }
 
-export function loadRecord(id: string): Promise<RecordRow | undefined> {
+export async function loadRecord(id: string): Promise<RecordRow | undefined> {
+  if (!isMockMode()) {
+    try {
+      const b = await getBeneficiaryById(id);
+      if (b) {
+        const record: DatabaseRecord = {
+          id: b.id,
+          name: b.name || b.fullName || "",
+          email: b.email,
+          phone: b.phone,
+          country: b.country,
+          institution: b.institution,
+          source: (b.source as RecordSource) || "organic",
+          verified: Boolean(b.verified),
+          createdAt: b.createdAt,
+          addedById: b.addedById || b.addedBy,
+          verifiedAt: b.verifiedAt,
+          ambassadorId: b.ambassadorId,
+          listingId: b.listingId || b.opportunityId,
+        };
+        return withNames(record);
+      }
+    } catch {
+      // Fallback to store on error
+    }
+  }
   const record = getMockCollection("databaseRecords").find((entry) => entry.id === id);
   return afterDelay(record ? withNames(record) : undefined);
 }
@@ -284,6 +343,26 @@ export function createRecord(fields: RecordFields): CreateResult {
     verifiedAt: fields.verified ? today : undefined,
   };
   write([record, ...existing]);
+
+  if (!isMockMode()) {
+    createBeneficiaryApi({
+      name: record.name,
+      fullName: record.name,
+      email: record.email,
+      phone: record.phone,
+      country: record.country,
+      institution: record.institution,
+      source: record.source,
+      verified: record.verified,
+      verifiedAt: record.verifiedAt,
+      createdAt: record.createdAt,
+      ambassadorId: record.ambassadorId,
+      listingId: record.listingId,
+    }).catch((err) => {
+      console.error("Failed to persist beneficiary via API:", err);
+    });
+  }
+
   return { ok: true, record };
 }
 
@@ -300,10 +379,23 @@ export function verifyRecord(id: string): VerifyUndo | undefined {
   const current = records.find((record) => record.id === id);
   if (!current || current.verified) return undefined;
   write(records.map((record) => (record.id === id ? { ...record, verified: true, verifiedAt: todayIsoDate() } : record)));
+
+  if (!isMockMode()) {
+    verifyBeneficiaryApi(id).catch((err) => {
+      console.error("Failed to verify beneficiary via API:", err);
+    });
+  }
+
   return { id, verified: current.verified, verifiedAt: current.verifiedAt };
 }
 
 /** Puts a record back exactly as it was before verifyRecord. */
 export function undoVerify(undo: VerifyUndo): void {
   write(getMockCollection("databaseRecords").map((record) => (record.id === undo.id ? { ...record, verified: undo.verified, verifiedAt: undo.verifiedAt } : record)));
+
+  if (!isMockMode()) {
+    undoVerifyBeneficiaryApi(undo.id, { verified: undo.verified, verifiedAt: undo.verifiedAt }).catch((err) => {
+      console.error("Failed to undo verify beneficiary via API:", err);
+    });
+  }
 }

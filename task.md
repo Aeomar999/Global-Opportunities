@@ -1888,7 +1888,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [x] Done |
 | BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [x] Done |
 | BE-007 | Ambassadors and the Network: dates, statuses, amplification, leaderboard, summary | P1 | – | [x] Done |
-| BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [ ] Open |
+| BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [x] Done |
 | BE-009 | Social posts: logging, validation, monthly totals by platform | P2 | – | [ ] Open |
 | BE-010 | Testimonials: statuses, decisions, counts | P2 | – | [ ] Open |
 | BE-011 | Listings curation: vetting, publish dates, drafts, event date-times | P1 | – | [ ] Open |
@@ -1986,7 +1986,16 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 #### BE-008 — Database records
 - **To do:** fields `source` (organic, ambassador, event, partner, import), `verified`, `verifiedAt`, `createdAt`, `addedBy`, `ambassadorId`, `listingId`. Verify sets `verifiedAt` to today; undo puts back exactly what was there. Duplicate check on create and update: first by email (trimmed, case-insensitive), then by phone (digits only, without the country calling code, the national 0 or a leading + or 00); return which field matched. `GET /admin/beneficiaries/pace?month=` (verified, target, pro-rated pace, status). `GET /admin/beneficiaries/sources?month=`. Pending count for the sidebar pill.
-- **Verify:** "Beneficiaries verified" for a month counts records verified in it, by `verifiedAt`.
+- **Implementation:**
+  - [x] Beneficiary fields: canonical `source` (`organic`, `ambassador`, `event`, `partner`, `import`), `verified`, `verifiedAt`, `createdAt`, `addedBy`, `ambassadorId`, `listingId` / `opportunityId`.
+  - [x] Verification workflow: verify stamps `verifiedAt` to today; undo restores previous `verified` and `verifiedAt` values.
+  - [x] Duplicate detection: checks email first (trimmed, lowercase), then phone (digits only without country calling codes or national leading 0); returns structured `{ error, field: 'email' | 'phone' }`.
+  - [x] `GET /admin/beneficiaries/pace?month=`: calculates verified, target, pro-rated pace, status (`ahead`, `on-track`, `behind`, `critical`), gauge coordinates, and hint texts.
+  - [x] `GET /admin/beneficiaries/sources?month=`: returns counts across the 5 canonical sources.
+  - [x] Pending verification count: `GET /admin/beneficiaries/pending-count` and `pendingRecords` on `GET /dashboard/summary` for sidebar pill.
+  - [x] Verification criteria: "Beneficiaries verified" for a month counts records verified in it, filtered strictly by `verifiedAt`.
+  - [x] Admin client API (`kredibble-admin/src/lib/api.ts`), nav counts service (`kredibble-admin/src/lib/services/nav-counts.ts`), and database service (`kredibble-admin/src/lib/services/database.ts`) wired to live endpoints.
+- **Verify:** "Beneficiaries verified" for a month counts records verified in it, by `verifiedAt`. (Verified with `tests/be-008-beneficiaries.test.js`, 15/15 tests passing; full suite 28 suites / 310 tests passing; admin API contract tests passing; admin typecheck and eslint clean).
 
 #### BE-009 — Social posts
 - **To do:** `platform` (facebook, instagram, x, linkedin, tiktok, youtube, whatsapp, other), `postedAt` (not in the future), `url` (http or https with a real host), `reach`, `engagement`, `status`, `listingId` (optional). `GET /admin/social-posts/monthly-totals?month=` returns posts, reach, engagement and the platform table (leading platform first) that add up to the totals.
@@ -2079,6 +2088,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - 2026-10-08 — BE-005 complete: Programs lifecycle model with deliveredAt date stamping, status flow (scheduled -> active -> delivered / cancelled), non-blocking operational warning for participant attendance exceeding targets, GET /api/v1/admin/programs/upcoming, dashboard metric counting programs delivered in month, and admin programs service wired. All 25 test suites (279 tests) passing.
 - 2026-10-08 — BE-006 complete: Partners stage history with append-only stageHistory ([{ stage, at, from, by, byName }]), POST /api/v1/admin/partners/:id/move transition endpoint returning closedChange, derived closed status (onboard/renew), GET /api/v1/admin/partners/pipeline-health with 6-month historical moving window conversion analytics and needed deals capacity planning, GET/PUT /api/v1/admin/settings/pipeline-stages with reset support and 24-character case-insensitive uniqueness validation, audit logging (partner.move, pipeline_stages.update), and admin partners/settings services wired. All 26 test suites (287 tests) passing.
 - 2026-10-08 — BE-007 complete: Ambassadors and the Network: joinedAt & dormantSince date tracking, canonical statuses (applicant, onboarding, active, dormant) and tiers (ambassador, senior, lead), referral code engine ("GOD-" + 6 glyphs from 32-char confusable-free alphabet), amplification logging (channel, clicks, note, at), verified beneficiary attribution, GET /api/v1/admin/network/summary, deterministic 4-tier GET /api/v1/admin/leaderboard, and admin network service wired. All 27 test suites (295 tests) passing.
+- 2026-10-09 — BE-008 complete: Database records (beneficiaries): canonical sources (organic, ambassador, event, partner, import), verify & undo-verify transitions with previous-state restoration, prioritized duplicate detection (email first, then normalized phone without dialing codes), GET /api/v1/admin/beneficiaries/pace with status and gauge geometry, GET /api/v1/admin/beneficiaries/sources, GET /api/v1/admin/beneficiaries/pending-count and pendingRecords in /dashboard/summary, month-bound beneficiariesVerified KPI counting, and admin database service wired. All 28 test suites (310 tests) passing.
 - 2026-10-08 — Mobile production readiness audit: Verified ~65–70% completion. Discovered registration broken on native iOS/Android (web DOM file inputs), missing email verification screen, canned AI assistant, unintegrated event payment flow, mock fallbacks in notifications/saved items, missing store policy links, and 0 screen UI tests. Filed SEC-119 through SEC-128 and authored Mobile Work Plan (MOB-010 to MOB-019).
 
 ---

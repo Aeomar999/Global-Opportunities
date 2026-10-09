@@ -174,22 +174,128 @@ const ambassadorAmplificationSchema = new mongoose.Schema({
 
 ambassadorAmplificationSchema.index({ ambassadorId: 1, at: 1 });
 
+export const COUNTRY_DIAL_CODES = Object.freeze({
+  Botswana: '267',
+  Cameroon: '237',
+  "Côte d'Ivoire": '225',
+  Egypt: '20',
+  Ethiopia: '251',
+  Ghana: '233',
+  Kenya: '254',
+  Malawi: '265',
+  Morocco: '212',
+  Mozambique: '258',
+  Namibia: '264',
+  Nigeria: '234',
+  Rwanda: '250',
+  Senegal: '221',
+  'Sierra Leone': '232',
+  'South Africa': '27',
+  Tanzania: '255',
+  Tunisia: '216',
+  Uganda: '256',
+  Zambia: '260',
+  Zimbabwe: '263',
+});
+
+export const normalizeEmail = (email) => (email ? String(email).trim().toLowerCase() : '');
+
+export const normalizePhone = (phone, country) => {
+  const raw = (phone ? String(phone).trim() : '');
+  if (!raw) return '';
+  let digits = raw.replace(/\D+/g, '');
+  if (!digits) return '';
+  if (raw.startsWith('+')) return digits;
+  if (digits.startsWith('00')) return digits.slice(2);
+  const dial = country ? COUNTRY_DIAL_CODES[country] : undefined;
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  else if (dial && digits.startsWith(dial) && digits.length - dial.length >= 6) return digits;
+  return dial ? dial + digits : digits;
+};
+
+export const CANONICAL_RECORD_SOURCES = Object.freeze(['organic', 'ambassador', 'event', 'partner', 'import']);
+export const RECORD_SOURCE_LABELS = Object.freeze({
+  organic: 'Organic',
+  ambassador: 'Ambassador referral',
+  event: 'Event',
+  partner: 'Partner channel',
+  import: 'Bulk import',
+});
+
 const beneficiarySchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   email: { type: String, lowercase: true, trim: true, sparse: true, index: true },
   phone: { type: String, sparse: true, index: true },
+  phoneNormalized: { type: String, sparse: true, index: true },
   country: String,
   institution: String,
-  sourceType: { type: String, required: true, enum: ['organic', 'ambassador-referral', 'event', 'partner-channel', 'bulk-import'], index: true },
+  source: {
+    type: String,
+    enum: ['organic', 'ambassador', 'event', 'partner', 'import', 'ambassador-referral', 'partner-channel', 'bulk-import'],
+    default: 'organic',
+    index: true,
+  },
+  sourceType: {
+    type: String,
+    enum: ['organic', 'ambassador', 'event', 'partner', 'import', 'ambassador-referral', 'partner-channel', 'bulk-import'],
+    default: 'organic',
+    index: true,
+  },
   ambassadorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ambassador', index: true },
-  opportunityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity' },
+  opportunityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity', index: true },
+  listingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity', index: true },
   verified: { type: Boolean, default: false, index: true },
   verifiedAt: { type: String, index: true },
+  createdAtDate: { type: String, index: true },
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   wordpressSync: syncField(),
 }, { timestamps: true });
 
+beneficiarySchema.virtual('name')
+  .get(function () { return this.fullName; })
+  .set(function (value) { this.fullName = value; });
+
+beneficiarySchema.pre('save', function () {
+  if (this.name && !this.fullName) {
+    this.fullName = this.name;
+  }
+  if (!this.source && this.sourceType) {
+    this.source = this.sourceType;
+  }
+  if (this.source) {
+    if (this.source === 'ambassador-referral') this.source = 'ambassador';
+    else if (this.source === 'partner-channel') this.source = 'partner';
+    else if (this.source === 'bulk-import') this.source = 'import';
+  }
+  if (!this.sourceType && this.source) {
+    this.sourceType = this.source === 'ambassador' ? 'ambassador-referral'
+      : (this.source === 'partner' ? 'partner-channel'
+      : (this.source === 'import' ? 'bulk-import' : this.source));
+  }
+  if (this.listingId && !this.opportunityId) {
+    this.opportunityId = this.listingId;
+  }
+  if (this.opportunityId && !this.listingId) {
+    this.listingId = this.opportunityId;
+  }
+  if (this.phone) {
+    this.phoneNormalized = normalizePhone(this.phone, this.country);
+  } else {
+    this.phoneNormalized = undefined;
+  }
+  if (this.email) {
+    this.email = normalizeEmail(this.email);
+  }
+  if (!this.createdAtDate) {
+    this.createdAtDate = this.createdAt ? new Date(this.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+  }
+  if (this.verified && !this.verifiedAt) {
+    this.verifiedAt = new Date().toISOString().slice(0, 10);
+  }
+});
+
 beneficiarySchema.index({ ambassadorId: 1, verified: 1, verifiedAt: 1 });
+beneficiarySchema.index({ verified: 1, verifiedAt: 1 });
 
 const socialPostSchema = new mongoose.Schema({
   platform: { type: String, required: true, enum: ['Facebook', 'Instagram', 'X', 'LinkedIn', 'TikTok', 'YouTube', 'WhatsApp', 'other'], index: true },

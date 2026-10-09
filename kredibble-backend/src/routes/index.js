@@ -28,7 +28,7 @@ import {
 } from '../models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
-import { Ambassador, OpportunityEngagement, Testimonial } from '../models/AdminPortal.js';
+import { Ambassador, OpportunityEngagement, Testimonial, Beneficiary } from '../models/AdminPortal.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 import { searchLimiter } from '../lib/rate-limiters.js';
 import { normalizeLegacyRole } from '../lib/permissions.js';
@@ -879,6 +879,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       totalEvents,
       totalGrants,
       totalGrantApplications,
+      pendingRecords,
     ] = await Promise.all([
       CompanyVerification.countDocuments({ overallStatus: 'pending' }),
       Opportunity.countDocuments({ moderationStatus: 'pending' }),
@@ -893,12 +894,14 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       Event.countDocuments(),
       Grant.countDocuments(),
       GrantApplication.countDocuments(),
+      Beneficiary.countDocuments({ verified: false }),
     ]);
 
     itemResponse(res, {
       // Keys read by the admin dashboard.
       pendingVerifications,
       pendingOpportunities,
+      pendingRecords,
       activeSeekers,
       activeHirers,
       openReports,
