@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Colors } from '../../constants/design';
 import {
   View,
   Text,
@@ -222,11 +223,11 @@ const Chip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
   <View
     style={{
       flexDirection: 'row', alignItems: 'center',
-      backgroundColor: 'rgba(102, 113, 228, 0.12)',
+      backgroundColor: 'rgba(121, 46, 164, 0.12)',
       borderRadius: 100, paddingHorizontal: 10, paddingVertical: 5, gap: 6,
     }}
   >
-    <Text style={{ fontSize: 12, color: '#6671E4' }} className="font-sans">{label}</Text>
+    <Text style={{ fontSize: 12, color: Colors.primary }} className="font-sans">{label}</Text>
     <TouchableOpacity
       onPress={onRemove}
       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -234,11 +235,11 @@ const Chip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
       <View
         style={{
           width: 16, height: 16, borderRadius: 8,
-          borderWidth: 1.2, borderColor: '#6671E4',
+          borderWidth: 1.2, borderColor: Colors.primary,
           justifyContent: 'center', alignItems: 'center',
         }}
       >
-        <Text style={{ fontSize: 8, color: '#6671E4', lineHeight: 12, marginTop: 1 }}>✕</Text>
+        <Text style={{ fontSize: 8, color: Colors.primary, lineHeight: 12, marginTop: 1 }}>✕</Text>
       </View>
     </TouchableOpacity>
   </View>
@@ -334,7 +335,7 @@ const UploadCard = ({
 
       {status === 'loading' && (
         <>
-          <ActivityIndicator size="small" color="#6671E4" />
+          <ActivityIndicator size="small" color={Colors.primary} />
           <Text style={{ fontSize: 12, color: '#8A8D9F', marginTop: 6 }} className="font-sans">
             uploading document...
           </Text>
@@ -346,7 +347,7 @@ const UploadCard = ({
           <View
             style={{
               width: 36, height: 36, borderRadius: 18,
-              backgroundColor: '#6671E4',
+              backgroundColor: Colors.primary,
               justifyContent: 'center', alignItems: 'center',
             }}
           >
@@ -378,21 +379,21 @@ const RoleCard = ({ label, active, onSelect }: { label: string; active: boolean;
     onPress={onSelect}
     style={{
       flex: 1, borderWidth: 1.5,
-      borderColor: active ? '#6671E4' : '#EBEBEE',
+      borderColor: active ? Colors.primary : '#EBEBEE',
       borderRadius: 12, padding: 14, backgroundColor: '#FFFFFF',
     }}
   >
     <View
       style={{
         width: 18, height: 18, borderRadius: 9,
-        borderWidth: 2, borderColor: active ? '#6671E4' : '#C4C4C4',
+        borderWidth: 2, borderColor: active ? Colors.primary : '#C4C4C4',
         justifyContent: 'center', alignItems: 'center', marginBottom: 10,
       }}
     >
-      {active && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#6671E4' }} />}
+      {active && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary }} />}
     </View>
     <Text
-      style={{ fontSize: 13, fontWeight: '600', color: active ? '#6671E4' : '#8A8D9F', lineHeight: 18 }}
+      style={{ fontSize: 13, fontWeight: '600', color: active ? Colors.primary : '#8A8D9F', lineHeight: 18 }}
       className="font-sans"
     >
       {label}
@@ -753,7 +754,7 @@ export default function SignupScreen() {
           style={{
             height: 4,
             width: `${(step / totalSteps) * 100}%`,
-            backgroundColor: '#6671E4', borderRadius: 2,
+            backgroundColor: Colors.primary, borderRadius: 2,
           }}
         />
       </View>
@@ -774,7 +775,7 @@ export default function SignupScreen() {
 
           {/* Header */}
           <Text
-            style={{ fontSize: 22, color: '#6671E4', fontWeight: 'bold', fontStyle: 'italic', marginBottom: 6 }}
+            style={{ fontSize: 22, color: Colors.primary, fontWeight: 'bold', fontStyle: 'italic', marginBottom: 6 }}
             className="font-sans"
           >
             Welcome
@@ -785,7 +786,7 @@ export default function SignupScreen() {
           >
             Explore global opportunities or find talented candidates, post opportunities, and connect with skilled youth.{' '}
             <Text
-              style={{ color: '#6671E4', fontWeight: 'bold' }}
+              style={{ color: Colors.primary, fontWeight: 'bold' }}
               onPress={() => router.replace('/(auth)/login')}
             >
               Go back to login
@@ -1095,7 +1096,7 @@ export default function SignupScreen() {
 
                 {cvStatus === 'loading' && (
                   <>
-                    <ActivityIndicator size="large" color="#6671E4" />
+                    <ActivityIndicator size="large" color={Colors.primary} />
                     <Text style={{ fontSize: 13, color: '#8A8D9F', marginTop: 8 }} className="font-sans">
                       extracting information 🔥
                     </Text>
@@ -1107,7 +1108,7 @@ export default function SignupScreen() {
                     <View
                       style={{
                         width: 44, height: 44, borderRadius: 22,
-                        backgroundColor: '#6671E4',
+                        backgroundColor: Colors.primary,
                         justifyContent: 'center', alignItems: 'center',
                       }}
                     >
@@ -1163,11 +1164,11 @@ export default function SignupScreen() {
           <TouchableOpacity
             onPress={() => setStep(s => s - 1)}
             style={{
-              width: 52, height: 52, borderWidth: 1.5, borderColor: '#6671E4',
+              width: 52, height: 52, borderWidth: 1.5, borderColor: Colors.primary,
               borderRadius: 12, justifyContent: 'center', alignItems: 'center',
             }}
           >
-            <ChevronLeft size={20} color="#6671E4" />
+            <ChevronLeft size={20} color={Colors.primary} />
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -1183,7 +1184,7 @@ export default function SignupScreen() {
           style={{
             flex: 1, height: 52, borderRadius: 12,
             justifyContent: 'center', alignItems: 'center',
-            backgroundColor: isNextActive && !isSubmitting ? '#6671E4' : '#C5C9F0',
+            backgroundColor: isNextActive && !isSubmitting ? Colors.primary : Colors.purple200,
           }}
         >
           <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">
@@ -1216,7 +1217,7 @@ export default function SignupScreen() {
 
             {/* Title + subtitle */}
             <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
-              <Text style={{ fontSize: 15, fontWeight: 'bold', fontStyle: 'italic', color: '#6671E4', marginBottom: 4 }} className="font-sans">
+              <Text style={{ fontSize: 15, fontWeight: 'bold', fontStyle: 'italic', color: Colors.primary, marginBottom: 4 }} className="font-sans">
                 {currentMeta?.title}
               </Text>
               <Text style={{ fontSize: 12, color: '#8A8D9F' }} className="font-sans">
@@ -1257,13 +1258,13 @@ export default function SignupScreen() {
                     onPress={() => handlePickerSelect(item)}
                     style={{
                       height: 56, borderWidth: 1,
-                      borderColor: selected ? '#6671E4' : '#EBEBEE',
+                      borderColor: selected ? Colors.primary : '#EBEBEE',
                       borderRadius: 12, paddingHorizontal: 16,
                       flexDirection: 'row', alignItems: 'center',
                       justifyContent: 'space-between', backgroundColor: '#FFFFFF',
                     }}
                   >
-                    <Text style={{ fontSize: 14, color: selected ? '#6671E4' : '#1A1A1A', flex: 1 }} className="font-sans">
+                    <Text style={{ fontSize: 14, color: selected ? Colors.primary : '#1A1A1A', flex: 1 }} className="font-sans">
                       {label}
                     </Text>
                     {isCountryType && (
@@ -1282,7 +1283,7 @@ export default function SignupScreen() {
                 <TouchableOpacity
                   onPress={closePicker}
                   style={{
-                    height: 52, borderRadius: 12, backgroundColor: '#6671E4',
+                    height: 52, borderRadius: 12, backgroundColor: Colors.primary,
                     justifyContent: 'center', alignItems: 'center',
                   }}
                 >

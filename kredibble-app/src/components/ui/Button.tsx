@@ -1,20 +1,28 @@
 import React from "react";
 import { TouchableOpacity, Text, ActivityIndicator, TouchableOpacityProps, View } from "react-native";
 import { tv, type VariantProps } from "tailwind-variants";
+import { Colors } from "../../constants/design";
+
+/**
+ * Button. Radius 12 (rounded-control) and height 48 (h-control) for every size; sizes only change padding and text size.
+ * Variants: primary (purple), accent (filled orange: accent-600 with a white label, 4.61:1), secondary, outline, ghost.
+ * Never put a white label on orange-500 (#FC5E24, 3.10:1).
+ */
 
 const buttonVariants = tv({
-  base: "flex flex-row items-center justify-center rounded-xl active:opacity-80",
+  base: "flex flex-row items-center justify-center rounded-control active:opacity-80",
   variants: {
     variant: {
       primary: "bg-primary",
+      accent: "bg-accent-600",
       secondary: "bg-background-alt",
-      outline: "border border-border bg-transparent",
+      outline: "border border-border-input bg-transparent",
       ghost: "bg-transparent",
     },
     size: {
-      sm: "h-10 px-4",
-      md: "h-12 px-6",
-      lg: "h-14 px-8",
+      sm: "h-control px-4",
+      md: "h-control px-6",
+      lg: "h-control px-8",
     },
     disabled: {
       true: "opacity-50",
@@ -36,6 +44,7 @@ const textVariants = tv({
   variants: {
     variant: {
       primary: "text-white",
+      accent: "text-white",
       secondary: "text-text",
       outline: "text-text",
       ghost: "text-primary",
@@ -80,7 +89,7 @@ export function Button({
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? "white" : "#6671E4"} />
+        <ActivityIndicator color={variant === "primary" || variant === "accent" ? Colors.white : Colors.primary} />
       ) : (
         <View className="flex-row items-center space-x-2">
           {icon}

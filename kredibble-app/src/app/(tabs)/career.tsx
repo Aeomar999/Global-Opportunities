@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Image, ActivityIndicator } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, SlidersHorizontal, Star, Check } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { mockExperts, Expert } from '../../constants/mockExperts';
 import { authStore } from '../../constants/authStore';
 import { searchSeekers } from '../../lib/api';
@@ -52,11 +52,6 @@ const ExpertCard = ({ expert, onPress }: { expert: Expert; onPress: () => void }
         borderRadius: 16,
         padding: 16,
         marginBottom: 16,
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
       }}
     >
       <View style={{ flexDirection: 'row' }}>
@@ -187,7 +182,7 @@ export default function CareerScreen() {
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => router.push('/experts/search')}
-            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.searchBar, paddingHorizontal: 16, height: 50, ...Shadow.searchBar }}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.searchBar, paddingHorizontal: 16, height: 50, }}
           >
             <Search size={18} color={Colors.textPlaceholder} style={{ marginRight: 10 }} />
             <Text style={{ flex: 1, fontSize: 13, color: Colors.textPlaceholder }} className="font-sans">

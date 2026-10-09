@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, Image, ScrollView, StyleSheet, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 16, fontSize: 14, color: '#1A1A1A',
   },
   saveButton: {
-    height: 52, backgroundColor: '#6671E4', borderRadius: 12,
+    height: 52, backgroundColor: Colors.primary, borderRadius: 12,
     justifyContent: 'center', alignItems: 'center', marginTop: 8,
   },
   disabledButton: { backgroundColor: '#EBEBEE' },

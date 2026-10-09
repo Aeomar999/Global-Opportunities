@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -110,7 +111,7 @@ export default function VerificationCenterScreen() {
             </View>
 
             {docs[doc.key] === 'loading' ? (
-              <ActivityIndicator size="small" color="#6671E4" />
+              <ActivityIndicator size="small" color={Colors.primary} />
             ) : docs[doc.key] === 'done' ? (
               <View style={styles.doneBadge}>
                 <Check size={12} color="#16A34A" strokeWidth={3} />
@@ -173,8 +174,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   uploadButton: {
-    backgroundColor: '#EEF2FF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: Colors.primaryTransparent, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
   },
-  uploadButtonText: { fontSize: 12, color: '#6671E4', fontWeight: 'bold' },
+  uploadButtonText: { fontSize: 12, color: Colors.primary, fontWeight: 'bold' },
   replaceText: { fontSize: 11, color: '#8A8D9F', fontWeight: '500', textDecorationLine: 'underline' },
 });

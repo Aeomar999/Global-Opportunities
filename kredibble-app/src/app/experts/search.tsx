@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, FlatList } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 
 const POPULAR_SUGGESTIONS = [
   'Software developer',
@@ -68,7 +68,6 @@ export default function SearchExpertsScreen() {
             paddingHorizontal: 16,
             height: 50,
             marginBottom: 20,
-            ...Shadow.searchBar,
           }}
         >
           <Search size={18} color={Colors.textPlaceholder} style={{ marginRight: 10 }} />

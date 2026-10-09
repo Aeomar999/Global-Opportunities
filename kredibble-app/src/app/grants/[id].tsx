@@ -3,6 +3,7 @@ import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Bookmark, Calendar, Coins, Globe, Briefcase, Award, MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSaved } from '../../lib/useSaved';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { getGrantById, Grant } from '../../lib/api';
 
@@ -13,7 +14,7 @@ export default function GrantDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarked, toggleBookmark] = useSaved(id, 'grants');
   const [expanded, setExpanded] = useState(false);
   const [showAllDetails, setShowAllDetails] = useState(false);
 
@@ -81,7 +82,7 @@ export default function GrantDetailScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
-          onPress={() => setBookmarked(!bookmarked)}
+          onPress={toggleBookmark}
           style={[styles.circleHeaderButton, bookmarked && styles.bookmarkActive]}
         >
           <Bookmark

@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
+import { Colors } from "../../constants/design";
 
 export interface HeaderProps {
   title?: string;
@@ -32,16 +33,16 @@ export function Header({
         {showBack && (
           <TouchableOpacity
             onPress={handleBack}
-            className="w-10 h-10 items-center justify-center bg-white rounded-full border border-border shadow-sm"
+            className="w-10 h-10 items-center justify-center bg-white rounded-full border border-border"
           >
-            <ChevronLeft size={24} color="#000000" />
+            <ChevronLeft size={24} color={Colors.textHeading} />
           </TouchableOpacity>
         )}
       </View>
       
       <View className="flex-[2] items-center">
         {title && (
-          <Text className="text-lg font-sans font-semibold text-text text-center">
+          <Text className="text-lg font-heading font-semibold text-text text-center">
             {title}
           </Text>
         )}

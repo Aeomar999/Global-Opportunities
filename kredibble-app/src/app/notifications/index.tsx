@@ -1,69 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Users, MessageCircle, Hash, ShieldCheck, Info } from 'lucide-react-native';
+import {
+  Users, MessageCircle, Hash, ShieldCheck, Info, Briefcase, FileCheck, CalendarClock, BellOff, CheckCheck, Clock, Megaphone,
+} from 'lucide-react-native';
+import { Colors, Radius } from '../../constants/design';
+import { Header } from '../../components/ui/Header';
+import { markNotificationRead } from '../../lib/api';
+import { isServerNotificationId, syncNotifications } from '../../lib/notificationSync';
 import { notificationStore, NotificationItem, NotificationType } from '../../constants/mockNotifications';
-import { authStore } from '../../constants/authStore';
-import { getNotifications } from '../../lib/api';
 
-const TYPE_META: Record<NotificationType, { Icon: any; color: string }> = {
-  applicant: { Icon: Users, color: '#6671E4' },
-  message: { Icon: MessageCircle, color: '#10B981' },
-  channel: { Icon: Hash, color: '#F59E0B' },
-  verification: { Icon: ShieldCheck, color: '#16A34A' },
-  system: { Icon: Info, color: '#8A8D9F' },
+// Icon colour is the dot value of each state colour; the tinted circle behind it is the same colour at low opacity.
+const TYPE_META: Record<NotificationType, { Icon: any; color: string; tint: string }> = {
+  applicant: { Icon: Users, color: Colors.primary, tint: Colors.primary10 },
+  opportunity: { Icon: Briefcase, color: Colors.primary, tint: Colors.primary10 },
+  application: { Icon: FileCheck, color: Colors.successDot, tint: Colors.successTint },
+  verification: { Icon: ShieldCheck, color: Colors.successDot, tint: Colors.successTint },
+  message: { Icon: MessageCircle, color: Colors.primary, tint: Colors.primary10 },
+  channel: { Icon: Hash, color: Colors.accent500, tint: Colors.accent50 },
+  event: { Icon: CalendarClock, color: Colors.accent500, tint: Colors.accent50 },
+  ambassador: { Icon: Megaphone, color: Colors.accent500, tint: Colors.accent50 },
+  system: { Icon: Info, color: Colors.textMuted, tint: Colors.bgScreen },
 };
+
+type Filter = 'all' | 'unread';
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [items, setItems] = useState<NotificationItem[]>(notificationStore.items);
+  const [items, setItems] = useState<NotificationItem[]>(() => [...notificationStore.items]);
+  const [filter, setFilter] = useState<Filter>('all');
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchNotifications = async () => {
-      try {
-        const userId = authStore.user?.id;
-        if (userId) {
-          const apiNotifications = await getNotifications();
-          const list = Array.isArray(apiNotifications) ? apiNotifications : [];
-          if (isMounted) {
-            notificationStore.items = list;
-            setItems(list);
-            notificationStore.notify();
-          }
-        } else {
-          if (isMounted) {
-            notificationStore.items = [];
-            setItems([]);
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to load notifications from API', err);
-        if (isMounted) {
-          notificationStore.items = [];
-          setItems([]);
-        }
-      }
-    };
-    fetchNotifications();
-
-    const unsubscribe = notificationStore.subscribe(() => {
-      if (isMounted) {
-        setItems([...notificationStore.items]);
-      }
-    });
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
+    syncNotifications();
+    return notificationStore.subscribe(() => setItems([...notificationStore.items]));
   }, []);
+
+  const unreadCount = items.filter(n => !n.read).length;
+  const visible = useMemo(() => (filter === 'unread' ? items.filter(n => !n.read) : items), [items, filter]);
+  const fresh = visible.filter(n => !n.read);
+  const earlier = visible.filter(n => n.read);
 
   const handlePress = (item: NotificationItem) => {
     notificationStore.markRead(item.id);
+    if (isServerNotificationId(item.id)) markNotificationRead(item.id).catch(() => {});
     switch (item.type) {
       case 'applicant':
         router.push({ pathname: '/(tabs)/opportunities', params: { view: 'all' } });
+        break;
+      case 'opportunity':
+        router.push('/(tabs)/opportunities');
+        break;
+      case 'application':
+        router.push('/profile/applications' as any);
+        break;
+      case 'event':
+        router.push('/events' as any);
+        break;
+      case 'ambassador':
+        router.push('/(tabs)/profile');
         break;
       case 'message':
       case 'channel':
@@ -77,88 +72,142 @@ export default function NotificationsScreen() {
     }
   };
 
-  const unreadCount = items.filter(n => !n.read).length;
+  const renderCard = (item: NotificationItem) => {
+    const meta = TYPE_META[item.type] ?? TYPE_META.system;
+    return (
+      <TouchableOpacity
+        key={item.id}
+        onPress={() => handlePress(item)}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}. ${item.body}`}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          backgroundColor: Colors.bgCard,
+          borderRadius: Radius.card,
+          borderWidth: 1,
+          borderColor: item.read ? Colors.borderDefault : Colors.purple200,
+          padding: 14,
+          marginBottom: 10,
+          overflow: 'hidden',
+        }}
+      >
+        {!item.read && (
+          <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: Colors.primary }} />
+        )}
+        <View
+          style={{
+            width: 44, height: 44, borderRadius: 22, backgroundColor: meta.tint,
+            alignItems: 'center', justifyContent: 'center', marginRight: 12,
+          }}
+        >
+          <meta.Icon size={20} color={meta.color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text
+              numberOfLines={1}
+              style={{ flex: 1, fontSize: 14, color: Colors.textBody }}
+              className="font-heading font-bold"
+            >
+              {item.title}
+            </Text>
+            {!item.read && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.accent500 }} />}
+          </View>
+          <Text style={{ fontSize: 13, lineHeight: 19, color: Colors.textMuted, marginTop: 4 }} className="font-sans">
+            {item.body}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
+            <Clock size={11} color={Colors.textMuted} />
+            <Text style={{ fontSize: 11, color: Colors.textMuted }} className="font-sans">{item.time}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const sectionTitle = (label: string, count: number) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginBottom: 10 }}>
+      <Text style={{ fontSize: 15, color: Colors.textBody }} className="font-heading font-bold">{label}</Text>
+      <View style={{ backgroundColor: Colors.primary10, borderRadius: 9999, paddingHorizontal: 8, paddingVertical: 2 }}>
+        <Text style={{ fontSize: 11, fontWeight: '700', color: Colors.primary }}>{count}</Text>
+      </View>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
-          <ChevronLeft size={20} color="#1A1A1A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} className="font-sans">Notifications</Text>
-        {unreadCount > 0 ? (
-          <TouchableOpacity onPress={() => notificationStore.markAllRead()} style={styles.markAllButton}>
-            <Text style={styles.markAllText} className="font-sans">Mark all read</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.white }} edges={['top', 'left', 'right']}>
+      <Header title="Notifications" showBack />
+
+      {/* Filter chips */}
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 4, paddingBottom: 14, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.borderDefault }}>
+        {([['all', 'All'], ['unread', `Unread${unreadCount ? ` (${unreadCount})` : ''}`]] as const).map(([key, label]) => {
+          const active = filter === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setFilter(key)}
+              activeOpacity={0.85}
+              style={{
+                paddingHorizontal: 16, height: 36, borderRadius: 18, justifyContent: 'center',
+                backgroundColor: active ? Colors.primary : Colors.bgCard,
+                borderWidth: 1, borderColor: active ? Colors.primary : Colors.borderDefault,
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '600', color: active ? Colors.white : Colors.textMuted }}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+        <View style={{ flex: 1 }} />
+        {unreadCount > 0 && (
+          <TouchableOpacity
+            onPress={() => notificationStore.markAllRead()}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Mark all as read"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 36 }}
+          >
+            <CheckCheck size={16} color={Colors.primary} />
+            <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.primary }}>Read all</Text>
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 40 }} />
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {items.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText} className="font-sans">You&apos;re all caught up.</Text>
+      <ScrollView
+        style={{ backgroundColor: Colors.bgScreen }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40, flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {visible.length === 0 ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 80 }}>
+            <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.primary10, alignItems: 'center', justifyContent: 'center' }}>
+              <BellOff size={36} color={Colors.primary} strokeWidth={1.6} />
+            </View>
+            <Text style={{ fontSize: 17, color: Colors.textBody, marginTop: 20 }} className="font-heading font-bold">
+              {filter === 'unread' ? 'No unread notifications' : "You're all caught up"}
+            </Text>
+            <Text style={{ fontSize: 13, color: Colors.textMuted, marginTop: 6, textAlign: 'center' }} className="font-sans">
+              {filter === 'unread' ? 'Everything has been read.' : 'New updates will appear here.'}
+            </Text>
           </View>
         ) : (
-          items.map(item => {
-            const meta = TYPE_META[item.type];
-            return (
-              <TouchableOpacity
-                key={item.id}
-                onPress={() => handlePress(item)}
-                activeOpacity={0.8}
-                style={[styles.card, !item.read && styles.cardUnread]}
-              >
-                <View style={[styles.iconWrap, { backgroundColor: meta.color }]}>
-                  <meta.Icon size={18} color="#FFFFFF" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.titleRow}>
-                    <Text style={styles.cardTitle} className="font-sans">{item.title}</Text>
-                    {!item.read && <View style={styles.unreadDot} />}
-                  </View>
-                  <Text style={styles.cardBody} className="font-sans">{item.body}</Text>
-                  <Text style={styles.cardTime} className="font-sans">{item.time}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })
+          <>
+            {fresh.length > 0 && (
+              <>
+                {sectionTitle('New', fresh.length)}
+                {fresh.map(renderCard)}
+              </>
+            )}
+            {earlier.length > 0 && (
+              <>
+                {sectionTitle('Earlier', earlier.length)}
+                {earlier.map(renderCard)}
+              </>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F7F9' },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12,
-  },
-  backButton: {
-    width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: '#E5E6F2',
-    backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center',
-  },
-  headerTitle: { fontSize: 17, fontWeight: '600', color: '#1A1A1A' },
-  markAllButton: { paddingHorizontal: 8, paddingVertical: 8 },
-  markAllText: { fontSize: 12, color: '#6671E4', fontWeight: '600' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
-  emptyState: { paddingVertical: 60, alignItems: 'center' },
-  emptyText: { fontSize: 13, color: '#8A8D9F' },
-  card: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: '#E5E6F2', marginBottom: 12,
-  },
-  cardUnread: { backgroundColor: '#F8F9FF', borderColor: '#DDE1FA' },
-  iconWrap: {
-    width: 36, height: 36, borderRadius: 10,
-    justifyContent: 'center', alignItems: 'center', marginRight: 12,
-  },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  cardTitle: { fontSize: 13, fontWeight: '700', color: '#1A1A1A' },
-  unreadDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#6671E4' },
-  cardBody: { fontSize: 12, color: '#595959', marginTop: 4, lineHeight: 17 },
-  cardTime: { fontSize: 11, color: '#A1A1AA', marginTop: 6 },
-});

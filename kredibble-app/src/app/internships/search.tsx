@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, SlidersHorizontal } from 'lucide-react-native';
@@ -45,8 +46,6 @@ export default function SearchInternshipsScreen() {
             flexDirection: 'row', alignItems: 'center',
             backgroundColor: '#FFFFFF', borderRadius: 15,
             paddingHorizontal: 16, height: 50, marginBottom: 24,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
           }}
         >
           <Search size={18} color="#A1A1AA" style={{ marginRight: 10 }} />
@@ -61,7 +60,7 @@ export default function SearchInternshipsScreen() {
             className="font-sans"
           />
           <TouchableOpacity onPress={() => router.push('/internships/filter' as any)}>
-            <SlidersHorizontal size={18} color="#6671E4" />
+            <SlidersHorizontal size={18} color={Colors.primary} />
           </TouchableOpacity>
         </View>
 

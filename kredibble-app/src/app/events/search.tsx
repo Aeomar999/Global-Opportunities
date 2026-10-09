@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, TextInput, ScrollView } from 'react-nativ
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, SlidersHorizontal } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 
 const SUGGESTIONS = [
   'conference',
@@ -54,7 +54,6 @@ export default function SearchEventsScreen() {
             paddingHorizontal: 16,
             height: 50,
             marginBottom: 24,
-            ...Shadow.searchBar,
           }}
         >
           <Search size={18} color={Colors.textPlaceholder} style={{ marginRight: 10 }} />

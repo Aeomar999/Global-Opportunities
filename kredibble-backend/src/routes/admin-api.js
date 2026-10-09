@@ -1,13 +1,16 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import { requireAdminOrStaffAuth } from '../middleware/auth.js';
+import { requireAdminOrStaffAuth, requireAdminAuth } from '../middleware/auth.js';
 import { requirePortalRoles, requireScreen } from '../middleware/portal-auth.js';
 import { ApiError, asyncHandler, itemResponse, listResponse, notFound } from '../utils/http.js';
 import { Opportunity } from '../models/Platform.js';
 import { StaffMember, User } from '../models/User.js';
+import { Channel, CommunityMembership } from '../models/Community.js';
+import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 import {
   AdminActivity,
   Ambassador,
+  AmbassadorRequest,
   AmbassadorAmplification,
   Beneficiary,
   MonthlyTarget,
@@ -19,7 +22,6 @@ import {
   RolePermissionConfig,
   PipelineStageConfig,
   DEFAULT_PIPELINE_STAGE_LABELS,
-  COUNTRY_DIAL_CODES,
   normalizeEmail,
   normalizePhone,
   CANONICAL_RECORD_SOURCES,
@@ -53,7 +55,6 @@ import {
   ambassadorCreateSchema,
   ambassadorUpdateSchema,
   amplificationCreateSchema,
-  BENEFICIARY_SOURCES,
   beneficiaryCreateSchema,
   beneficiaryUpdateSchema,
   beneficiaryUndoVerifySchema,
@@ -61,6 +62,14 @@ import {
   socialPostUpdateSchema,
 } from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
+import { postChannelMessage, listChannelMessages, getThread, findPost, setAllowReplies } from '../lib/chat.js';
+import { notifyUser } from '../lib/user-notify.js';
+import { evictFromChannelRoom } from '../socket.js';
+import { toRequestResponse } from './ambassador.js';
+import {
+  approveAmbassadorRequestSchema, rejectAmbassadorRequestSchema, chatMessageSchema,
+  createAdminChannelSchema, addChannelMemberSchema, allowRepliesSchema,
+} from '../schemas/ambassador.js';
 
 export const adminApiRouter = Router();
 
@@ -72,7 +81,6 @@ const OPPORTUNITY_ROLES = ['Opportunities Officer', 'Writer', 'Desk Lead'];
 const PROGRAM_ROLES = ['Training and Capacity Development Officer', 'Desk Lead'];
 const PARTNER_ROLES = ['Partnerships Officer', 'Desk Lead'];
 const AMBASSADOR_ROLES = ['Communications Officer', 'Social Media Manager', 'Country Lead', 'Desk Lead'];
-const BENEFICIARY_ROLES = ['Database Officer', 'Country Lead', 'Desk Lead'];
 const SOCIAL_ROLES = ['Communications Officer', 'Social Media Manager', 'Desk Lead'];
 const configured = (value) => Boolean(value && !value.includes('placeholder'));
 const escapedRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1386,6 +1394,301 @@ adminApiRouter.post('/social-posts/:id/retry-wordpress-sync', requireAdminOrStaf
   if (!post) throw notFound('SocialPost');
   itemResponse(res, { ...toSocialPostClientObject(post), sync: await syncManagedRecord('social-posts', post) });
 }));
+
+// --- Ambassador applications -------------------------------------------------
+// Reviewed by an admin. Approving links the user to the ambassador registry and, optionally, a channel.
+
+adminApiRouter.get('/ambassador-requests', requireAdminAuth, asyncHandler(async (req, res) => {
+  const filter = {};
+  if (['pending', 'approved', 'rejected'].includes(req.query.status)) filter.status = req.query.status;
+  if (['seeker', 'hirer'].includes(req.query.role)) filter.role = req.query.role;
+  if (req.query.q) {
+    const pattern = new RegExp(escapedRegex(String(req.query.q).slice(0, 80)), 'i');
+    filter.$or = [{ name: pattern }, { email: pattern }, { organisation: pattern }, { profession: pattern }];
+  }
+  const { page, skip, limit } = pageOptions(req.query);
+  const [rows, total] = await Promise.all([
+    AmbassadorRequest.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    AmbassadorRequest.countDocuments(filter),
+  ]);
+  listResponse(res, rows.map(toRequestResponse), total, page, limit);
+}));
+
+adminApiRouter.get('/ambassador-requests/:id', requireAdminAuth, asyncHandler(async (req, res) => {
+  const request = await AmbassadorRequest.findById(validId(req.params.id, 'Ambassador request')).lean();
+  if (!request) throw notFound('Ambassador request');
+  const [user, seeker, hirer] = await Promise.all([
+    User.findById(request.userId).select('name email role emailVerified createdAt avatarUrl').lean(),
+    SeekerProfile.findOne({ userId: request.userId }).lean(),
+    request.role === 'hirer' ? HirerAccount.findOne({ userId: request.userId }).lean() : null,
+  ]);
+  const list = (value) => {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+      return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  };
+  // The same details the person sees on their own profile, so the reviewer knows who they are approving.
+  const profile = request.role === 'hirer'
+    ? hirer && {
+      kind: 'hirer',
+      companyName: hirer.companyName, tagline: hirer.tagline, industry: hirer.industry, companySize: hirer.companySize,
+      location: hirer.location, website: hirer.website, companyEmail: hirer.companyEmail, description: hirer.description,
+      recruiterName: hirer.recruiterName, recruiterRole: hirer.recruiterRole, recruiterEmail: hirer.recruiterEmail,
+      recruiterPhone: hirer.recruiterPhone, recruiterLinkedin: hirer.recruiterLinkedin,
+      verified: Boolean(hirer.verified), verification: hirer.verification, postingsCount: hirer.postingsCount || 0,
+    }
+    : seeker && {
+      kind: 'seeker',
+      profession: seeker.profession, university: seeker.university, country: seeker.country, city: seeker.city, phone: seeker.phone,
+      bio: seeker.bio, professionalSummary: seeker.professionalSummary, experienceLevel: seeker.experienceLevel,
+      technicalSkills: list(seeker.technicalSkills), softSkills: list(seeker.softSkills), tools: list(seeker.tools), certifications: list(seeker.certifications),
+      rating: seeker.rating || 0, verified: Boolean(seeker.verified), applicationsCount: seeker.applicationsCount || 0,
+    };
+  itemResponse(res, {
+    ...toRequestResponse(request),
+    user: user && { id: String(user._id), name: user.name, email: user.email, role: user.role, emailVerified: Boolean(user.emailVerified), joinedAt: user.createdAt, avatarUrl: user.avatarUrl },
+    verified: Boolean(seeker?.verified || hirer?.verified),
+    profile: profile || null,
+  });
+}));
+
+adminApiRouter.post('/ambassador-requests/:id/approve', requireAdminAuth, validate(approveAmbassadorRequestSchema), asyncHandler(async (req, res) => {
+  const request = await AmbassadorRequest.findById(req.params.id);
+  if (!request) throw notFound('Ambassador request');
+  if (request.status !== 'pending') throw new ApiError(409, 'This request has already been decided');
+  const user = await User.findById(request.userId);
+  if (!user || user.role === 'deleted') throw new ApiError(409, 'This user no longer has an active account');
+
+  let channel = null;
+  if (req.body.channelId) {
+    channel = await Channel.findById(req.body.channelId);
+    if (!channel) throw notFound('Channel');
+  }
+
+  // Saved through the model (not an upsert) so its save hook issues the GOD-XXXXXX referral code and the joinedAt date,
+  // exactly as for an ambassador added from the Network page.
+  const ambassador = (await Ambassador.findOne({ linkedUserId: user._id })) || new Ambassador({ linkedUserId: user._id, createdBy: req.auth.sub });
+  ambassador.set({
+    fullName: user.name,
+    email: user.email,
+    phone: request.phone,
+    country: request.country,
+    city: request.city,
+    // The Network registry only knows student, graduate, staff and volunteer; the team can edit this on the ambassador page.
+    memberType: request.role === 'hirer' ? 'volunteer' : 'student',
+    status: 'onboarding',
+  });
+  await ambassador.save();
+
+  if (channel) {
+    await CommunityMembership.findOneAndUpdate(
+      { channelId: channel._id, userId: user._id },
+      { $set: { status: 'active', role: 'member', reviewedBy: req.auth.sub, reviewedAt: new Date() }, $unset: { bannedReason: 1 } },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
+  }
+
+  request.status = 'approved';
+  request.reviewNote = req.body.note;
+  request.reviewedBy = req.auth.sub;
+  request.reviewedAt = new Date();
+  request.ambassadorId = ambassador._id;
+  if (channel) request.channelId = channel._id;
+  await request.save();
+
+  await notifyUser(user._id, {
+    title: 'Ambassador request approved',
+    message: channel
+      ? `Congratulations! Your request to become a Kredibble ambassador has been approved. Welcome to the team! You have been added to "${channel.name}" in Community, where our team will share next steps.`
+      : 'Congratulations! Your request to become a Kredibble ambassador has been approved. Welcome to the team! Our team will be in touch shortly with next steps.',
+    type: 'ambassador',
+    priority: 'high',
+  });
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.ADMIN_AMBASSADOR_DECISION,
+    resourceType: AUDIT_RESOURCE_TYPES.AMBASSADOR_REQUEST,
+    resourceId: request._id,
+    outcome: 'success',
+    metadata: { decision: 'approved', channelId: channel ? String(channel._id) : undefined },
+  });
+  await logActivity(req.auth.sub, 'approved ambassador request', 'ambassadors', ambassador);
+  itemResponse(res, toRequestResponse(request));
+}));
+
+adminApiRouter.post('/ambassador-requests/:id/reject', requireAdminAuth, validate(rejectAmbassadorRequestSchema), asyncHandler(async (req, res) => {
+  const request = await AmbassadorRequest.findById(req.params.id);
+  if (!request) throw notFound('Ambassador request');
+  if (request.status !== 'pending') throw new ApiError(409, 'This request has already been decided');
+  request.status = 'rejected';
+  request.reviewNote = req.body.note;
+  request.reviewedBy = req.auth.sub;
+  request.reviewedAt = new Date();
+  await request.save();
+
+  await notifyUser(request.userId, {
+    title: 'Ambassador request update',
+    message: 'Thank you for your interest in becoming a Kredibble ambassador. We have carefully reviewed your request and are unable to approve it at this time. You are welcome to apply again in a few days, and we encourage you to keep contributing to the Kredibble community.',
+    type: 'ambassador',
+  });
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.ADMIN_AMBASSADOR_DECISION,
+    resourceType: AUDIT_RESOURCE_TYPES.AMBASSADOR_REQUEST,
+    resourceId: request._id,
+    outcome: 'success',
+    metadata: { decision: 'rejected' },
+  });
+  itemResponse(res, toRequestResponse(request));
+}));
+
+adminApiRouter.post('/ambassador-requests/:id/revoke', requireAdminAuth, validate(rejectAmbassadorRequestSchema), asyncHandler(async (req, res) => {
+  const request = await AmbassadorRequest.findById(req.params.id);
+  if (!request) throw notFound('Ambassador request');
+  if (request.status !== 'approved') throw new ApiError(409, 'Only an approved ambassador can be removed');
+
+  // Take back the ambassador status.
+  // Dormant through save(), so the dormantSince date used by the Network totals and leaderboard is recorded.
+  for (const ambassador of await Ambassador.find({ linkedUserId: request.userId })) {
+    ambassador.status = 'dormant';
+    await ambassador.save();
+  }
+
+  // Remove the person from every channel an admin created and added them to (the ambassador group, for example).
+  // Groups they joined or created themselves are left alone.
+  const memberships = await CommunityMembership.find({ userId: request.userId, status: 'active', reviewedBy: { $ne: null } }).populate('channelId', 'name createdBy').lean();
+  const creatorIds = [...new Set(memberships.map((m) => m.channelId?.createdBy).filter(Boolean).map(String))];
+  const adminIds = new Set((await User.find({ _id: { $in: creatorIds }, role: 'admin' }).select('_id').lean()).map((u) => String(u._id)));
+  const removedFrom = [];
+  for (const membership of memberships) {
+    const channel = membership.channelId;
+    const addedByAdminChannel = channel && adminIds.has(String(channel.createdBy));
+    if (!addedByAdminChannel && String(channel?._id) !== String(request.channelId)) continue;
+    await CommunityMembership.updateOne({ _id: membership._id }, { $set: { status: 'removed', reviewedBy: req.auth.sub, reviewedAt: new Date() } });
+    evictFromChannelRoom(channel._id, request.userId);
+    removedFrom.push(channel.name);
+  }
+
+  request.status = 'rejected';
+  request.reviewNote = req.body.note || request.reviewNote;
+  request.reviewedBy = req.auth.sub;
+  request.reviewedAt = new Date();
+  await request.save();
+
+  await notifyUser(request.userId, {
+    title: 'Ambassador status update',
+    message: 'Thank you for your time as a Kredibble ambassador. Your ambassador status has now ended, and your access to the ambassador group has been removed. We appreciate your contribution and you are welcome to apply again in future.',
+    type: 'ambassador',
+  });
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.ADMIN_AMBASSADOR_DECISION,
+    resourceType: AUDIT_RESOURCE_TYPES.AMBASSADOR_REQUEST,
+    resourceId: request._id,
+    outcome: 'success',
+    metadata: { decision: 'revoked', removedFrom },
+  });
+  await logActivity(req.auth.sub, 'removed ambassador', 'ambassadors', { _id: request.ambassadorId || request._id });
+  itemResponse(res, { ...toRequestResponse(request), removedFrom });
+}));
+
+// --- Admin-managed channels: create, members and group chat ------------------
+
+adminApiRouter.post('/channels', requireAdminAuth, validate(createAdminChannelSchema), asyncHandler(async (req, res) => {
+  const channel = await Channel.create({
+    name: req.body.name,
+    category: req.body.category,
+    bio: req.body.bio,
+    visibility: req.body.visibility,
+    requiresApproval: req.body.visibility === 'private',
+    owner: 'Kredibble',
+    createdBy: req.auth.sub,
+  });
+  await CommunityMembership.create({ channelId: channel._id, userId: req.auth.sub, role: 'admin', status: 'active', reviewedBy: req.auth.sub, reviewedAt: new Date() });
+  await auditReq(req, { action: AUDIT_ACTIONS.ADMIN_USER_UPDATE, resourceType: AUDIT_RESOURCE_TYPES.COMMUNITY_CHANNEL, resourceId: channel._id, outcome: 'success', metadata: { created: true } });
+  res.status(201).json({ data: toClientObject(channel) });
+}));
+
+adminApiRouter.get('/channels/:id/members', requireAdminAuth, asyncHandler(async (req, res) => {
+  const channel = await Channel.findById(validId(req.params.id, 'Channel'));
+  if (!channel) throw notFound('Channel');
+  const status = ['pending', 'active', 'removed', 'banned'].includes(req.query.status) ? req.query.status : 'active';
+  const memberships = await CommunityMembership.find({ channelId: channel._id, status }).populate('userId', 'name email role avatarUrl').lean();
+  listResponse(res, memberships.map((m) => ({
+    id: String(m._id),
+    userId: String(m.userId?._id || m.userId),
+    name: m.userId?.name,
+    email: m.userId?.email,
+    userRole: m.userId?.role,
+    role: m.role,
+    status: m.status,
+    joinedAt: m.createdAt,
+  })));
+}));
+
+adminApiRouter.post('/channels/:id/members', requireAdminAuth, validate(addChannelMemberSchema), asyncHandler(async (req, res) => {
+  const channel = await Channel.findById(req.params.id);
+  if (!channel) throw notFound('Channel');
+  const user = await User.findById(req.body.userId).select('name role');
+  if (!user || user.role === 'deleted') throw notFound('User');
+  const membership = await CommunityMembership.findOneAndUpdate(
+    { channelId: channel._id, userId: user._id },
+    { $set: { status: 'active', role: 'member', reviewedBy: req.auth.sub, reviewedAt: new Date() }, $unset: { bannedReason: 1 } },
+    { new: true, upsert: true, setDefaultsOnInsert: true },
+  );
+  await notifyUser(user._id, { title: 'Added to a group', message: `You were added to "${channel.name}" in Community.`, type: 'channel' });
+  itemResponse(res, toClientObject(membership));
+}));
+
+adminApiRouter.delete('/channels/:id/members/:userId', requireAdminAuth, asyncHandler(async (req, res) => {
+  const channel = await Channel.findById(validId(req.params.id, 'Channel'));
+  if (!channel) throw notFound('Channel');
+  if (String(channel.createdBy) === req.params.userId) throw new ApiError(400, 'The group creator cannot be removed');
+  const membership = await CommunityMembership.findOneAndUpdate(
+    { channelId: channel._id, userId: validId(req.params.userId, 'User') },
+    { $set: { status: 'removed', reviewedBy: req.auth.sub, reviewedAt: new Date() } },
+    { new: true },
+  );
+  if (!membership) throw notFound('Channel member');
+  evictFromChannelRoom(channel._id, req.params.userId);
+  itemResponse(res, toClientObject(membership));
+}));
+
+adminApiRouter.get('/channels/:id/messages', requireAdminAuth, asyncHandler(async (req, res) => {
+  const channel = await Channel.findById(validId(req.params.id, 'Channel'));
+  if (!channel) throw notFound('Channel');
+  listResponse(res, await listChannelMessages(channel._id, { before: req.query.before, limit: req.query.limit }));
+}));
+
+adminApiRouter.get('/channels/:id/messages/:messageId/replies', requireAdminAuth, asyncHandler(async (req, res) => {
+  const channel = await Channel.findById(validId(req.params.id, 'Channel'));
+  if (!channel) throw notFound('Channel');
+  const thread = await getThread(channel._id, validId(req.params.messageId, 'Message'));
+  if (!thread) throw notFound('Message');
+  itemResponse(res, thread);
+}));
+
+adminApiRouter.post('/channels/:id/messages', requireAdminAuth, asyncHandler(async (req, res) => {
+  const parsed = chatMessageSchema.safeParse({ body: req.body, query: req.query, params: { channelId: req.params.id } });
+  if (!parsed.success) throw new ApiError(400, 'Validation failed: ' + parsed.error.issues.map((i) => i.path.join('.') + ': ' + i.message).join(', '));
+  const channel = await Channel.findById(parsed.data.params.channelId);
+  if (!channel) throw notFound('Channel');
+  const sender = await User.findById(req.auth.sub).select('name role');
+  if (!sender) throw new ApiError(401, 'Account no longer active');
+  const { body, parentId, allowReplies } = parsed.data.body;
+  if (parentId && !(await findPost(channel._id, parentId))) throw notFound('Message');
+  res.status(201).json({ data: await postChannelMessage({ channel, sender, body, parentId, allowReplies }) });
+}));
+
+// Turn replies on or off for a post that is already published.
+adminApiRouter.patch('/channels/:id/messages/:messageId', requireAdminAuth, validate(allowRepliesSchema), asyncHandler(async (req, res) => {
+  const channel = await Channel.findById(req.params.id);
+  if (!channel) throw notFound('Channel');
+  const updated = await setAllowReplies(channel._id, req.params.messageId, req.body.allowReplies);
+  if (!updated) throw notFound('Message');
+  itemResponse(res, updated);
+}));
+
 
 export const toBeneficiaryClientObject = (doc) => {
   if (!doc) return doc;

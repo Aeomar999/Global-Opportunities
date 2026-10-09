@@ -7,7 +7,7 @@ import {
   Sprout, Lightbulb, Leaf, Crown
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { professions, experienceLevels, ratingOptions, countries } from '../../constants/mockExperts';
 
 type Section = 'city' | 'profession' | 'experience' | 'rating' | 'country' | null;
@@ -232,7 +232,6 @@ export default function FilterExpertsScreen() {
             paddingHorizontal: 16,
             height: 50,
             marginBottom: 16,
-            ...Shadow.searchBar,
           }}
         >
           <Search size={18} color={Colors.textPlaceholder} style={{ marginRight: 10 }} />

@@ -107,8 +107,8 @@ export function NavGroupItem({ group, pathname, open, onToggle, counts, onNaviga
                     childActive ? "glass-active font-medium text-sb-text" : "text-sb-muted hover:bg-white/6 hover:text-sb-text",
                   )}
                 >
-                  <span className="flex-1">{child.label}</span>
-                  {count !== undefined && count > 0 && <CountPill count={count} onDark label="pending" />}
+                  <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                  {count !== undefined && count > 0 && <span className="shrink-0"><CountPill count={count} onDark label="pending" /></span>}
                 </Link>
               </li>
             );

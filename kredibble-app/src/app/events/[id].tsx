@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Clipboard, Alert,
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Bookmark, Clock, MapPin, Copy, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSaved } from '../../lib/useSaved';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { getEventById, EventItem } from '../../lib/api';
 
@@ -13,7 +14,7 @@ export default function EventDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarked, toggleBookmark] = useSaved(id, 'events');
   const [expanded, setExpanded] = useState(false);
   const insets = useSafeAreaInsets();
 
@@ -86,7 +87,7 @@ export default function EventDetailScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
-          onPress={() => setBookmarked(!bookmarked)}
+          onPress={toggleBookmark}
           style={[styles.circleHeaderButton, bookmarked && styles.bookmarkActive]}
         >
           <Bookmark size={20} color={bookmarked ? Colors.white : Colors.textMuted} fill={bookmarked ? Colors.white : 'transparent'} />
@@ -237,11 +238,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   bookmarkActive: {
     backgroundColor: Colors.primary,

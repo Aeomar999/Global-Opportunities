@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, X, Plus, ChevronRight } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { authStore } from '../../constants/authStore';
-import { getChannels, createChannel } from '../../lib/api';
+import { getChannels, createChannel, joinChannel } from '../../lib/api';
+import { useToast } from '../../components/ui/ToastProvider';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 const LogoSVG = () => (
@@ -19,6 +20,7 @@ const LogoSVG = () => (
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function CommunityScreen() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [role, setRole] = useState(authStore.role);
   
   // Seeker states
@@ -37,12 +39,6 @@ export default function CommunityScreen() {
 
   // Subscribe to auth store updates & fetch initial data
   useEffect(() => {
-    // Fetch channels from backend; isLoading starts true.
-    getChannels()
-      .then(setChannels)
-      .catch((e) => console.error('Failed to fetch channels:', e))
-      .finally(() => setIsLoading(false));
-
     // State is initialised from authStore; the subscription keeps it in sync.
     const unsubAuth = authStore.subscribe(() => {
       setRole(authStore.role);
@@ -53,10 +49,36 @@ export default function CommunityScreen() {
     };
   }, []);
 
-  const handleFollow = (id: string) => {
-    // Optimistic UI update or integrate API
-    alert(`Followed channel ${id}`);
+  const loadChannels = useCallback(() => {
+    getChannels()
+      .then(setChannels)
+      .catch((e) => console.error('Failed to fetch channels:', e))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  // Reload whenever the tab comes into view, so a channel an admin just added you to shows up straight away.
+  useFocusEffect(
+    useCallback(() => {
+      loadChannels();
+    }, [loadChannels]),
+  );
+
+  // Following a channel joins it: a public one is joined at once and moves to the top list.
+  const handleFollow = async (id: string) => {
+    try {
+      const result = await joinChannel(id);
+      showToast(result.accepted ? 'You joined this channel.' : 'Your request was sent. You will be notified once it is accepted.', 'success');
+      loadChannels();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'We could not join this channel. Please try again.', 'error');
+    }
   };
+
+  // Admin announcement channels open as posts with replies; other channels open as the usual feed.
+  const openChannel = (channel: any) =>
+    channel.announcement
+      ? router.push({ pathname: '/community/chat', params: { id: channel.id, name: channel.name } } as any)
+      : router.push({ pathname: '/community/feed', params: { id: channel.id } });
 
   const handleDismiss = (id: string) => {
     // Local filter out
@@ -125,21 +147,21 @@ export default function CommunityScreen() {
         <View style={{ flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#E5E6F2' }}>
           <TouchableOpacity
             onPress={() => setHirerTab('managed')}
-            style={{ paddingVertical: 12, marginRight: 24, borderBottomWidth: 2, borderBottomColor: hirerTab === 'managed' ? '#6671E4' : 'transparent' }}
+            style={{ paddingVertical: 12, marginRight: 24, borderBottomWidth: 2, borderBottomColor: hirerTab === 'managed' ? Colors.primary : 'transparent' }}
           >
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: hirerTab === 'managed' ? '#6671E4' : '#8A8D9F' }} className="font-sans">Managed by Me</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: hirerTab === 'managed' ? Colors.primary : '#8A8D9F' }} className="font-sans">Managed by Me</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setHirerTab('discover')}
-            style={{ paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: hirerTab === 'discover' ? '#6671E4' : 'transparent' }}
+            style={{ paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: hirerTab === 'discover' ? Colors.primary : 'transparent' }}
           >
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: hirerTab === 'discover' ? '#6671E4' : '#8A8D9F' }} className="font-sans">Discover All</Text>
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: hirerTab === 'discover' ? Colors.primary : '#8A8D9F' }} className="font-sans">Discover All</Text>
           </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-          {isLoading && <ActivityIndicator size="small" color="#6671E4" style={{ marginTop: 20, marginBottom: 20 }} />}
+          {isLoading && <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 20, marginBottom: 20 }} />}
           {hirerTab === 'managed' ? (
             <View>
               {/* Quick Action: Create a Group */}
@@ -148,10 +170,8 @@ export default function CommunityScreen() {
                 activeOpacity={0.8}
                 style={{
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: '#6671E4', borderRadius: 12,
+                  backgroundColor: Colors.primary, borderRadius: 12,
                   paddingVertical: 14, gap: 8, marginBottom: 20,
-                  shadowColor: '#6671E4', shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.15, shadowRadius: 10, elevation: 3,
                 }}
               >
                 <Plus size={18} color="#FFFFFF" strokeWidth={3} />
@@ -191,8 +211,6 @@ export default function CommunityScreen() {
                   backgroundColor: '#FFFFFF', borderRadius: 15,
                   paddingHorizontal: 16, height: 50,
                   marginBottom: 16,
-                  shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
                 }}
               >
                 <Search size={18} color="#A1A1AA" style={{ marginRight: 10 }} />
@@ -214,7 +232,7 @@ export default function CommunityScreen() {
                     {followedChannels.map(channel => (
                       <TouchableOpacity
                         key={channel.id}
-                        onPress={() => router.push({ pathname: '/community/feed', params: { id: channel.id } })}
+                        onPress={() => openChannel(channel)}
                         style={{
                           flexDirection: 'row', alignItems: 'center',
                           backgroundColor: '#FFFFFF', borderRadius: 16,
@@ -233,7 +251,9 @@ export default function CommunityScreen() {
                 </View>
               )}
 
-              <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#8A8D9F', marginBottom: 12 }} className="font-sans">ALL COMMUNITIES</Text>
+              {recommendedChannels.length > 0 && (
+                <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#8A8D9F', marginBottom: 12 }} className="font-sans">ALL COMMUNITIES</Text>
+              )}
 
               <View style={{ gap: 16 }}>
                 {recommendedChannels.map(channel => (
@@ -253,11 +273,11 @@ export default function CommunityScreen() {
                     <TouchableOpacity
                       onPress={() => handleFollow(channel.id)}
                       style={{
-                        backgroundColor: '#EEF2FF',
+                        backgroundColor: Colors.primaryTransparent,
                         paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
                       }}
                     >
-                      <Text style={{ fontSize: 11, color: '#6671E4', fontWeight: 'bold' }} className="font-sans">
+                      <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: 'bold' }} className="font-sans">
                         Join
                       </Text>
                     </TouchableOpacity>
@@ -322,7 +342,7 @@ export default function CommunityScreen() {
                 <TouchableOpacity
                   onPress={handleCreateChannel}
                   style={{
-                    backgroundColor: '#6671E4', borderRadius: 8, height: 48,
+                    backgroundColor: Colors.primary, borderRadius: 8, height: 48,
                     justifyContent: 'center', alignItems: 'center', marginTop: 12,
                   }}
                 >
@@ -366,7 +386,7 @@ export default function CommunityScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24, flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
       >
         {isLoading && <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 20, marginBottom: 20 }} />}
@@ -381,7 +401,6 @@ export default function CommunityScreen() {
             paddingHorizontal: 16,
             height: 50,
             marginBottom: 20,
-            ...Shadow.searchBar,
           }}
         >
           <Search size={18} color={Colors.textPlaceholder} style={{ marginRight: 10 }} />
@@ -407,10 +426,7 @@ export default function CommunityScreen() {
             <TouchableOpacity
               key={channel.id}
               activeOpacity={0.8}
-              onPress={() => router.push({
-                pathname: '/community/feed',
-                params: { id: channel.id }
-              })}
+              onPress={() => openChannel(channel)}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -466,10 +482,12 @@ export default function CommunityScreen() {
           ))}
         </View>
 
-        {/* Find Channels to Follow Header */}
-        <Text style={{ fontSize: 12, fontWeight: FontWeight.medium, color: Colors.textMuted, opacity: 0.6, marginBottom: 16 }} className="font-sans">
-          Find channels to follow
-        </Text>
+        {/* Find Channels to Follow Header: only when there are channels to follow */}
+        {recommendedChannels.length > 0 && (
+          <Text style={{ fontSize: 12, fontWeight: FontWeight.medium, color: Colors.textMuted, opacity: 0.6, marginBottom: 16 }} className="font-sans">
+            Find channels to follow
+          </Text>
+        )}
 
         {/* Recommendations List */}
         {recommendedChannels.length > 0 ? (
@@ -508,7 +526,7 @@ export default function CommunityScreen() {
                 <TouchableOpacity
                   onPress={() => handleFollow(channel.id)}
                   style={{
-                    backgroundColor: '#EEF2FF',
+                    backgroundColor: Colors.primaryTransparent,
                     paddingHorizontal: 16,
                     paddingVertical: 8,
                     borderRadius: 8,
@@ -528,13 +546,13 @@ export default function CommunityScreen() {
               </View>
             </View>
           ))
-        ) : (
-          <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+        ) : followedChannels.length === 0 ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 80 }}>
             <Text style={{ fontSize: 13, color: Colors.textMuted }} className="font-sans">
               No recommended channels available.
             </Text>
           </View>
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

@@ -1,4 +1,4 @@
-export type NotificationType = 'applicant' | 'message' | 'channel' | 'verification' | 'system';
+export type NotificationType = 'applicant' | 'message' | 'channel' | 'verification' | 'system' | 'opportunity' | 'application' | 'event' | 'ambassador';
 
 export interface NotificationItem {
   id: string;
@@ -8,8 +8,6 @@ export interface NotificationItem {
   time: string;
   read: boolean;
 }
-
-
 
 class NotificationStateStore {
   items: NotificationItem[] = [];

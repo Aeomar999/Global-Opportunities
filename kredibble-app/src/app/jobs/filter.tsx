@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -50,10 +51,10 @@ const RadioButton = ({ selected }: { selected: boolean }) => (
   <View style={{
     width: 20, height: 20, borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: selected ? '#6671E4' : '#C4C4C4',
+    borderColor: selected ? Colors.primary : '#C4C4C4',
     justifyContent: 'center', alignItems: 'center',
   }}>
-    {selected && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#6671E4' }} />}
+    {selected && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary }} />}
   </View>
 );
 
@@ -66,9 +67,9 @@ const OptionRow = ({
     onPress={onPress}
     style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}
   >
-    <Icon size={18} color={selected ? '#6671E4' : '#A1A1AA'} style={{ marginRight: 12 }} />
+    <Icon size={18} color={selected ? Colors.primary : '#A1A1AA'} style={{ marginRight: 12 }} />
     <Text
-      style={{ flex: 1, fontSize: 12, color: selected ? '#6671E4' : '#1A1A1A', fontWeight: selected ? '500' : '400' }}
+      style={{ flex: 1, fontSize: 12, color: selected ? Colors.primary : '#1A1A1A', fontWeight: selected ? '500' : '400' }}
       className="font-sans"
     >
       {label}
@@ -86,16 +87,16 @@ const SectionHeader = ({
     onPress={onToggle}
     style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}
   >
-    <Icon size={20} color={hasSelections ? '#6671E4' : '#A1A1AA'} style={{ marginRight: 12 }} />
+    <Icon size={20} color={hasSelections ? Colors.primary : '#A1A1AA'} style={{ marginRight: 12 }} />
     <Text
-      style={{ fontSize: 12, color: hasSelections ? '#6671E4' : '#8A8D9F', fontWeight: '500' }}
+      style={{ fontSize: 12, color: hasSelections ? Colors.primary : '#8A8D9F', fontWeight: '500' }}
       className="font-sans"
     >
       {label}
     </Text>
     {count > 0 && (
       <View style={{
-        backgroundColor: '#6671E4', borderRadius: 9999,
+        backgroundColor: Colors.primary, borderRadius: 9999,
         width: 20, height: 20, justifyContent: 'center', alignItems: 'center', marginLeft: 6,
       }}>
         <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>{count}</Text>
@@ -168,8 +169,6 @@ export default function FilterJobsScreen() {
             flexDirection: 'row', alignItems: 'center',
             backgroundColor: '#FFFFFF', borderRadius: 15,
             paddingHorizontal: 16, height: 50, marginBottom: 8,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
           }}
         >
           <Search size={18} color="#A1A1AA" style={{ marginRight: 10 }} />
@@ -180,7 +179,7 @@ export default function FilterJobsScreen() {
 
         {/* Filter label */}
         <TouchableOpacity style={{ marginBottom: 16 }}>
-          <Text style={{ fontSize: 12, color: '#6671E4', fontWeight: '500' }} className="font-sans">Filter</Text>
+          <Text style={{ fontSize: 12, color: Colors.primary, fontWeight: '500' }} className="font-sans">Filter</Text>
         </TouchableOpacity>
 
         {/* Location */}
@@ -311,11 +310,11 @@ export default function FilterJobsScreen() {
           onPress={handleReset}
           style={{
             flex: 1, height: 47, borderRadius: 12,
-            borderWidth: 1.5, borderColor: '#6671E4',
+            borderWidth: 1.5, borderColor: Colors.primary,
             justifyContent: 'center', alignItems: 'center',
           }}
         >
-          <Text style={{ fontSize: 15, color: '#6671E4', fontWeight: '500' }} className="font-sans">
+          <Text style={{ fontSize: 15, color: Colors.primary, fontWeight: '500' }} className="font-sans">
             Reset Filters
           </Text>
         </TouchableOpacity>
@@ -324,7 +323,7 @@ export default function FilterJobsScreen() {
           onPress={handleApply}
           style={{
             flex: 2, height: 47, borderRadius: 12,
-            backgroundColor: '#6671E4',
+            backgroundColor: Colors.primary,
             justifyContent: 'center', alignItems: 'center',
           }}
         >

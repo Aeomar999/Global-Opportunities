@@ -741,4 +741,73 @@ export const sendAssistantMessage = async (
 };
 
 
+// --- Ambassadors, notifications and group chat ---
 
+export type AmbassadorRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface AmbassadorRequest {
+  id: string;
+  status: AmbassadorRequestStatus;
+  channelId?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+export interface MyAmbassadorStatus {
+  isAmbassador: boolean;
+  request: AmbassadorRequest | null;
+}
+
+export const createAmbassadorRequest = async (data: { motivation?: string } = {}) => {
+  return request<AmbassadorRequest>('/ambassador-requests', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const getMyAmbassadorStatus = async () => {
+  return request<MyAmbassadorStatus>('/ambassador-requests/me');
+};
+
+export const markNotificationRead = async (id: string) => {
+  return request<any>(`/notifications/${id}/read`, { method: 'POST' });
+};
+
+export interface ChatMessage {
+  id: string;
+  channelId: string;
+  /** null for an announcement; otherwise the announcement this message replies to. */
+  parentId: string | null;
+  allowReplies: boolean;
+  replyCount: number;
+  senderId: string;
+  senderName: string;
+  senderRole: 'seeker' | 'hirer' | 'admin';
+  body: string;
+  createdAt: string;
+}
+
+/** Announcements of a channel. `canPost` is true only for people who can post (channel admins). */
+export const getChannelMessages = async (channelId: string) => {
+  return request<{ posts: ChatMessage[]; canPost: boolean }>(`/community/channels/${channelId}/messages`);
+};
+
+/** One announcement with its replies. `canReply` is false when the admin turned replies off for it. */
+export const getChannelThread = async (channelId: string, messageId: string) => {
+  return request<{ post: ChatMessage; replies: ChatMessage[]; canReply: boolean; canManage: boolean }>(`/community/channels/${channelId}/messages/${messageId}/replies`);
+};
+
+export const sendChannelMessage = async (channelId: string, body: string, options: { parentId?: string; allowReplies?: boolean } = {}) => {
+  return request<ChatMessage>(`/community/channels/${channelId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ body, ...options }),
+  });
+};
+
+/** Follow (join) a channel. Public channels are joined straight away; others wait for an admin to accept. */
+export const joinChannel = async (channelId: string) => {
+  return request<{ accepted: boolean }>(`/community/channels/${channelId}/join-requests`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+};

@@ -5,6 +5,7 @@ import { uploadRouter, createUploadRouter, IMAGE_MIME_TYPES } from './upload.js'
 import { assistantRouter } from './assistant.js';
 import { newsRouter } from './news.js';
 import { adminApiRouter } from './admin-api.js';
+import { ambassadorRouter } from './ambassador.js';
 import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination } from '../utils/http.js';
 import { requireAuth, requireAdminAuth, optionalAuth, requireEmailVerified } from '../middleware/auth.js';
 import { env } from '../config/env.js';
@@ -28,10 +29,13 @@ import {
 } from '../models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
-import { Ambassador, OpportunityEngagement, Testimonial, Beneficiary } from '../models/AdminPortal.js';
+import { Ambassador, AmbassadorRequest, OpportunityEngagement, Testimonial, Beneficiary } from '../models/AdminPortal.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
-import { searchLimiter } from '../lib/rate-limiters.js';
+import { searchLimiter, chatLimiter } from '../lib/rate-limiters.js';
 import { normalizeLegacyRole } from '../lib/permissions.js';
+import { postChannelMessage, listChannelMessages, getThread, findPost } from '../lib/chat.js';
+import { evictFromChannelRoom } from '../socket.js';
+import { chatMessageSchema } from '../schemas/ambassador.js';
 
 const parseJson = (value, fallback = []) => {
   if (!value) return fallback;
@@ -478,9 +482,13 @@ const notificationReadScope = (req) => {
   } else if (req.auth?.role === HIRER) {
     allowedAudiences.push('hirers', 'hirer');
   }
+  // A person sees broadcasts for their audience plus anything addressed to them personally.
   return {
-    audience: { $in: allowedAudiences },
     isActive: { $ne: false },
+    $or: [
+      { audience: { $in: allowedAudiences } },
+      ...(req.auth?.sub ? [{ userId: req.auth.sub }] : []),
+    ],
   };
 };
 
@@ -834,6 +842,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   router.use('/assistant', assistantRouter);
   router.use('/news', newsRouter);
   router.use('/admin', adminApiRouter);
+  router.use('/ambassador-requests', ambassadorRouter);
   // After the staff-portal router, so its paths (e.g. /admin/reports/monthly) match first.
   mountAdminDataRoutes(router);
 
@@ -879,6 +888,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       totalEvents,
       totalGrants,
       totalGrantApplications,
+      pendingAmbassadorRequests,
       pendingRecords,
     ] = await Promise.all([
       CompanyVerification.countDocuments({ overallStatus: 'pending' }),
@@ -894,12 +904,14 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       Event.countDocuments(),
       Grant.countDocuments(),
       GrantApplication.countDocuments(),
+      AmbassadorRequest.countDocuments({ status: 'pending' }),
       Beneficiary.countDocuments({ verified: false }),
     ]);
 
     itemResponse(res, {
       // Keys read by the admin dashboard.
       pendingVerifications,
+      pendingAmbassadorRequests,
       pendingOpportunities,
       pendingRecords,
       activeSeekers,
@@ -1047,7 +1059,17 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       Channel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
       Channel.countDocuments(filter),
     ]);
-    listResponse(res, channels.map(toClientObject), total, page, limit);
+    // `followed`: the caller already belongs to it (so the app lists it under their channels, not under "find channels").
+    // `announcement`: an admin created it, so it opens as an announcement channel (posts, with optional replies).
+    const me = req.auth?.sub;
+    const memberOf = new Set(membershipChannelIds.map(String));
+    const creatorIds = [...new Set(channels.map((c) => toId(c.createdBy)).filter(Boolean))];
+    const adminCreators = new Set((await User.find({ _id: { $in: creatorIds }, role: ADMIN }).select('_id').lean()).map((u) => String(u._id)));
+    listResponse(res, channels.map((channel) => ({
+      ...toClientObject(channel),
+      followed: Boolean(me) && (memberOf.has(String(channel._id)) || isChannelCreator(channel, req.auth) || isLegacyMember(channel, me)),
+      announcement: adminCreators.has(toId(channel.createdBy)),
+    })), total, page, limit);
   }));
 
   router.post('/community/channels', requireAuth, asyncHandler(async (req, res) => {
@@ -1146,6 +1168,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       { new: true },
     );
     if (!membership) throw notFound('Community member');
+    evictFromChannelRoom(channel._id, req.params.userId);
     itemResponse(res, toClientObject(membership));
   }));
 
@@ -1159,6 +1182,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       { $set: { status: 'banned', reviewedBy: req.auth.sub, reviewedAt: new Date(), bannedReason: String(req.body.reason || '').trim() || undefined } },
       { new: true, upsert: true, setDefaultsOnInsert: true },
     );
+    evictFromChannelRoom(channel._id, req.params.userId);
     itemResponse(res, toClientObject(membership));
   }));
 
@@ -1172,6 +1196,52 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     );
     if (!membership) throw new ApiError(404, 'Banned community member not found');
     itemResponse(res, toClientObject(membership));
+  }));
+
+  // Group chat. History and sending are limited to people who can access the channel and are not banned.
+  const assertCanChat = async (channel, auth) => {
+    assertChannelVisible(channel, auth);
+    if (!await canAccessChannel(channel, auth)) throw new ApiError(403, 'You do not have access to this group');
+    const membership = await getMembership(channel._id, auth.sub);
+    if (membership?.status === 'banned') throw new ApiError(403, 'You have been removed from this group');
+  };
+
+  // Announcements: members read them, only channel admins post them. Whether members may reply is chosen per post.
+  router.get('/community/channels/:channelId/messages', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await assertCanChat(channel, req.auth);
+    const [posts, canPost] = await Promise.all([
+      listChannelMessages(channel._id, { before: req.query.before, limit: req.query.limit }),
+      canManageChannel(channel, req.auth),
+    ]);
+    itemResponse(res, { posts, canPost });
+  }));
+
+  router.get('/community/channels/:channelId/messages/:messageId/replies', requireAuth, asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await assertCanChat(channel, req.auth);
+    if (!mongoose.isValidObjectId(req.params.messageId)) throw notFound('Message');
+    const thread = await getThread(channel._id, req.params.messageId);
+    if (!thread) throw notFound('Message');
+    const isManager = await canManageChannel(channel, req.auth);
+    itemResponse(res, { ...thread, canReply: isManager || thread.post.allowReplies, canManage: isManager });
+  }));
+
+  router.post('/community/channels/:channelId/messages', requireAuth, chatLimiter, validate(chatMessageSchema), asyncHandler(async (req, res) => {
+    const channel = await getChannelOrThrow(req.params.channelId);
+    await assertCanChat(channel, req.auth);
+    const isManager = await canManageChannel(channel, req.auth);
+    const { parentId } = req.body;
+    if (parentId) {
+      const parent = await findPost(channel._id, parentId);
+      if (!parent) throw notFound('Message');
+      if (!isManager && !parent.allowReplies) throw new ApiError(403, 'Replies are turned off for this post');
+    } else if (!isManager) {
+      throw new ApiError(403, 'Only admins can post in this channel. You can reply to posts that allow replies.');
+    }
+    const sender = await User.findById(req.auth.sub).select('name role');
+    const message = await postChannelMessage({ channel, sender, body: req.body.body, parentId, allowReplies: req.body.allowReplies });
+    res.status(201).json({ data: message });
   }));
 
   router.get('/community/channels/:channelId/posts', optionalAuth, asyncHandler(async (req, res) => {
@@ -1301,6 +1371,16 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     enablePopulate,
     publicRead: true,
     readScope: articleReadScope,
+  }));
+  router.post('/notifications/:id/read', requireAuth, asyncHandler(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) throw notFound('Notification');
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, userId: req.auth.sub },
+      { $set: { readAt: new Date() } },
+      { new: true },
+    );
+    if (!notification) throw notFound('Notification');
+    itemResponse(res, toClientObject(notification));
   }));
   router.use('/notifications', collectionRoutes({ Model: Notification, resourceName: 'Notification', policyKey: 'notifications', searchFields: ['title', 'message'], enablePopulate, readScope: notificationReadScope }));
   router.use('/verification/companies', collectionRoutes({

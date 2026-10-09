@@ -3,6 +3,7 @@ import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Bookmark, Sparkles, Users, MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSaved } from '../../lib/useSaved';
 import { Colors, FontWeight, FontSize, Radius } from '../../constants/design';
 import { useToast } from '../../components/ui/ToastProvider';
 import { getOpportunityById, applyForOpportunity } from '../../lib/api';
@@ -21,7 +22,7 @@ export default function InternshipDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarked, toggleBookmark] = useSaved(id, 'internships');
   const [expanded, setExpanded] = useState(false);
   const [applied, setApplied] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -110,7 +111,7 @@ export default function InternshipDetailScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
-          onPress={() => setBookmarked(!bookmarked)}
+          onPress={toggleBookmark}
           style={[styles.circleHeaderButton, bookmarked && styles.bookmarkActive]}
         >
           <Bookmark

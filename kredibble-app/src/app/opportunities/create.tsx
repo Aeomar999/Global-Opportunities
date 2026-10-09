@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -75,7 +76,7 @@ const DropdownSelector = ({
             >
               <Text style={{
                 fontSize: 14,
-                color: selectedValue === option ? '#6671E4' : '#1A1A1A',
+                color: selectedValue === option ? Colors.primary : '#1A1A1A',
                 fontWeight: selectedValue === option ? 'bold' : 'normal',
               }} className="font-sans">
                 {option}
@@ -126,14 +127,14 @@ const ExperienceLevelSelector = ({
                 paddingVertical: 10,
                 borderRadius: 20,
                 borderWidth: 1,
-                borderColor: isSelected ? '#6671E4' : '#E5E6F2',
-                backgroundColor: isSelected ? '#EEF2FF' : '#FFFFFF',
+                borderColor: isSelected ? Colors.primary : '#E5E6F2',
+                backgroundColor: isSelected ? Colors.primaryTransparent : '#FFFFFF',
               }}
               activeOpacity={0.8}
             >
               <Text style={{
                 fontSize: 13,
-                color: isSelected ? '#6671E4' : '#8A8D9F',
+                color: isSelected ? Colors.primary : '#8A8D9F',
                 fontWeight: isSelected ? '600' : '500',
               }} className="font-sans">
                 {level}
@@ -334,7 +335,7 @@ export default function CreateOpportunityScreen() {
     }
 
     // Choose logo color and initial based on type
-    let logoColor = '#6671E4';
+    let logoColor = Colors.primary;
     let initial = 'J';
     if (type === 'internships') { logoColor = '#34D399'; initial = 'I'; }
     if (type === 'events') { logoColor = '#F87171'; initial = 'E'; }
@@ -416,11 +417,6 @@ export default function CreateOpportunityScreen() {
             alignItems: 'center',
             borderWidth: 1,
             borderColor: '#E5E6F2',
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.04,
-            shadowRadius: 6,
-            elevation: 1,
           }}
         >
           <ChevronLeft size={20} color="#8A8D9F" />
@@ -469,7 +465,7 @@ export default function CreateOpportunityScreen() {
                   paddingVertical: 10,
                   borderRadius: 8,
                   alignItems: 'center',
-                  backgroundColor: type === t ? '#6671E4' : '#F3F4F6'
+                  backgroundColor: type === t ? Colors.primary : '#F3F4F6'
                 }}
               >
                 <Text style={{
@@ -608,9 +604,9 @@ export default function CreateOpportunityScreen() {
                     height: 90,
                     borderRadius: 45,
                     overflow: 'hidden',
-                    backgroundColor: '#EEF2FF',
+                    backgroundColor: Colors.primaryTransparent,
                     borderWidth: 2,
-                    borderColor: grantLogoUri ? '#6671E4' : '#C7CBEE',
+                    borderColor: grantLogoUri ? Colors.primary : Colors.purple200,
                     borderStyle: grantLogoUri ? 'solid' : 'dashed',
                     justifyContent: 'center',
                     alignItems: 'center',
@@ -636,7 +632,7 @@ export default function CreateOpportunityScreen() {
                     onPress={() => setGrantLogoUri('')}
                     style={{ marginTop: 8 }}
                   >
-                    <Text style={{ fontSize: 11, color: '#6671E4', fontWeight: '600' }} className="font-sans">
+                    <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '600' }} className="font-sans">
                       Change Logo
                     </Text>
                   </TouchableOpacity>
@@ -774,9 +770,9 @@ export default function CreateOpportunityScreen() {
                   height: 140,
                   borderRadius: 14,
                   overflow: 'hidden',
-                  backgroundColor: '#EEF2FF',
+                  backgroundColor: Colors.primaryTransparent,
                   borderWidth: 2,
-                  borderColor: eventBannerUri ? 'transparent' : '#C7CBEE',
+                  borderColor: eventBannerUri ? 'transparent' : Colors.purple200,
                   borderStyle: 'dashed',
                   marginBottom: 18,
                   justifyContent: 'center',
@@ -809,13 +805,13 @@ export default function CreateOpportunityScreen() {
                       width: 44,
                       height: 44,
                       borderRadius: 22,
-                      backgroundColor: '#D8DBFF',
+                      backgroundColor: Colors.purple200,
                       justifyContent: 'center',
                       alignItems: 'center',
                     }}>
                       <Text style={{ fontSize: 22 }}>🖼️</Text>
                     </View>
-                    <Text style={{ fontSize: 13, color: '#6671E4', fontWeight: '600' }} className="font-sans">
+                    <Text style={{ fontSize: 13, color: Colors.primary, fontWeight: '600' }} className="font-sans">
                       Tap to upload banner
                     </Text>
                     <Text style={{ fontSize: 11, color: '#8A8D9F' }} className="font-sans">
@@ -975,7 +971,7 @@ const styles = StyleSheet.create({
   },
   button: {
     height: 52,
-    backgroundColor: '#6671E4',
+    backgroundColor: Colors.primary,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',

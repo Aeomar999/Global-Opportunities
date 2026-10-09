@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, SlidersHorizontal, Search, Bookmark } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius, Shadow } from '../../constants/design';
+import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { profileStore } from '../../constants/mockProfile';
 import { useToast } from '../../components/ui/ToastProvider';
 import { getEvents } from '../../lib/api';
@@ -317,7 +317,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 50,
     marginBottom: 20,
-    ...Shadow.searchBar,
   },
   searchPrompt: {
     flex: 1,
@@ -355,11 +354,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card,
     marginBottom: 16,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
   },
   banner: {
     height: 120,

@@ -14,12 +14,12 @@
  */
 import {
   BarChart3, Bell, Briefcase, CalendarDays, CalendarRange, Building2, Database, FileText, Flag, GraduationCap, HandCoins, Handshake,
-  Hash, LayoutDashboard, Network, Quote, Settings, Settings2, Share2, ShieldCheck, Target, Trophy, UserCog, Users, type LucideIcon,
+  Hash, LayoutDashboard, Megaphone, Network, Quote, Settings, Settings2, Share2, ShieldCheck, Target, Trophy, UserCog, Users, type LucideIcon,
 } from "lucide-react";
 import type { AccessLevel, Screen } from "@/config/permissions";
 
 /** Counts the sidebar can show. Unknown counts are hidden, never shown as 0. */
-export type CountKey = "pendingVerifications" | "openReports" | "pendingRecords" | "pendingTestimonials";
+export type CountKey = "pendingVerifications" | "openReports" | "pendingRecords" | "pendingTestimonials" | "pendingAmbassadorRequests";
 
 export interface NavChild {
   label: string;
@@ -69,6 +69,7 @@ export const NAV_GROUPS: NavGroup[] = [
     children: [
       { label: "Partners", href: "/partners", icon: Handshake, screen: "partners", accent: "purple" },
       { label: "Network", href: "/network", icon: Network, screen: "network", accent: "purple" },
+      { label: "Ambassadors", href: "/ambassador-applications", icon: Megaphone, screen: "network", accent: "purple", countKey: "pendingAmbassadorRequests" },
       { label: "Leaderboard", href: "/leaderboard", icon: Trophy, screen: "leaderboard" },
     ],
   },

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Modal, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -163,7 +164,7 @@ export default function ManageSecurityScreen() {
           <Switch
             value={security.showProfileToRecruiters}
             onValueChange={() => handleToggle('showProfileToRecruiters')}
-            trackColor={{ false: '#E5E6F2', true: '#6671E4' }}
+            trackColor={{ false: '#E5E6F2', true: Colors.primary }}
             thumbColor="#FFFFFF"
             ios_backgroundColor="#E5E6F2"
           />
@@ -318,7 +319,7 @@ const styles = StyleSheet.create({
   },
   updateButton: {
     height: 52,
-    backgroundColor: '#6671E4',
+    backgroundColor: Colors.primary,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',

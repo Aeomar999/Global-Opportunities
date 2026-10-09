@@ -1410,3 +1410,125 @@ export const getSocialMonthlyTotalsApi = async (month?: string) => {
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with
 // `npm run user:create-admin -- --email ... --name ...` in kredibble-backend.
+
+// --- Ambassador applications ---------------------------------------------------------------------
+
+export type AmbassadorRequestStatus = "pending" | "approved" | "rejected";
+
+export type AmbassadorRequestRecord = {
+  id: string;
+  userId: string;
+  role: "seeker" | "hirer";
+  name: string;
+  email: string;
+  phone?: string;
+  country?: string;
+  city?: string;
+  profession?: string;
+  organisation?: string;
+  motivation?: string;
+  status: AmbassadorRequestStatus;
+  reviewNote?: string;
+  reviewedAt?: string;
+  channelId?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Only on the single-record read. */
+  user?: { id: string; name: string; email: string; role: string; emailVerified: boolean; joinedAt: string; avatarUrl?: string };
+  verified?: boolean;
+  profile?: AmbassadorApplicantProfile | null;
+};
+
+/** The applicant's own profile details, as they appear on their Manage profile page in the app. */
+export type AmbassadorApplicantProfile =
+  | {
+      kind: "seeker";
+      profession?: string; university?: string; country?: string; city?: string; phone?: string;
+      bio?: string; professionalSummary?: string; experienceLevel?: string;
+      technicalSkills: string[]; softSkills: string[]; tools: string[]; certifications: string[];
+      rating: number; verified: boolean; applicationsCount: number;
+    }
+  | {
+      kind: "hirer";
+      companyName?: string; tagline?: string; industry?: string; companySize?: string; location?: string; website?: string;
+      companyEmail?: string; description?: string; recruiterName?: string; recruiterRole?: string; recruiterEmail?: string;
+      recruiterPhone?: string; recruiterLinkedin?: string; verified: boolean; verification?: string; postingsCount: number;
+    };
+
+export const getAmbassadorRequests = async (params?: { status?: AmbassadorRequestStatus; role?: string; q?: string; page?: number; limit?: number }) => {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.role) query.set("role", params.role);
+  if (params?.q) query.set("q", params.q);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<AmbassadorRequestRecord>(`/admin/ambassador-requests${queryString}`);
+};
+
+export const getAmbassadorRequestById = async (id: string) => request<AmbassadorRequestRecord>(`/admin/ambassador-requests/${id}`);
+
+export const approveAmbassadorRequest = async (id: string, data: { channelId?: string; note?: string }) =>
+  request<AmbassadorRequestRecord>(`/admin/ambassador-requests/${id}/approve`, { method: "POST", body: JSON.stringify(data) });
+
+export const revokeAmbassador = async (id: string, note?: string) =>
+  request<AmbassadorRequestRecord & { removedFrom?: string[] }>(`/admin/ambassador-requests/${id}/revoke`, { method: "POST", body: JSON.stringify({ note }) });
+
+export const rejectAmbassadorRequest = async (id: string, note?: string) =>
+  request<AmbassadorRequestRecord>(`/admin/ambassador-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ note }) });
+
+// --- Admin-managed channels: create, members and group chat -------------------------------------------
+
+export type ChannelMemberRecord = {
+  id: string;
+  userId: string;
+  name?: string;
+  email?: string;
+  userRole?: string;
+  role: "member" | "admin";
+  status: string;
+  joinedAt: string;
+};
+
+export type ChatMessageRecord = {
+  id: string;
+  channelId: string;
+  /** null for an announcement; otherwise the announcement this message replies to. */
+  parentId: string | null;
+  allowReplies: boolean;
+  replyCount: number;
+  senderId: string;
+  senderName: string;
+  senderRole: "seeker" | "hirer" | "admin";
+  body: string;
+  createdAt: string;
+};
+
+export const createAdminChannel = async (data: { name: string; bio?: string; visibility: "public" | "private" }) =>
+  request<ChannelRecord>(`/admin/channels`, { method: "POST", body: JSON.stringify(data) });
+
+export const getChannelMembers = async (channelId: string) => request<ChannelMemberRecord[]>(`/admin/channels/${channelId}/members`);
+
+export const addChannelMember = async (channelId: string, userId: string) =>
+  request<unknown>(`/admin/channels/${channelId}/members`, { method: "POST", body: JSON.stringify({ userId }) });
+
+export const removeChannelMember = async (channelId: string, userId: string) =>
+  request<unknown>(`/admin/channels/${channelId}/members/${userId}`, { method: "DELETE" });
+
+export const getChannelMessages = async (channelId: string, params?: { before?: string; limit?: number }) => {
+  const query = new URLSearchParams();
+  if (params?.before) query.set("before", params.before);
+  if (params?.limit) query.set("limit", String(params.limit));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<ChatMessageRecord[]>(`/admin/channels/${channelId}/messages${queryString}`);
+};
+
+export const sendChannelMessage = async (channelId: string, body: string, options: { allowReplies?: boolean; parentId?: string } = {}) =>
+  request<ChatMessageRecord>(`/admin/channels/${channelId}/messages`, { method: "POST", body: JSON.stringify({ body, ...options }) });
+
+/** Turns replies on or off for a post that is already published. */
+export const setPostAllowReplies = async (channelId: string, messageId: string, allowReplies: boolean) =>
+  request<ChatMessageRecord>(`/admin/channels/${channelId}/messages/${messageId}`, { method: "PATCH", body: JSON.stringify({ allowReplies }) });
+
+export const getChannelThread = async (channelId: string, messageId: string) =>
+  request<{ post: ChatMessageRecord; replies: ChatMessageRecord[] }>(`/admin/channels/${channelId}/messages/${messageId}/replies`);

@@ -9,31 +9,13 @@
     -webkit-user-select: none;
   }
 
+  /* Web only. Autofill colours mirror tokens: surface #FFFFFF and text #17121F (src/constants/tokens.js). */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus,
   input:-webkit-autofill:active {
     -webkit-box-shadow: 0 0 0px 1000px #FFFFFF inset !important;
-    -webkit-text-fill-color: #1A1A1A !important;
+    -webkit-text-fill-color: #17121F !important;
     transition: background-color 5000s ease-in-out 0s;
   }
-}
-
-:root {
-  --color-primary: #6671E4;
-  --color-secondary: #000000;
-  --color-background: #FFFFFF;
-  --color-background-card: #F9FAFB;
-  --color-text: #111827;
-  --color-text-muted: #6B7280;
-  --color-border: #E5E7EB;
-  --color-error: #EF4444;
-  --color-success: #10B981;
-  --font-display:
-    Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,
-    Segoe UI Symbol, Noto Color Emoji;
-  --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
-  --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
-  --font-serif: Georgia, 'Times New Roman', serif;
 }

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Colors } from '../../constants/design';
 import { View, Text, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bookmark, Sparkles, Plus, Briefcase } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { authStore } from '../../constants/authStore';
 import { getOpportunities, getApplicants } from '../../lib/api';
+import { useSaved } from '../../lib/useSaved';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 
@@ -18,50 +20,23 @@ const LogoSVG = () => (
 
 // ─── Category cards ───────────────────────────────────────────────────────────
 
+// Card artwork is exported from the approved design; title and count are part of the image.
 const CATEGORIES = [
-  { title: 'Events',      count: 55, image: require('../../../assets/images/opp_events.png') },
-  { title: 'Jobs',        count: 35, image: require('../../../assets/images/opp_jobs.png') },
-  { title: 'Internships', count: 20, image: require('../../../assets/images/opp_internships.png') },
-  { title: 'Grants',      count: 55, image: require('../../../assets/images/opp_grants.png') },
+  { title: 'Events',      image: require('../../../assets/images/opp_card_events.png') },
+  { title: 'Jobs',        image: require('../../../assets/images/opp_card_jobs.png') },
+  { title: 'Internships', image: require('../../../assets/images/opp_card_internships.png') },
+  { title: 'Grants',      image: require('../../../assets/images/opp_card_grants.png') },
 ];
 
-const CategoryCard = ({ title, count, image, onPress }: { title: string; count: number; image: any; onPress?: () => void }) => (
+const CategoryCard = ({ title, image, onPress }: { title: string; image: any; onPress?: () => void }) => (
   <TouchableOpacity
     activeOpacity={0.85}
     onPress={onPress}
-    style={{
-      flex: 1,
-      height: 121.7,
-      borderRadius: 16,
-      overflow: 'hidden',
-    }}
+    accessibilityRole="button"
+    accessibilityLabel={title}
+    style={{ flex: 1, aspectRatio: 164 / 125 }}
   >
-    <Image
-      source={image}
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        width: '100%',
-        height: '100%',
-      }}
-      resizeMode="cover"
-    />
-
-    <View style={{ flex: 1, padding: 16, justifyContent: 'space-between' }}>
-      <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '500' }} className="font-sans">
-        {title}
-      </Text>
-
-      <Text
-        style={{ color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' }}
-        className="font-sans"
-      >
-        {count}
-      </Text>
-    </View>
+    <Image source={image} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
   </TouchableOpacity>
 );
 
@@ -89,48 +64,34 @@ const AvatarStack = () => (
   </View>
 );
 
-const JOBS = [
-  {
-    id: '2',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'Pinterest',
-    logoColor: '#E60023',
-    initial: 'P',
-    description:
-      'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-  {
-    id: '3',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'OpenSea',
-    logoColor: '#2081E2',
-    initial: 'O',
-    description:
-      'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-  {
-    id: '4',
-    title: 'Junior Product designer',
-    location: 'Ghana (Remote)',
-    company: 'Product Hunt',
-    logoColor: '#DA552F',
-    initial: 'P',
-    description:
-      'A curious and detail-oriented Junior Product Designer with strong visual design skills, user-centered...',
-    applied: '100+ applied',
-    match: '92% Match',
-  },
-];
+type Job = {
+  id: string;
+  title: string;
+  location: string;
+  company: string;
+  logoColor: string;
+  initial: string;
+  description: string;
+  applied: string;
+  match: string;
+};
 
-type Job = (typeof JOBS)[number];
+// Real listings from the API, so saved ids match the Saved opportunities list.
+const toJob = (o: any): Job => ({
+  id: String(o.id || o._id),
+  title: o.title,
+  location: o.location || 'Remote',
+  company: o.company || 'Company',
+  logoColor: o.logoColor || Colors.primary,
+  initial: (o.company || 'J').charAt(0).toUpperCase(),
+  description: o.description || '',
+  applied: `${o.applicantsCount || 0} applied`,
+  match: '92% Match',
+});
 
-const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => (
+const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => {
+  const [isSaved, toggleSave] = useSaved(job.id, 'jobs');
+  return (
   <TouchableOpacity
     activeOpacity={0.8}
     onPress={onPress}
@@ -139,11 +100,6 @@ const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => (
       borderRadius: 16,
       padding: 16,
       marginBottom: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 3,
     }}
   >
     {/* Logo + title + bookmark */}
@@ -173,17 +129,21 @@ const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => (
       </View>
 
       <TouchableOpacity
+        onPress={toggleSave}
+        accessibilityRole="button"
+        accessibilityLabel={isSaved ? 'Remove from saved' : 'Save opportunity'}
         style={{
           width: 34,
           height: 34,
           borderRadius: 17,
           borderWidth: 1,
-          borderColor: '#E5E6F2',
+          borderColor: isSaved ? Colors.primary : '#E5E6F2',
+          backgroundColor: isSaved ? Colors.primary : 'transparent',
           justifyContent: 'center',
           alignItems: 'center',
         }}
       >
-        <Bookmark size={16} color="#8A8D9F" />
+        <Bookmark size={16} color={isSaved ? '#FFFFFF' : '#8A8D9F'} fill={isSaved ? '#FFFFFF' : 'transparent'} />
       </TouchableOpacity>
     </View>
 
@@ -233,7 +193,8 @@ const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => (
       </View>
     </View>
   </TouchableOpacity>
-);
+  );
+};
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -243,6 +204,8 @@ export default function OpportunitiesScreen() {
   const viewMode = params.view;
   const [role, setRole] = useState(authStore.role);
   const [opps, setOpps] = useState(authStore.opportunities);
+  const [recommended, setRecommended] = useState<Job[]>([]);
+  const [recommendedLoading, setRecommendedLoading] = useState(true);
   const [recruiterActiveTab, setRecruiterActiveTab] = useState<'Jobs' | 'Internships' | 'Grants' | 'Events'>('Jobs');
 
   useEffect(() => {
@@ -282,6 +245,15 @@ export default function OpportunitiesScreen() {
       }
     }, [role])
   );
+
+  useEffect(() => {
+    let active = true;
+    getOpportunities({ type: 'jobs' })
+      .then((data: any) => { if (active) setRecommended((Array.isArray(data) ? data : []).slice(0, 5).map(toJob)); })
+      .catch(() => {})
+      .finally(() => { if (active) setRecommendedLoading(false); });
+    return () => { active = false; };
+  }, []);
   if (role === 'hirer') {
     if (viewMode !== 'all') {
       const filteredOpps = opps.filter((opp) => opp.type.toLowerCase() === recruiterActiveTab.toLowerCase());
@@ -318,7 +290,7 @@ export default function OpportunitiesScreen() {
             <View style={{ width: 60, alignItems: 'flex-end' }}>
               <TouchableOpacity
                 onPress={() => router.push('/opportunities/create')}
-                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#6671E4', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
               >
                 <Plus size={14} color="#FFFFFF" />
                 <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">Post</Text>
@@ -349,7 +321,7 @@ export default function OpportunitiesScreen() {
                       paddingVertical: 10,
                       alignItems: 'center',
                       borderRadius: 10,
-                      backgroundColor: isActive ? '#6671E4' : 'transparent',
+                      backgroundColor: isActive ? Colors.primary : 'transparent',
                     }}
                   >
                     <Text style={{ 
@@ -384,11 +356,6 @@ export default function OpportunitiesScreen() {
                       borderRadius: 16,
                       padding: 16,
                       marginBottom: 12,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.06,
-                      shadowRadius: 8,
-                      elevation: 3,
                     }}
                   >
                     {/* Event Banner (only for events with a banner) */}
@@ -400,7 +367,7 @@ export default function OpportunitiesScreen() {
                           height: 110,
                           borderRadius: 10,
                           marginBottom: 12,
-                          backgroundColor: '#EEF2FF',
+                          backgroundColor: Colors.primaryTransparent,
                         }}
                         resizeMode="cover"
                       />
@@ -413,7 +380,7 @@ export default function OpportunitiesScreen() {
                           style={{
                             width: 37, height: 37, borderRadius: 18,
                             marginRight: 8,
-                            backgroundColor: '#EEF2FF',
+                            backgroundColor: Colors.primaryTransparent,
                           }}
                           resizeMode="cover"
                         />
@@ -438,8 +405,8 @@ export default function OpportunitiesScreen() {
                         </Text>
                       </View>
 
-                      <View style={{ backgroundColor: '#EEF2FF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
-                        <Text style={{ fontSize: 11, color: '#6671E4', fontWeight: '600', textTransform: 'capitalize' }} className="font-sans">{opp.type}</Text>
+                      <View style={{ backgroundColor: Colors.primaryTransparent, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                        <Text style={{ fontSize: 11, color: Colors.primary, fontWeight: '600', textTransform: 'capitalize' }} className="font-sans">{opp.type}</Text>
                       </View>
                     </View>
 
@@ -479,10 +446,10 @@ export default function OpportunitiesScreen() {
 
                       <View style={{
                         flexDirection: 'row', alignItems: 'center', gap: 4,
-                        backgroundColor: '#EEF2FF', borderRadius: 9999,
+                        backgroundColor: Colors.primaryTransparent, borderRadius: 9999,
                         paddingHorizontal: 12, paddingVertical: 5,
                       }}>
-                        <Text style={{ fontSize: 12, color: '#6671E4', fontWeight: '500' }} className="font-sans">
+                        <Text style={{ fontSize: 12, color: Colors.primary, fontWeight: '500' }} className="font-sans">
                           Review Applicants →
                         </Text>
                       </View>
@@ -531,7 +498,7 @@ export default function OpportunitiesScreen() {
           {role === 'hirer' ? (
             <TouchableOpacity
               onPress={() => router.push('/opportunities/create')}
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#6671E4', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
             >
               <Plus size={14} color="#FFFFFF" />
               <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#FFFFFF' }} className="font-sans">Post</Text>
@@ -569,14 +536,19 @@ export default function OpportunitiesScreen() {
             Recommended
           </Text>
           <TouchableOpacity onPress={() => router.push('/recommended' as any)}>
-            <Text style={{ fontSize: 12, color: '#6671E4', fontWeight: '600' }} className="font-sans">
+            <Text style={{ fontSize: 12, color: Colors.primary, fontWeight: '600' }} className="font-sans">
               See All
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Job listings */}
-        {JOBS.map(job => (
+        {!recommendedLoading && recommended.length === 0 && (
+          <Text style={{ fontSize: 13, color: '#8A8D9F', textAlign: 'center', paddingVertical: 24 }} className="font-sans">
+            No recommended jobs yet.
+          </Text>
+        )}
+        {recommended.map(job => (
           <JobCard
             key={job.id}
             job={job}

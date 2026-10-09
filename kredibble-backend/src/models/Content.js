@@ -21,6 +21,9 @@ const notificationSchema = new mongoose.Schema({
   priority: { type: String, default: 'normal' },
   isActive: { type: Boolean, default: true, index: true },
   sentAt: String,
+  // Per-user notifications (for example an ambassador decision). Broadcasts leave this empty.
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+  readAt: Date,
 }, { timestamps: true });
 
 // SEC-031: Compound index for notifications
