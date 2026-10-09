@@ -288,5 +288,71 @@ export const amplificationCreateSchema = z.object({
   }),
 });
 
+export const BENEFICIARY_SOURCES = [
+  'organic', 'ambassador', 'event', 'partner', 'import',
+  'ambassador-referral', 'partner-channel', 'bulk-import',
+];
+
+export const beneficiaryCreateSchema = z.object({
+  body: z.object({
+    fullName: z.string().trim().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    email: z.string().trim().toLowerCase().pipe(z.string().email('Invalid email')).optional(),
+    phone: z.string().max(50).optional(),
+    country: z.string().max(100).optional(),
+    institution: z.string().max(200).optional(),
+    source: z.enum(BENEFICIARY_SOURCES).optional(),
+    sourceType: z.enum(BENEFICIARY_SOURCES).optional(),
+    verified: z.boolean().optional(),
+    verifiedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'verifiedAt must be YYYY-MM-DD').optional(),
+    createdAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'createdAt must be YYYY-MM-DD').optional(),
+    ambassadorId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ambassadorId').nullable().optional(),
+    opportunityId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid opportunityId').nullable().optional(),
+    listingId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid listingId').nullable().optional(),
+  }).refine((data) => Boolean(data.fullName || data.name), {
+    message: 'name or fullName is required',
+    path: ['fullName'],
+  }).refine((data) => Boolean(data.email || data.phone), {
+    message: 'email or phone is required',
+    path: ['email'],
+  }).refine((data) => {
+    const src = data.source || data.sourceType;
+    if ((src === 'ambassador' || src === 'ambassador-referral') && !data.ambassadorId) {
+      return false;
+    }
+    return true;
+  }, {
+    message: 'ambassadorId is required for ambassador-referral records',
+    path: ['ambassadorId'],
+  }),
+});
+
+export const beneficiaryUpdateSchema = z.object({
+  body: z.object({
+    fullName: z.string().trim().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    email: z.string().trim().toLowerCase().pipe(z.string().email('Invalid email')).optional(),
+    phone: z.string().max(50).optional(),
+    country: z.string().max(100).optional(),
+    institution: z.string().max(200).optional(),
+    source: z.enum(BENEFICIARY_SOURCES).optional(),
+    sourceType: z.enum(BENEFICIARY_SOURCES).optional(),
+    verified: z.boolean().optional(),
+    verifiedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'verifiedAt must be YYYY-MM-DD').nullable().optional(),
+    createdAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'createdAt must be YYYY-MM-DD').optional(),
+    ambassadorId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid ambassadorId').nullable().optional(),
+    opportunityId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid opportunityId').nullable().optional(),
+    listingId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid listingId').nullable().optional(),
+  }),
+});
+
+export const beneficiaryUndoVerifySchema = z.object({
+  body: z.object({
+    verified: z.boolean().optional(),
+    verifiedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'verifiedAt must be YYYY-MM-DD').nullable().optional(),
+  }),
+});
+
+
 
 
