@@ -353,6 +353,81 @@ export const beneficiaryUndoVerifySchema = z.object({
   }),
 });
 
+// BE-009: Social Post schemas
+export const SOCIAL_PLATFORMS = [
+  'facebook',
+  'instagram',
+  'x',
+  'linkedin',
+  'tiktok',
+  'youtube',
+  'whatsapp',
+  'other',
+];
+
+export const SOCIAL_STATUSES = ['draft', 'scheduled', 'published'];
+
+export const postUrlSchema = z.string().trim().refine((val) => {
+  if (!val) return false;
+  if (/\s/.test(val)) return false;
+  try {
+    const url = new URL(val);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    if (!url.hostname.includes('.') || url.hostname.startsWith('.') || url.hostname.endsWith('.')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}, { message: 'The link must be a valid http or https URL with a real host' });
+
+export const notFutureDateSchema = z.string().or(z.date()).refine((val) => {
+  if (!val) return false;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  let dateIso;
+  if (typeof val === 'string') {
+    dateIso = val.slice(0, 10);
+  } else {
+    dateIso = new Date(val).toISOString().slice(0, 10);
+  }
+  return dateIso <= todayIso;
+}, { message: 'The date posted cannot be in the future' });
+
+export const socialPostCreateSchema = z.object({
+  body: z.object({
+    platform: z.preprocess(
+      (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+      z.enum(SOCIAL_PLATFORMS, { errorMap: () => ({ message: 'Invalid social platform' }) })
+    ),
+    title: z.string().trim().min(1, 'Title is required').max(300, 'Title is too long'),
+    text: z.string().trim().max(5000).optional(),
+    url: postUrlSchema,
+    reach: z.number().int('Reach must be an integer').min(0, 'Reach cannot be negative').default(0),
+    engagement: z.number().int('Engagement must be an integer').min(0, 'Engagement cannot be negative').default(0),
+    status: z.enum(SOCIAL_STATUSES).default('published'),
+    postedAt: notFutureDateSchema,
+    listingId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid listingId').nullable().optional(),
+    opportunityId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid opportunityId').nullable().optional(),
+  }),
+});
+
+export const socialPostUpdateSchema = z.object({
+  body: z.object({
+    platform: z.preprocess(
+      (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+      z.enum(SOCIAL_PLATFORMS, { errorMap: () => ({ message: 'Invalid social platform' }) })
+    ).optional(),
+    title: z.string().trim().min(1, 'Title is required').max(300, 'Title is too long').optional(),
+    text: z.string().trim().max(5000).optional(),
+    url: postUrlSchema.optional(),
+    reach: z.number().int().min(0).optional(),
+    engagement: z.number().int().min(0).optional(),
+    status: z.enum(SOCIAL_STATUSES).optional(),
+    postedAt: notFutureDateSchema.optional(),
+    listingId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid listingId').nullable().optional(),
+    opportunityId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid opportunityId').nullable().optional(),
+  }),
+});
+
 
 
 

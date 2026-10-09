@@ -26,6 +26,10 @@ import {
   normalizePhone,
   CANONICAL_RECORD_SOURCES,
   RECORD_SOURCE_LABELS,
+  CANONICAL_SOCIAL_PLATFORMS,
+  SOCIAL_PLATFORM_LABELS,
+  normalizeSocialPlatform,
+  SOCIAL_POST_STATUSES,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
@@ -54,6 +58,8 @@ import {
   beneficiaryCreateSchema,
   beneficiaryUpdateSchema,
   beneficiaryUndoVerifySchema,
+  socialPostCreateSchema,
+  socialPostUpdateSchema,
 } from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
 import { postChannelMessage, listChannelMessages, getThread, findPost, setAllowReplies } from '../lib/chat.js';
@@ -1108,7 +1114,286 @@ addManagedRoutes({
   filters: ['status', 'tier', 'country'],
 });
 
-addManagedRoutes({ path: '/social-posts', Model: SocialPost, resource: 'social-posts', roles: SOCIAL_ROLES, screen: 'social', filters: ['platform'] });
+export const toSocialPostClientObject = (doc) => {
+  if (!doc) return doc;
+  const raw = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+  const id = raw._id ? raw._id.toString() : (raw.id ? String(raw.id) : '');
+  const platform = raw.platform || 'other';
+
+  const oppDoc = raw.opportunityId || raw.listingId;
+  const listingId = oppDoc && typeof oppDoc === 'object'
+    ? (oppDoc._id?.toString() || oppDoc.id)
+    : (oppDoc ? oppDoc.toString() : undefined);
+  const listingTitle = oppDoc && typeof oppDoc === 'object'
+    ? (oppDoc.title || oppDoc.name || undefined)
+    : undefined;
+
+  let postedAtDate = raw.postedAtDate;
+  let postedAtIso;
+  if (raw.postedAt) {
+    const d = new Date(raw.postedAt);
+    if (!Number.isNaN(d.getTime())) {
+      postedAtIso = d.toISOString();
+      if (!postedAtDate) {
+        postedAtDate = postedAtIso.slice(0, 10);
+      }
+    }
+  }
+
+  return {
+    id,
+    platform,
+    title: raw.title || '',
+    text: raw.text || raw.title || '',
+    url: raw.url || '',
+    reach: typeof raw.reach === 'number' ? Math.max(0, Math.round(raw.reach)) : 0,
+    engagement: typeof raw.engagement === 'number' ? Math.max(0, Math.round(raw.engagement)) : 0,
+    status: raw.status || 'published',
+    postedAt: postedAtDate || (postedAtIso ? postedAtIso.slice(0, 10) : ''),
+    postedAtIso,
+    listingId,
+    listingTitle,
+    authorId: raw.authorId ? raw.authorId.toString() : (raw.createdBy ? raw.createdBy.toString() : undefined),
+    createdBy: raw.createdBy ? raw.createdBy.toString() : (raw.authorId ? raw.authorId.toString() : undefined),
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+};
+
+export const calculateSocialMonthlyTotals = async (monthQuery) => {
+  const { month, start, end } = monthBounds(monthQuery);
+  const startIsoDate = start.toISOString().slice(0, 10);
+  const endIsoDate = end.toISOString().slice(0, 10);
+
+  const posts = await SocialPost.find({
+    status: 'published',
+    $or: [
+      { postedAt: { $gte: start, $lt: end } },
+      { postedAtDate: { $gte: startIsoDate, $lt: endIsoDate } },
+    ],
+  }).populate('opportunityId', 'title name').sort({ postedAt: -1, _id: -1 });
+
+  const targetsList = await getTargetsForMonth(month);
+  const targetMap = new Map(targetsList.map((t) => [t.kpi, t.target]));
+  const targets = {
+    posts: targetMap.get('posts_published') ?? 8,
+    reach: targetMap.get('social_reach') ?? 10500,
+    engagement: targetMap.get('social_engagement') ?? 800,
+  };
+
+  const platformStats = CANONICAL_SOCIAL_PLATFORMS.map((platform) => {
+    const mine = posts.filter((p) => (p.platform || '').toLowerCase() === platform);
+    const pReach = mine.reduce((sum, p) => sum + (Number(p.reach) || 0), 0);
+    const pEngagement = mine.reduce((sum, p) => sum + (Number(p.engagement) || 0), 0);
+    return {
+      platform,
+      label: SOCIAL_PLATFORM_LABELS[platform] || platform,
+      posts: mine.length,
+      reach: pReach,
+      engagement: pEngagement,
+    };
+  }).filter((row) => row.posts > 0);
+
+  platformStats.sort((a, b) => b.reach - a.reach || b.posts - a.posts || a.label.localeCompare(b.label));
+
+  const totalPosts = platformStats.reduce((sum, r) => sum + r.posts, 0);
+  const totalReach = platformStats.reduce((sum, r) => sum + r.reach, 0);
+  const totalEngagement = platformStats.reduce((sum, r) => sum + r.engagement, 0);
+  const leading = platformStats[0]?.platform ?? null;
+
+  return {
+    month,
+    posts: totalPosts,
+    reach: totalReach,
+    engagement: totalEngagement,
+    targets,
+    platforms: platformStats,
+    leading,
+    team: {
+      posts: totalPosts,
+      reach: totalReach,
+      engagement: totalEngagement,
+    },
+  };
+};
+
+adminApiRouter.get('/social-posts/monthly-totals', requireAdminOrStaffAuth, requireScreen('social', 'view'), requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
+  const result = await calculateSocialMonthlyTotals(req.query.month);
+  itemResponse(res, result);
+}));
+
+adminApiRouter.get('/social-posts', requireAdminOrStaffAuth, requireScreen('social', 'view'), requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.month) {
+    const { start, end } = monthBounds(req.query.month);
+    const startIsoDate = start.toISOString().slice(0, 10);
+    const endIsoDate = end.toISOString().slice(0, 10);
+    filter.$or = [
+      { postedAt: { $gte: start, $lt: end } },
+      { postedAtDate: { $gte: startIsoDate, $lt: endIsoDate } },
+    ];
+  }
+  if (req.query.platform) {
+    filter.platform = normalizeSocialPlatform(req.query.platform);
+  }
+  if (req.query.status) {
+    filter.status = req.query.status;
+  }
+  if (req.query.search || req.query.q) {
+    const term = req.query.search || req.query.q;
+    filter.title = new RegExp(escapedRegex(term), 'i');
+  }
+
+  const { page, skip, limit } = pageOptions(req.query);
+  const total = await SocialPost.countDocuments(filter);
+  const query = SocialPost.find(filter)
+    .populate('opportunityId', 'title name')
+    .sort({ postedAt: -1, _id: -1 });
+
+  if (limit) {
+    query.skip(skip).limit(limit);
+  }
+
+  const posts = await query;
+  listResponse(res, posts.map(toSocialPostClientObject), total, page, limit);
+}));
+
+adminApiRouter.get('/social-posts/:id', requireAdminOrStaffAuth, requireScreen('social', 'view'), requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
+  const post = await SocialPost.findById(validId(req.params.id, 'SocialPost')).populate('opportunityId', 'title name');
+  if (!post) throw notFound('SocialPost');
+  itemResponse(res, toSocialPostClientObject(post));
+}));
+
+adminApiRouter.post('/social-posts', requireAdminOrStaffAuth, requireScreen('social', 'edit'), requirePortalRoles(...SOCIAL_ROLES), validate(socialPostCreateSchema), asyncHandler(async (req, res) => {
+  const body = req.body;
+  const platform = normalizeSocialPlatform(body.platform);
+  const reach = Math.max(0, Math.round(Number(body.reach) || 0));
+  const engagement = Math.max(0, Math.round(Number(body.engagement) || 0));
+  const postedAtDate = new Date(body.postedAt);
+  const listingId = body.listingId || body.opportunityId || undefined;
+
+  const post = new SocialPost({
+    platform,
+    title: String(body.title).trim(),
+    text: body.text ? String(body.text).trim() : String(body.title).trim(),
+    url: String(body.url).trim(),
+    reach,
+    engagement,
+    status: body.status || 'published',
+    postedAt: postedAtDate,
+    postedAtDate: postedAtDate.toISOString().slice(0, 10),
+    listingId: listingId || undefined,
+    opportunityId: listingId || undefined,
+    createdBy: req.auth?.sub,
+    authorId: req.auth?.sub,
+  });
+
+  await post.save();
+  await post.populate('opportunityId', 'title name');
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.SOCIAL_POST_CREATE,
+    resourceType: AUDIT_RESOURCE_TYPES.SOCIAL_POST,
+    resourceId: post._id,
+    outcome: 'success',
+    metadata: {
+      platform: post.platform,
+      title: post.title,
+      postedAt: post.postedAtDate,
+      reach: post.reach,
+      engagement: post.engagement,
+      status: post.status,
+    },
+  });
+
+  const sync = await syncManagedRecord('social-posts', post);
+  const clientObj = toSocialPostClientObject(post);
+  res.status(201).json({ data: { ...clientObj, sync } });
+}));
+
+adminApiRouter.patch('/social-posts/:id', requireAdminOrStaffAuth, requireScreen('social', 'edit'), requirePortalRoles(...SOCIAL_ROLES), validate(socialPostUpdateSchema), asyncHandler(async (req, res) => {
+  const post = await SocialPost.findById(validId(req.params.id, 'SocialPost'));
+  if (!post) throw notFound('SocialPost');
+
+  const before = {
+    platform: post.platform,
+    title: post.title,
+    reach: post.reach,
+    engagement: post.engagement,
+    status: post.status,
+    postedAt: post.postedAtDate,
+  };
+
+  const body = req.body;
+  if (body.platform) post.platform = normalizeSocialPlatform(body.platform);
+  if (body.title !== undefined) post.title = String(body.title).trim();
+  if (body.text !== undefined) post.text = String(body.text).trim();
+  if (body.url !== undefined) post.url = String(body.url).trim();
+  if (body.reach !== undefined) post.reach = Math.max(0, Math.round(Number(body.reach) || 0));
+  if (body.engagement !== undefined) post.engagement = Math.max(0, Math.round(Number(body.engagement) || 0));
+  if (body.status !== undefined) post.status = body.status;
+  if (body.postedAt !== undefined) {
+    const d = new Date(body.postedAt);
+    post.postedAt = d;
+    post.postedAtDate = d.toISOString().slice(0, 10);
+  }
+  if (body.listingId !== undefined || body.opportunityId !== undefined) {
+    const newListing = body.listingId || body.opportunityId || null;
+    post.listingId = newListing;
+    post.opportunityId = newListing;
+  }
+
+  await post.save();
+  await post.populate('opportunityId', 'title name');
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.SOCIAL_POST_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.SOCIAL_POST,
+    resourceId: post._id,
+    outcome: 'success',
+    metadata: {
+      before,
+      after: {
+        platform: post.platform,
+        title: post.title,
+        reach: post.reach,
+        engagement: post.engagement,
+        status: post.status,
+        postedAt: post.postedAtDate,
+      },
+    },
+  });
+
+  const sync = await syncManagedRecord('social-posts', post);
+  itemResponse(res, { ...toSocialPostClientObject(post), sync });
+}));
+
+adminApiRouter.delete('/social-posts/:id', requireAdminOrStaffAuth, requireScreen('social', 'edit'), requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
+  const post = await SocialPost.findById(validId(req.params.id, 'SocialPost'));
+  if (!post) throw notFound('SocialPost');
+
+  await post.deleteOne();
+  await deleteFromWordpress('social-posts', post._id);
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.SOCIAL_POST_DELETE,
+    resourceType: AUDIT_RESOURCE_TYPES.SOCIAL_POST,
+    resourceId: post._id,
+    outcome: 'success',
+    metadata: {
+      platform: post.platform,
+      title: post.title,
+    },
+  });
+
+  itemResponse(res, { id: req.params.id, deleted: true });
+}));
+
+adminApiRouter.post('/social-posts/:id/retry-wordpress-sync', requireAdminOrStaffAuth, requireScreen('social', 'edit'), requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
+  const post = await SocialPost.findById(validId(req.params.id, 'SocialPost')).populate('opportunityId', 'title name');
+  if (!post) throw notFound('SocialPost');
+  itemResponse(res, { ...toSocialPostClientObject(post), sync: await syncManagedRecord('social-posts', post) });
+}));
 
 // --- Ambassador applications -------------------------------------------------
 // Reviewed by an admin. Approving links the user to the ambassador registry and, optionally, a channel.
@@ -1918,17 +2203,6 @@ adminApiRouter.post('/beneficiaries/:id/retry-wordpress-sync', requireAdminOrSta
   itemResponse(res, { ...toBeneficiaryClientObject(record), sync: await syncManagedRecord('beneficiaries', record) });
 }));
 
-adminApiRouter.get('/social-posts/monthly-totals', requireAdminOrStaffAuth, requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
-  const { month, start, end } = monthBounds(req.query.month);
-  const totals = await SocialPost.aggregate([
-    { $match: { postedAt: { $gte: start, $lt: end } } },
-    { $group: { _id: '$platform', posts: { $sum: 1 }, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } },
-    { $sort: { _id: 1 } },
-  ]);
-  const team = totals.reduce((result, item) => ({ posts: result.posts + item.posts, reach: result.reach + item.reach, engagement: result.engagement + item.engagement }), { posts: 0, reach: 0, engagement: 0 });
-  itemResponse(res, { month, team, platforms: totals.map((item) => ({ platform: item._id, ...item, _id: undefined })) });
-}));
-
 // BE-002: GET /targets?month= resolves the 10 KPI targets in force for the requested month
 adminApiRouter.get('/targets', requireAdminOrStaffAuth, requireScreen('overview', 'view'), asyncHandler(async (req, res) => {
   const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
@@ -2166,12 +2440,40 @@ const dashboardMetrics = async (month) => {
         { createdAt: { $gte: start, $lt: end } },
       ],
     }),
-    SocialPost.aggregate([{ $match: { postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } }]),
+    SocialPost.aggregate([
+      {
+        $match: {
+          status: 'published',
+          $or: [
+            { postedAt: { $gte: start, $lt: end } },
+            { postedAtDate: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          posts: { $sum: 1 },
+          reach: { $sum: '$reach' },
+          engagement: { $sum: '$engagement' },
+        },
+      },
+    ]),
     OpportunityEngagement.countDocuments({ event: 'application', createdAt: { $gte: start, $lt: end } }),
   ]);
+  const publishedPosts = social[0]?.posts || 0;
+  const reachVal = social[0]?.reach || 0;
+  const engagementVal = social[0]?.engagement || 0;
   return {
     opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified,
-    beneficiariesAdded, socialReach: social[0]?.reach || 0, socialEngagement: social[0]?.engagement || 0, opportunityApplications: applications,
+    beneficiariesAdded,
+    postsPublished: publishedPosts,
+    posts_published: publishedPosts,
+    socialReach: reachVal,
+    social_reach: reachVal,
+    socialEngagement: engagementVal,
+    social_engagement: engagementVal,
+    opportunityApplications: applications,
   };
 };
 
@@ -2274,7 +2576,7 @@ const scorecardForStaff = async (staff, month, targetsByMetric) => {
     metrics.push({ metric: 'beneficiariesAdded', value: await Beneficiary.countDocuments({ addedBy: userId, createdAt: { $gte: start, $lt: end } }) });
   }
   if (roles.some((role) => ['communications officer', 'social media manager'].includes(role))) {
-    const social = await SocialPost.aggregate([{ $match: { createdBy: userId, postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' } } }]);
+    const social = await SocialPost.aggregate([{ $match: { createdBy: userId, status: 'published', postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' } } }]);
     metrics.push({ metric: 'socialReach', value: social[0]?.reach || 0 });
   }
   const scored = metrics.map((item) => {
@@ -2408,7 +2710,7 @@ adminApiRouter.get('/reports/monthly', requireAdminOrStaffAuth, requirePortalRol
   previousDate.setUTCMonth(previousDate.getUTCMonth() - 1);
   const previousMonth = previousDate.toISOString().slice(0, 7);
   const [metrics, pipeline, networkSize, social, targets, recordsBySource, topFive, activityCount, previousMetrics] = await Promise.all([
-    dashboardMetrics(month), partnerPipelineHealth(month), Ambassador.countDocuments({ status: 'active' }), SocialPost.aggregate([{ $match: { postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } }]),
+    dashboardMetrics(month), partnerPipelineHealth(month), Ambassador.countDocuments({ status: 'active' }), SocialPost.aggregate([{ $match: { status: 'published', postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } }]),
     MonthlyTarget.find({ month }),
     Beneficiary.aggregate([{ $match: { createdAt: { $gte: start, $lt: end } } }, { $group: { _id: '$sourceType', count: { $sum: 1 } } }]),
     leaderboardEntries(month, 5),

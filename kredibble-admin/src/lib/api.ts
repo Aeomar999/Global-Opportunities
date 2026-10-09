@@ -1298,6 +1298,114 @@ export const getBeneficiariesPendingCountApi = async () => {
   return request<{ count: number }>("/admin/beneficiaries/pending-count");
 };
 
+// BE-009: Social Posts API
+export interface PlatformRowApiRecord {
+  platform: string;
+  label: string;
+  posts: number;
+  reach: number;
+  engagement: number;
+}
+
+export interface SocialMonthlyTotalsApiRecord {
+  month: string;
+  posts: number;
+  reach: number;
+  engagement: number;
+  targets: {
+    posts: number;
+    reach: number;
+    engagement: number;
+  };
+  platforms: PlatformRowApiRecord[];
+  leading: string | null;
+  team: {
+    posts: number;
+    reach: number;
+    engagement: number;
+  };
+}
+
+export interface SocialPostApiRecord {
+  id: string;
+  platform: string;
+  title: string;
+  text?: string;
+  url: string;
+  reach: number;
+  engagement: number;
+  status: "draft" | "scheduled" | "published";
+  postedAt: string;
+  postedAtIso?: string;
+  listingId?: string;
+  listingTitle?: string;
+  authorId?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SocialPostPayload {
+  platform: string;
+  title: string;
+  text?: string;
+  url: string;
+  reach: number;
+  engagement: number;
+  status?: "draft" | "scheduled" | "published";
+  postedAt: string;
+  listingId?: string;
+  opportunityId?: string;
+}
+
+export const getSocialPostsApi = async (params?: {
+  month?: string;
+  platform?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.month) query.set("month", params.month);
+  if (params?.platform) query.set("platform", params.platform);
+  if (params?.status) query.set("status", params.status);
+  if (params?.search) query.set("search", params.search);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<SocialPostApiRecord>(`/admin/social-posts${queryString}`);
+};
+
+export const getSocialPostByIdApi = async (id: string) => {
+  return request<SocialPostApiRecord>(`/admin/social-posts/${id}`);
+};
+
+export const createSocialPostApi = async (data: SocialPostPayload) => {
+  return request<SocialPostApiRecord>("/admin/social-posts", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateSocialPostApi = async (id: string, data: Partial<SocialPostPayload>) => {
+  return request<SocialPostApiRecord>(`/admin/social-posts/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteSocialPostApi = async (id: string) => {
+  return request<{ id: string; deleted: boolean }>(`/admin/social-posts/${id}`, {
+    method: "DELETE",
+  });
+};
+
+export const getSocialMonthlyTotalsApi = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<SocialMonthlyTotalsApiRecord>(`/admin/social-posts/monthly-totals${query}`);
+};
+
 
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with

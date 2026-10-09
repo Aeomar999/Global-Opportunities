@@ -322,17 +322,102 @@ beneficiarySchema.pre('save', function () {
 beneficiarySchema.index({ ambassadorId: 1, verified: 1, verifiedAt: 1 });
 beneficiarySchema.index({ verified: 1, verifiedAt: 1 });
 
+export const CANONICAL_SOCIAL_PLATFORMS = [
+  'facebook',
+  'instagram',
+  'x',
+  'linkedin',
+  'tiktok',
+  'youtube',
+  'whatsapp',
+  'other',
+];
+
+export const SOCIAL_PLATFORM_LABELS = {
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+  x: 'X',
+  linkedin: 'LinkedIn',
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
+  whatsapp: 'WhatsApp',
+  other: 'Other',
+};
+
+export const normalizeSocialPlatform = (value) => {
+  if (!value) return 'other';
+  const normalized = String(value).trim().toLowerCase();
+  if (CANONICAL_SOCIAL_PLATFORMS.includes(normalized)) return normalized;
+  return 'other';
+};
+
+export const SOCIAL_POST_STATUSES = ['draft', 'scheduled', 'published'];
+
 const socialPostSchema = new mongoose.Schema({
-  platform: { type: String, required: true, enum: ['Facebook', 'Instagram', 'X', 'LinkedIn', 'TikTok', 'YouTube', 'WhatsApp', 'other'], index: true },
-  title: { type: String, required: true },
-  url: String,
+  platform: {
+    type: String,
+    required: true,
+    enum: CANONICAL_SOCIAL_PLATFORMS,
+    lowercase: true,
+    trim: true,
+    index: true,
+  },
+  title: { type: String, required: true, trim: true },
+  text: { type: String, trim: true },
+  url: { type: String, trim: true },
   reach: { type: Number, default: 0, min: 0 },
   engagement: { type: Number, default: 0, min: 0 },
-  opportunityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity' },
+  status: {
+    type: String,
+    enum: SOCIAL_POST_STATUSES,
+    default: 'published',
+    index: true,
+  },
+  listingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity', index: true },
+  opportunityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity', index: true },
   postedAt: { type: Date, required: true, index: true },
+  postedAtDate: { type: String, index: true },
+  authorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   wordpressSync: syncField(),
 }, { timestamps: true });
+
+socialPostSchema.pre('validate', function () {
+  if (this.platform) {
+    this.platform = normalizeSocialPlatform(this.platform);
+  }
+  if (!this.text && this.title) {
+    this.text = this.title;
+  }
+  if (this.listingId && !this.opportunityId) {
+    this.opportunityId = this.listingId;
+  }
+  if (this.opportunityId && !this.listingId) {
+    this.listingId = this.opportunityId;
+  }
+  if (this.postedAt) {
+    const date = new Date(this.postedAt);
+    if (!Number.isNaN(date.getTime())) {
+      this.postedAtDate = date.toISOString().slice(0, 10);
+    }
+  }
+  if (this.createdBy && !this.authorId) {
+    this.authorId = this.createdBy;
+  }
+  if (this.authorId && !this.createdBy) {
+    this.createdBy = this.authorId;
+  }
+  if (typeof this.reach === 'number') {
+    this.reach = Math.max(0, Math.round(this.reach));
+  }
+  if (typeof this.engagement === 'number') {
+    this.engagement = Math.max(0, Math.round(this.engagement));
+  }
+});
+
+socialPostSchema.index({ status: 1, postedAt: -1 });
+socialPostSchema.index({ platform: 1, status: 1, postedAt: -1 });
+socialPostSchema.index({ postedAtDate: 1, status: 1 });
 
 const opportunityEngagementSchema = new mongoose.Schema({
   opportunityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Opportunity', required: true, index: true },
