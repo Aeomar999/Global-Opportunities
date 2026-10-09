@@ -294,7 +294,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-124 | App Store & Google Play compliance gaps: policy links, push notifications, offline netinfo | P1 | Mobile store | ✅ Done |
 | SEC-125 | AI Assistant in mobile app is canned setTimeout demo disconnected from backend | P2 | Mobile assistant | ✅ Done |
 | SEC-126 | Mock data fallbacks in notifications, saved items, and hardcoded Wave job descriptions | P2 | Mobile app | ✅ Done |
-| SEC-127 | Hirer postings and managed channels rely on mock in-memory authStore data | P2 | Mobile hirer | Open |
+| SEC-127 | Hirer postings and managed channels rely on mock in-memory authStore data | P2 | Mobile hirer | ✅ Done |
 | SEC-128 | Mobile test coverage: 0 screen/UI component tests; 116 ESLint warnings across screens | P2 | Mobile tests | Open |
 
 ---
@@ -2068,6 +2068,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - 2026-10-08 — MOB-015 complete: Installed `@react-native-community/netinfo` and `expo-notifications`; created legal URL helpers (`openPrivacyPolicy`, `openTermsOfService`) using `expo-web-browser` and integrated into `signup.tsx`, `profile/security.tsx`, and `hirer-profile/security.tsx`; built offline connectivity detection with `useNetworkStatus` and `<OfflineBanner />` root banner in `_layout.tsx`; implemented `registerForPushNotificationsAsync` for Expo/APNs/FCM tokens; added unit test suite (`__tests__/store-compliance.test.ts`) covering legal links, offline calculations, and push notification token registration (64/64 tests passing across 8 suites with 0 type errors).
 - 2026-10-08 — MOB-016 complete: Implemented `sendAssistantMessage` API caller in `src/lib/api.ts` with Bearer session authentication; replaced 1.2s `setTimeout` and mock jobs/candidates in `src/app/assistant/index.tsx` with real-time `POST /api/v1/assistant/chat` integration; added automatic 503 maintenance fallback handling ("AI smart assistant is currently undergoing scheduled maintenance. Please check back shortly."); added comprehensive unit test suite (`__tests__/assistant.test.ts`) covering single/multi message payloads, Bearer auth headers, 503 error mapping, and chat history payload management (69/69 tests passing across 9 suites with 0 type errors).
 - 2026-10-08 — MOB-017 complete: Removed hardcoded Google LLC notifications from `mockNotifications.ts` and updated `notifications/index.tsx` with static imports and empty state sync; initialized `profileStore.saved` to empty array in `mockProfile.ts` and removed stale fallback guard in `profile/saved.tsx`; removed hardcoded Wave mission statement and static design responsibilities from `jobs/[id].tsx` in favor of live description and dynamic requirements parsing; wired native document picker (`pickDocument`) and Cloudinary upload (`uploadFile`) into `grants/apply.tsx` with file preview and payload attachment; added unit test suite (`__tests__/mock-fallback-removal.test.ts`) confirming empty initialization and dynamic requirements parsing (77/77 tests passing across 10 suites with 0 type errors).
+- 2026-10-08 — MOB-018 complete: Upgraded `hirer-profile/postings.tsx` to fetch caller-scoped opportunities via `getOpportunities()`, added live `deleteOpportunity` with confirmation alert and state sync, and added "Post an Opportunity" empty state action; upgraded `hirer-profile/channels.tsx` to fetch live channels via `getChannels()`, added live `deleteChannel`, added empty state and create banner; added `updateChannel` and `deleteChannel` API callers in `src/lib/api.ts`; cleaned up unused mock initial arrays in `authStore.ts`; added unit test suite (`__tests__/hirer-management.test.ts`) covering channel deletion/updates, opportunity scoping, and model mappings (83/83 tests passing across 11 suites with 0 type errors).
 
 ---
 
@@ -2085,7 +2086,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | MOB-015 | SEC-124 | Store compliance: in-app policy links, push notifications, netinfo | P1 | [x] Completed |
 | MOB-016 | SEC-125 | AI Assistant live backend integration (`/api/v1/assistant`) | P2 | [x] Completed |
 | MOB-017 | SEC-126 | Mock fallback removal: notifications, saved items, Wave text | P2 | [x] Completed |
-| MOB-018 | SEC-127 | Live Hirer management: my postings & community channels | P2 | [ ] Open |
+| MOB-018 | SEC-127 | Live Hirer management: my postings & community channels | P2 | [x] Completed |
 | MOB-019 | SEC-128 | Mobile screen integration test suite & ESLint zero-warning sweep | P2 | [ ] Open |
 
 ---

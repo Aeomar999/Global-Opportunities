@@ -209,71 +209,6 @@ const initialCandidates: Candidate[] = [
   }
 ];
 
-const initialApplicants: Applicant[] = [
-  {
-    id: 'app-c1',
-    name: 'Kojo Boateng',
-    profession: 'UI/UX Designer',
-    university: 'Ashesi University',
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    matchScore: 96,
-    status: 'Shortlisted',
-    skills: ['Figma', 'UI Design', 'Wireframing'],
-    resumeUrl: 'kojo_boateng_resume.pdf',
-  },
-  {
-    id: 'app-c2',
-    name: 'Ama Serwaa',
-    profession: 'Frontend Developer',
-    university: 'KNUST',
-    image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    matchScore: 92,
-    status: 'Applied',
-    skills: ['React Native', 'TypeScript', 'TailwindCSS'],
-    resumeUrl: 'ama_serwaa_resume.pdf',
-  },
-  {
-    id: 'app-c4',
-    name: 'Elona Blankson',
-    profession: 'Product Designer',
-    university: 'GIMPA',
-    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    matchScore: 94,
-    status: 'Interviewing',
-    skills: ['Figma', 'User Research', 'Design Systems'],
-    resumeUrl: 'elona_blankson_resume.pdf',
-  }
-];
-
-const initialOpportunities: PostedOpportunity[] = [
-  {
-    id: 'post-1',
-    title: 'Senior Product Designer',
-    type: 'jobs',
-    company: 'Google LLC',
-    location: 'Accra, Ghana (Hybrid)',
-    logoColor: '#4285F4',
-    initial: 'G',
-    description: 'We are looking for a Senior Product Designer to lead design initiatives across the Google Pay EMEA teams. You will work on expanding digital payment experiences for millions of users.',
-    applicantsCount: 3,
-    applicants: initialApplicants,
-    date: '28 Jun 2026',
-  },
-  {
-    id: 'post-2',
-    title: 'UX Research Intern',
-    type: 'internships',
-    company: 'Google LLC',
-    location: 'Accra, Ghana (On-site)',
-    logoColor: '#EA4335',
-    initial: 'G',
-    description: 'A 6-month internship focusing on gathering qualitative insights, structuring user journeys, and conducting usability tests for new localization features in West Africa.',
-    applicantsCount: 2,
-    applicants: [initialApplicants[0], initialApplicants[1]],
-    date: '29 Jun 2026',
-  },
-];
-
 export interface ManagedGroup {
   id: string;
   name: string;
@@ -282,25 +217,6 @@ export interface ManagedGroup {
   bio: string;
   avatar: string;
 }
-
-const initialManagedGroups: ManagedGroup[] = [
-  {
-    id: 'group-1',
-    name: 'Google Tech Circle',
-    category: 'Coding & Technology',
-    members: '1.2k members',
-    bio: 'Connect with Google recruiters and engineers to learn about software development opportunities, workshops, and career accelerators.',
-    avatar: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=120&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'group-2',
-    name: 'Designers @ Google Accra',
-    category: 'Design & Creative',
-    members: '850 members',
-    bio: 'Official Google community circle for designers in West Africa. Join for portfolio reviews, tech talks, and open design roles.',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-  }
-];
 
 // ─── State Store ──────────────────────────────────────────────────────────────
 

@@ -449,6 +449,19 @@ export const createChannel = async (data: any) => {
     body: JSON.stringify(data),
   });
 };
+
+export const updateChannel = async (id: string, data: any) => {
+  return request<any>(`/community/channels/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteChannel = async (id: string) => {
+  return request<any>(`/community/channels/${id}`, {
+    method: 'DELETE',
+  });
+};
 export const getChannelPosts = async (channelId: string) => {
   return request<any[]>(`/community/channels/${channelId}/posts`);
 };
