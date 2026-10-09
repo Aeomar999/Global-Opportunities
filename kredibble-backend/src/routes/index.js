@@ -11,6 +11,7 @@ import { requireAuth, requireAdminAuth, optionalAuth, requireEmailVerified } fro
 import { env } from '../config/env.js';
 import { validate } from '../middleware/validate.js';
 import { staffInviteSchema } from '../schemas/admin.js';
+import { pushTokenSchema } from '../schemas/auth.js';
 import {
   RESOURCE_POLICIES,
   ADMIN,
@@ -1309,6 +1310,21 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     post.pinnedBy = null;
     await Promise.all([post.save(), channel.save()]);
     itemResponse(res, { channel: toClientObject(channel), post: toClientObject(post) });
+  }));
+
+  // Push notification token registration
+  router.post('/users/me/push-token', requireAuth, validate(pushTokenSchema), asyncHandler(async (req, res) => {
+    const userId = req.auth.sub || req.auth.id || req.auth.userId;
+    const { token, platform } = req.body;
+    const update = {
+      pushToken: token,
+      pushTokenUpdatedAt: new Date(),
+    };
+    if (platform) {
+      update.pushPlatform = platform;
+    }
+    await User.findByIdAndUpdate(userId, { $set: update });
+    itemResponse(res, { success: true });
   }));
 
   // Collection routes with populate option

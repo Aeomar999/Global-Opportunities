@@ -33,6 +33,10 @@ const userSchema = new mongoose.Schema({
   failedLoginAttempts: { type: Number, default: 0 },
   lockUntil: { type: Date },
   lastFailedLogin: { type: Date },
+  // Push notifications
+  pushToken: { type: String },
+  pushPlatform: { type: String, enum: ['ios', 'android', 'web', 'other'] },
+  pushTokenUpdatedAt: { type: Date },
 }, { timestamps: true });
 
 // Virtuals to mimic the previous Prisma/Native structure for the frontend

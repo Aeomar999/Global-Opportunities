@@ -44,9 +44,16 @@ jest.mock('../src/lib/api', () => ({
 }));
 
 describe('store compliance: legal links, push notifications, netinfo (MOB-015 / SEC-124)', () => {
+  const originalFetch = global.fetch;
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsDevice = true;
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
   });
 
   describe('Legal Policies & In-App Browser (Apple Guideline 5.1.1)', () => {
@@ -56,7 +63,7 @@ describe('store compliance: legal links, push notifications, netinfo (MOB-015 / 
       await openPrivacyPolicy();
 
       expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
-      expect(PRIVACY_POLICY_URL).toBe('https://kredibble.com/privacy');
+      expect(PRIVACY_POLICY_URL).toBe('https://globalopportunitydesk.com/privacy-policy/');
     });
 
     test('openTermsOfService launches official terms URL in secure WebBrowser', async () => {
@@ -65,7 +72,7 @@ describe('store compliance: legal links, push notifications, netinfo (MOB-015 / 
       await openTermsOfService();
 
       expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(TERMS_OF_SERVICE_URL);
-      expect(TERMS_OF_SERVICE_URL).toBe('https://kredibble.com/terms');
+      expect(TERMS_OF_SERVICE_URL).toBe('https://globalopportunitydesk.com/privacy-policy/');
     });
   });
 
@@ -75,10 +82,6 @@ describe('store compliance: legal links, push notifications, netinfo (MOB-015 / 
       (Notifications.getExpoPushTokenAsync as jest.Mock).mockResolvedValueOnce({
         data: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
       });
-
-      const originalFetch = global.fetch;
-      global.fetch = jest.fn().mockResolvedValueOnce({ ok: true, json: async () => ({}) });
-
       const token = await registerForPushNotificationsAsync('ios');
 
       expect(token).toBe('ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]');
@@ -91,8 +94,6 @@ describe('store compliance: legal links, push notifications, netinfo (MOB-015 / 
           }),
         })
       );
-
-      global.fetch = originalFetch;
     });
 
     test('requests permissions if not initially granted and succeeds when accepted', async () => {

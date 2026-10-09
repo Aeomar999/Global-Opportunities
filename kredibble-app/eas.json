@@ -8,7 +8,7 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://dev-api.globalopportunitydesk.com/api"
+        "EXPO_PUBLIC_API_URL": "https://dev-api.globalopportunitydesk.com/api/v1"
       }
     },
     "staging": {
@@ -17,13 +17,13 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://staging-api.globalopportunitydesk.com/api"
+        "EXPO_PUBLIC_API_URL": "https://staging-api.globalopportunitydesk.com/api/v1"
       },
       "channel": "staging"
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://kredibble-api.onrender.com/api"
+        "EXPO_PUBLIC_API_URL": "https://kredibble-api.onrender.com/api/v1"
       },
       "channel": "production"
     }
