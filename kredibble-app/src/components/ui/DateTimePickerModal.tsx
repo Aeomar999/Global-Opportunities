@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   Dimensions,
-  Platform,
 } from 'react-native';
 import { ChevronLeft, ChevronRight, X, Clock, Calendar } from 'lucide-react-native';
 
@@ -80,7 +79,7 @@ export function DateTimePickerModal({
             if (ap === 'AM' || ap === 'PM') setAmpm(ap);
           }
         }
-      } catch (e) {
+      } catch {
         // Fallback to current date/time
       }
     }

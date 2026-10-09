@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ChevronLeft, Search, Clock, X, BookOpen } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Colors, FontSize, FontWeight, Radius, LineHeight, Size, Shadow } from '../../constants/design';
+import { getArticles } from '../../lib/api';
 
 
 interface Article {
@@ -54,7 +55,6 @@ export default function CareerResourcesScreen() {
   React.useEffect(() => {
     const fetchArticles = async () => {
       try {
-        const { getArticles } = require('../../lib/api');
         const data = await getArticles();
         if (data && data.length > 0) {
           setArticles(data);

@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Modal, TextInput, Pressable, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bookmark, Sparkles, Plus, X, ChevronLeft, MapPin, Briefcase, Award, Calendar, FileText, Download, Users } from 'lucide-react-native';
-import Svg, { G, Rect, Defs, ClipPath, RadialGradient, Stop, Ellipse } from 'react-native-svg';
-import { useRouter, useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
-import { authStore, PostedOpportunity, Applicant } from '../../constants/authStore';
-import { getOpportunities } from '../../lib/api';
+import { Bookmark, Sparkles, Plus, Briefcase } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { authStore } from '../../constants/authStore';
+import { getOpportunities, getApplicants } from '../../lib/api';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 
@@ -240,7 +239,6 @@ const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => (
 
 export default function OpportunitiesScreen() {
   const router = useRouter();
-  const navigation = useNavigation();
   const params = useLocalSearchParams();
   const viewMode = params.view;
   const [role, setRole] = useState(authStore.role);
@@ -265,30 +263,25 @@ export default function OpportunitiesScreen() {
         const fetchOpps = async () => {
           try {
             const data = await getOpportunities();
-            const { getApplicants } = require('../../lib/api');
             const oppsWithApplicants = await Promise.all(
               data.map(async (opp: any) => {
                 try {
                   const applicants = await getApplicants(opp.id);
                   return { ...opp, applicants, applicantsCount: applicants.length || opp.applicantsCount || 0 };
-                } catch (e) {
+                } catch {
                   return { ...opp, applicants: [], applicantsCount: 0 };
                 }
               })
             );
             authStore.setOpportunities(oppsWithApplicants);
-          } catch (e) {
-            console.error(e);
+          } catch (err) {
+            console.error(err);
           }
         };
         fetchOpps();
       }
     }, [role])
   );
-
-  const handleStatusChange = (oppId: string, applicantId: string, status: Applicant['status']) => {
-    authStore.updateApplicantStatus(oppId, applicantId, status);
-  };
   if (role === 'hirer') {
     if (viewMode !== 'all') {
       const filteredOpps = opps.filter((opp) => opp.type.toLowerCase() === recruiterActiveTab.toLowerCase());

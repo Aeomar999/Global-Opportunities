@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Eye, EyeOff, ChevronDown, ChevronLeft, Search, Upload, Check, Home } from 'lucide-react-native';
-import Svg, { G, Rect, Defs, ClipPath } from 'react-native-svg';
+import { Eye, EyeOff, ChevronDown, ChevronLeft, Search, Upload, Check } from 'lucide-react-native';
 import { authStore } from '../../constants/authStore';
 import { profileStore } from '../../constants/mockProfile';
 import { signupMobile, uploadFile } from '../../lib/api';
@@ -169,7 +168,6 @@ const getFlag = (code: string) =>
   code.toUpperCase().split('').map(c => String.fromCodePoint(c.charCodeAt(0) + 127397)).join('');
 
 const LOGO_CLEARANCE = 114;
-const TOTAL_STEPS = 4;
 
 const MULTI_PICKERS: PickerType[] = ['skills', 'prefCountries'];
 const isMulti = (t: PickerType) => MULTI_PICKERS.includes(t);
@@ -523,7 +521,7 @@ export default function SignupScreen() {
     }
   };
 
-  const getPickerItems = (): Array<Country | string> => {
+  const getPickerItems = (): (Country | string)[] => {
     const q = searchQuery.toLowerCase();
     switch (activePicker) {
       case 'country':

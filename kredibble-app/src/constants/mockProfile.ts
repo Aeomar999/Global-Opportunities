@@ -1,4 +1,6 @@
 import { mockExperts, Expert } from './mockExperts';
+import { authStore } from './authStore';
+import { toggleSavedItem } from '../lib/api';
 
 export interface SavedOpportunity {
   id: string;
@@ -134,17 +136,14 @@ class ProfileStateStore {
     this.notify();
 
     try {
-      const { authStore } = require('./authStore');
-      const { toggleSavedItem } = require('../lib/api');
-      
       const userId = authStore.user?.id;
       if (userId) {
-        let itemType = type === 'jobs' ? 'opportunities' : type;
-        toggleSavedItem(userId, { itemId: id, itemType: itemType }).catch((err: any) => {
-          console.warn('Failed to persist bookmark to server', err);
+        const itemType = type === 'jobs' ? 'opportunities' : type;
+        toggleSavedItem({ itemId: id, itemType }).catch((_err: any) => {
+          console.warn('Failed to persist bookmark to server');
         });
       }
-    } catch (err) {
+    } catch {
       console.warn('Could not load auth store for saving item');
     }
   }

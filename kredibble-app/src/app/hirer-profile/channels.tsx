@@ -14,44 +14,55 @@ export default function MyChannelsScreen() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const fetchMyChannels = async () => {
-    setLoading(true);
-    try {
-      const data = await getChannels();
-      const userId = authStore.user?.id;
-
-      const myChannels = (Array.isArray(data) ? data : []).filter((c: any) => {
-        if (!userId) return true;
-        return (
-          c.createdBy === userId ||
-          c.createdBy?._id === userId ||
-          c.ownerId === userId
-        );
-      });
-
-      const mapped: ManagedGroup[] = myChannels.map((c: any) => ({
-        id: String(c.id || c._id),
-        name: c.name || 'Untitled Channel',
-        category: c.category || 'General',
-        members: `${c.membersCount || (Array.isArray(c.memberIds) ? c.memberIds.length : 1)} members`,
-        bio: c.bio || '',
-        avatar:
-          c.avatar ||
-          'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=120&auto=format&fit=crop&q=80',
-      }));
-
-      setManagedGroups(mapped);
-    } catch (err: any) {
-      console.warn('Failed to load my channels:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isMounted = true;
+    const fetchMyChannels = async () => {
+      try {
+        const data = await getChannels();
+        const userId = authStore.user?.id;
+
+        const myChannels = (Array.isArray(data) ? data : []).filter((c: any) => {
+          if (!userId) return true;
+          return (
+            c.createdBy === userId ||
+            c.createdBy?._id === userId ||
+            c.ownerId === userId
+          );
+        });
+
+        const mapped: ManagedGroup[] = myChannels.map((c: any) => ({
+          id: String(c.id || c._id),
+          name: c.name || 'Untitled Channel',
+          category: c.category || 'General',
+          members: `${c.membersCount || (Array.isArray(c.memberIds) ? c.memberIds.length : 1)} members`,
+          bio: c.bio || '',
+          avatar:
+            c.avatar ||
+            'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=120&auto=format&fit=crop&q=80',
+        }));
+
+        if (isMounted) {
+          setManagedGroups(mapped);
+        }
+      } catch (err: any) {
+        console.warn('Failed to load my channels:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
     fetchMyChannels();
-    const unsubscribe = authStore.subscribe(() => setManagedGroups([...authStore.managedGroups]));
-    return unsubscribe;
+    const unsubscribe = authStore.subscribe(() => {
+      if (isMounted) {
+        setManagedGroups([...authStore.managedGroups]);
+      }
+    });
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const handleDelete = (group: ManagedGroup) => {

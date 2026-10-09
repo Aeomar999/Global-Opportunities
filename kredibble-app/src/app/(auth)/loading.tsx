@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Animated, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import Svg, { G, Rect, Defs, ClipPath } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 
 const LogoSVG = () => (
@@ -49,7 +48,7 @@ export default function LoadingScreen() {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [router, spinValue]);
 
   const rotate = spinValue.interpolate({
     inputRange: [0, 1],

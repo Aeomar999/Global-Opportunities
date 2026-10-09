@@ -21,53 +21,64 @@ export default function MyPostingsScreen() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const fetchMyPostings = async () => {
-    setLoading(true);
-    try {
-      const data = await getOpportunities();
-      const userId = authStore.user?.id;
-      const companyId = authStore.company?.id;
-
-      const myOpps = (Array.isArray(data) ? data : []).filter((o: any) => {
-        if (!userId && !companyId) return true;
-        const createdByMatch = o.createdBy === userId || o.createdBy?._id === userId;
-        const hirerMatch =
-          o.hirerId === userId ||
-          o.hirerId === companyId ||
-          o.hirerId?._id === companyId ||
-          o.hirerId?.userId === userId;
-        return createdByMatch || hirerMatch;
-      });
-
-      const mapped: PostedOpportunity[] = myOpps.map((opp: any) => ({
-        id: String(opp.id || opp._id),
-        title: opp.title || 'Untitled Opportunity',
-        type: (opp.type && ['jobs', 'internships', 'events', 'grants'].includes(String(opp.type).toLowerCase()))
-          ? (String(opp.type).toLowerCase() as PostedOpportunity['type'])
-          : 'jobs',
-        company: opp.company || authStore.company?.name || 'Company',
-        location: opp.location || 'Remote',
-        logoColor: opp.logoColor || '#6671E4',
-        initial: (opp.company || 'O').charAt(0).toUpperCase(),
-        description: opp.description || '',
-        applicantsCount: opp.applicantsCount || 0,
-        applicants: [],
-        date: opp.createdAt ? new Date(opp.createdAt).toLocaleDateString() : 'Recent',
-      }));
-
-      setOpportunities(mapped);
-      authStore.setOpportunities(mapped);
-    } catch (err: any) {
-      console.warn('Failed to load hirer postings:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isMounted = true;
+    const fetchMyPostings = async () => {
+      try {
+        const data = await getOpportunities();
+        const userId = authStore.user?.id;
+        const companyId = authStore.company?.id;
+
+        const myOpps = (Array.isArray(data) ? data : []).filter((o: any) => {
+          if (!userId && !companyId) return true;
+          const createdByMatch = o.createdBy === userId || o.createdBy?._id === userId;
+          const hirerMatch =
+            o.hirerId === userId ||
+            o.hirerId === companyId ||
+            o.hirerId?._id === companyId ||
+            o.hirerId?.userId === userId;
+          return createdByMatch || hirerMatch;
+        });
+
+        const mapped: PostedOpportunity[] = myOpps.map((opp: any) => ({
+          id: String(opp.id || opp._id),
+          title: opp.title || 'Untitled Opportunity',
+          type: (opp.type && ['jobs', 'internships', 'events', 'grants'].includes(String(opp.type).toLowerCase()))
+            ? (String(opp.type).toLowerCase() as PostedOpportunity['type'])
+            : 'jobs',
+          company: opp.company || authStore.company?.name || 'Company',
+          location: opp.location || 'Remote',
+          logoColor: opp.logoColor || '#6671E4',
+          initial: (opp.company || 'O').charAt(0).toUpperCase(),
+          description: opp.description || '',
+          applicantsCount: opp.applicantsCount || 0,
+          applicants: [],
+          date: opp.createdAt ? new Date(opp.createdAt).toLocaleDateString() : 'Recent',
+        }));
+
+        if (isMounted) {
+          setOpportunities(mapped);
+          authStore.setOpportunities(mapped);
+        }
+      } catch (err: any) {
+        console.warn('Failed to load hirer postings:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
     fetchMyPostings();
-    const unsubscribe = authStore.subscribe(() => setOpportunities([...authStore.opportunities]));
-    return unsubscribe;
+    const unsubscribe = authStore.subscribe(() => {
+      if (isMounted) {
+        setOpportunities([...authStore.opportunities]);
+      }
+    });
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const goToOpportunity = (_opp: PostedOpportunity) => {
