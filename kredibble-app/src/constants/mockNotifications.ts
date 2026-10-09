@@ -61,7 +61,7 @@ const initialHirerNotifications: NotificationItem[] = [
 ];
 
 class NotificationStateStore {
-  items: NotificationItem[] = [...initialHirerNotifications];
+  items: NotificationItem[] = [];
 
   private listeners: (() => void)[] = [];
 

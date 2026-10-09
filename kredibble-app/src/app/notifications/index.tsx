@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Users, MessageCircle, Hash, ShieldCheck, Info } from 'lucide-react-native';
 import { notificationStore, NotificationItem, NotificationType } from '../../constants/mockNotifications';
+import { authStore } from '../../constants/authStore';
+import { getNotifications } from '../../lib/api';
 
 const TYPE_META: Record<NotificationType, { Icon: any; color: string }> = {
   applicant: { Icon: Users, color: '#6671E4' },
@@ -18,27 +20,43 @@ export default function NotificationsScreen() {
   const [items, setItems] = useState<NotificationItem[]>(notificationStore.items);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchNotifications = async () => {
       try {
-        const { authStore } = require('../../constants/authStore');
-        const { getNotifications } = require('../../lib/api');
         const userId = authStore.user?.id;
         if (userId) {
-          const apiNotifications = await getNotifications(userId);
-          if (apiNotifications && apiNotifications.length > 0) {
-            notificationStore.items = apiNotifications;
-            setItems(apiNotifications);
+          const apiNotifications = await getNotifications();
+          const list = Array.isArray(apiNotifications) ? apiNotifications : [];
+          if (isMounted) {
+            notificationStore.items = list;
+            setItems(list);
             notificationStore.notify();
+          }
+        } else {
+          if (isMounted) {
+            notificationStore.items = [];
+            setItems([]);
           }
         }
       } catch (err) {
         console.warn('Failed to load notifications from API', err);
+        if (isMounted) {
+          notificationStore.items = [];
+          setItems([]);
+        }
       }
     };
     fetchNotifications();
 
-    const unsubscribe = notificationStore.subscribe(() => setItems([...notificationStore.items]));
-    return unsubscribe;
+    const unsubscribe = notificationStore.subscribe(() => {
+      if (isMounted) {
+        setItems([...notificationStore.items]);
+      }
+    });
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const handlePress = (item: NotificationItem) => {

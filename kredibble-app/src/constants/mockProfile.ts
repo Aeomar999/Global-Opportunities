@@ -40,12 +40,7 @@ export interface SecuritySettings {
 
 class ProfileStateStore {
   user: Expert = { ...mockExperts[0] };
-  saved: SavedOpportunity[] = [
-    { id: '1', type: 'jobs' },
-    { id: '1', type: 'internships' },
-    { id: '1', type: 'events' },
-    { id: '1', type: 'grants' },
-  ];
+  saved: SavedOpportunity[] = [];
   applications: Application[] = [
     {
       id: 'app-1',

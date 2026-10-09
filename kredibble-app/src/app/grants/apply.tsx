@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, UploadCloud, Check, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { ChevronLeft, UploadCloud, Check, ChevronDown, ChevronUp, FileText, X } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/design';
 import { useToast } from '../../components/ui/ToastProvider';
-import { applyForGrant, getGrantById, Grant } from '../../lib/api';
+import { applyForGrant, getGrantById, Grant, uploadFile } from '../../lib/api';
 import { authStore } from '../../constants/authStore';
+import { pickDocument, PickedFile } from '../../lib/file-picker';
 
 const DURATION_OPTIONS = ['Less than 3 months', '3 - 6 months', '6 - 12 months', '1 - 2 years', 'More than 2 years'];
 const ENTITY_OPTIONS = ['Non-Governmental Organization (NGO)', 'Startup', 'Corporation', 'Individual / Freelancer', 'Academic Institution', 'Other'];
@@ -68,6 +69,9 @@ export default function ApplyGrantScreen() {
   const [consentContact, setConsentContact] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isApplied, setIsApplied] = useState(false);
+  const [proposalFile, setProposalFile] = useState<PickedFile | null>(null);
+  const [proposalUrl, setProposalUrl] = useState<string | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   // Auto-filled data from user session
   const autoFilledName = authStore.user?.name || "Applicant";
@@ -92,6 +96,27 @@ export default function ApplyGrantScreen() {
     };
   }, [id]);
 
+  const handlePickProposal = async () => {
+    try {
+      const file = await pickDocument({ maxBytes: 10 * 1024 * 1024 });
+      if (!file) return;
+      setProposalFile(file);
+      setUploadingDoc(true);
+      const uploadRes = await uploadFile(file, 'verification-docs');
+      setProposalUrl(uploadRes.url);
+      showToast(`Selected ${file.name}`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to select document', 'info');
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleRemoveProposal = () => {
+    setProposalFile(null);
+    setProposalUrl(null);
+  };
+
   const handleSubmit = async () => {
     if (!consentAccuracy || !consentContact) {
       showToast('Please check all consent boxes to proceed.', 'info');
@@ -105,6 +130,8 @@ export default function ApplyGrantScreen() {
         requestedAmount: parseFloat(projectBudget) || 1000,
         organizationName: orgName,
         projectTitle,
+        proposalUrl: proposalUrl || undefined,
+        proposalName: proposalFile?.name || undefined,
       });
 
       setIsApplied(true);
@@ -118,6 +145,8 @@ export default function ApplyGrantScreen() {
       setProjectDuration('');
       setProjectBudget('');
       setHasReceivedFunding(null);
+      setProposalFile(null);
+      setProposalUrl(null);
       setPhoneNumber('');
       setEntityType('');
       setRegistrationNumber('');
@@ -338,11 +367,36 @@ export default function ApplyGrantScreen() {
 
         <View style={styles.formGroup}>
           <Text style={styles.label} className="font-sans">Upload supporting documents (e.g. project proposal) <Text style={styles.asterisk}>*</Text></Text>
-          <TouchableOpacity style={styles.uploadBox}>
-            <UploadCloud size={24} color={Colors.primary} />
-            <Text style={styles.uploadText} className="font-sans">Tap to upload file</Text>
-            <Text style={styles.uploadSubtext} className="font-sans">PDF, DOCX up to 10MB</Text>
-          </TouchableOpacity>
+          {proposalFile ? (
+            <View style={[styles.uploadBox, { borderColor: Colors.primary, backgroundColor: '#F0F4FF' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                  <FileText size={24} color={Colors.primary} style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={[styles.uploadText, { textAlign: 'left', fontWeight: '600' }]} className="font-sans">
+                      {proposalFile.name}
+                    </Text>
+                    <Text style={[styles.uploadSubtext, { textAlign: 'left' }]} className="font-sans">
+                      {uploadingDoc ? 'Uploading document...' : `${((proposalFile.size || 0) / 1024).toFixed(0)} KB · Ready`}
+                    </Text>
+                  </View>
+                </View>
+                {uploadingDoc ? (
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                ) : (
+                  <TouchableOpacity onPress={handleRemoveProposal} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <X size={18} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.uploadBox} onPress={handlePickProposal} activeOpacity={0.7}>
+              <UploadCloud size={24} color={Colors.primary} />
+              <Text style={styles.uploadText} className="font-sans">Tap to upload file</Text>
+              <Text style={styles.uploadSubtext} className="font-sans">PDF, DOCX up to 10MB</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Consent Section */}
