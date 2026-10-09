@@ -40,6 +40,7 @@ export interface Expert {
   certifications: string[];
   tools: string[];
   experienceLevel: 'Beginner' | 'Entry Level' | 'Intermediate' | 'Senior';
+  resumeUrl?: string;
 }
 
 export const mockExperts: Expert[] = [

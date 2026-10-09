@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Colors } from '../../constants/design';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { authStore } from '../../constants/authStore';
+import { updateHirerProfile } from '../../lib/api';
 
 export default function RecruiterDetailsScreen() {
   const router = useRouter();
@@ -29,7 +30,6 @@ export default function RecruiterDetailsScreen() {
     const recruiterData = { recruiterName, recruiterRole, recruiterEmail, recruiterPhone, recruiterLinkedin };
     
     try {
-      const { updateHirerProfile } = require('../../lib/api');
       const hirerId = (authStore as any).user?.hirer?.id;
       if (hirerId) {
         await updateHirerProfile(hirerId, recruiterData);
@@ -38,7 +38,7 @@ export default function RecruiterDetailsScreen() {
       authStore.updateCompany(recruiterData);
       router.back();
     } catch (err) {
-      alert('Failed to save recruiter profile');
+      Alert.alert('Error', 'Failed to save recruiter profile');
       console.error(err);
     }
   };

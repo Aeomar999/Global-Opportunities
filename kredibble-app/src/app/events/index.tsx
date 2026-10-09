@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { profileStore } from '../../constants/mockProfile';
 import { useToast } from '../../components/ui/ToastProvider';
+import { getEvents } from '../../lib/api';
 
 // ─── Shared events data ────────────────────────────────────────────────────────
 
@@ -136,7 +137,6 @@ export default function EventsScreen() {
     const fetchEvents = async () => {
       setIsLoading(true);
       try {
-        const { getEvents } = require('../../lib/api');
         const data = await getEvents({
           q: params.searchQuery,
           date: params.date,

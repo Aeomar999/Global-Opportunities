@@ -22,6 +22,10 @@ import {
   RolePermissionConfig,
   PipelineStageConfig,
   DEFAULT_PIPELINE_STAGE_LABELS,
+  normalizeEmail,
+  normalizePhone,
+  CANONICAL_RECORD_SOURCES,
+  RECORD_SOURCE_LABELS,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
@@ -47,6 +51,9 @@ import {
   ambassadorCreateSchema,
   ambassadorUpdateSchema,
   amplificationCreateSchema,
+  beneficiaryCreateSchema,
+  beneficiaryUpdateSchema,
+  beneficiaryUndoVerifySchema,
 } from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
 import { postChannelMessage, listChannelMessages, getThread, findPost, setAllowReplies } from '../lib/chat.js';
@@ -68,7 +75,6 @@ const OPPORTUNITY_ROLES = ['Opportunities Officer', 'Writer', 'Desk Lead'];
 const PROGRAM_ROLES = ['Training and Capacity Development Officer', 'Desk Lead'];
 const PARTNER_ROLES = ['Partnerships Officer', 'Desk Lead'];
 const AMBASSADOR_ROLES = ['Communications Officer', 'Social Media Manager', 'Country Lead', 'Desk Lead'];
-const BENEFICIARY_ROLES = ['Database Officer', 'Country Lead', 'Desk Lead'];
 const SOCIAL_ROLES = ['Communications Officer', 'Social Media Manager', 'Desk Lead'];
 const configured = (value) => Boolean(value && !value.includes('placeholder'));
 const escapedRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1398,71 +1404,510 @@ adminApiRouter.patch('/channels/:id/messages/:messageId', requireAdminAuth, vali
   itemResponse(res, updated);
 }));
 
-adminApiRouter.get('/beneficiaries', requireAdminOrStaffAuth, requirePortalRoles(...BENEFICIARY_ROLES), asyncHandler(async (req, res) => {
-  const filter = {};
-  if (req.query.sourceType) filter.sourceType = req.query.sourceType;
-  if (req.query.verified !== undefined) filter.verified = req.query.verified === 'true';
-  const { skip, limit } = pageOptions(req.query);
-  const records = await Beneficiary.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit);
-  listResponse(res, records.map(toClientObject));
-}));
+
+export const toBeneficiaryClientObject = (doc) => {
+  if (!doc) return doc;
+  const raw = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+  const id = raw._id ? raw._id.toString() : (raw.id ? String(raw.id) : '');
+  const name = raw.fullName || raw.name || '';
+  const email = raw.email || '';
+  const phone = raw.phone || undefined;
+  const country = raw.country || '';
+  const institution = raw.institution || '';
+
+  let source = raw.source || raw.sourceType || 'organic';
+  if (source === 'ambassador-referral') source = 'ambassador';
+  else if (source === 'partner-channel') source = 'partner';
+  else if (source === 'bulk-import') source = 'import';
+
+  const verified = Boolean(raw.verified);
+  const verifiedAt = raw.verifiedAt || undefined;
+  const createdAt = raw.createdAt
+    ? (typeof raw.createdAt === 'string' ? raw.createdAt.slice(0, 10) : new Date(raw.createdAt).toISOString().slice(0, 10))
+    : new Date().toISOString().slice(0, 10);
+
+  const ambassadorId = raw.ambassadorId?._id
+    ? raw.ambassadorId._id.toString()
+    : (raw.ambassadorId ? raw.ambassadorId.toString() : undefined);
+  const ambassadorName = raw.ambassadorId?.fullName || raw.ambassadorId?.name || undefined;
+
+  const listingId = (raw.listingId?._id ? raw.listingId._id.toString() : (raw.listingId ? raw.listingId.toString() : undefined))
+    || (raw.opportunityId?._id ? raw.opportunityId._id.toString() : (raw.opportunityId ? raw.opportunityId.toString() : undefined));
+  const listingTitle = raw.listingId?.title || raw.opportunityId?.title || undefined;
+
+  const addedById = raw.addedBy?._id
+    ? raw.addedBy._id.toString()
+    : (raw.addedBy ? raw.addedBy.toString() : undefined);
+  const addedByName = raw.addedBy?.name || raw.addedBy?.fullName || undefined;
+
+  return {
+    ...raw,
+    id,
+    _id: id,
+    name,
+    fullName: name,
+    email,
+    phone,
+    country,
+    institution,
+    source,
+    sourceType: source === 'ambassador' ? 'ambassador-referral'
+      : (source === 'partner' ? 'partner-channel'
+      : (source === 'import' ? 'bulk-import' : source)),
+    verified,
+    verifiedAt,
+    createdAt,
+    ambassadorId,
+    ambassadorName,
+    listingId,
+    opportunityId: listingId,
+    listingTitle,
+    addedBy: addedById,
+    addedById,
+    addedByName,
+  };
+};
+
+export const findDuplicateBeneficiary = async ({ email, phone, country, existingId }) => {
+  const normEmail = normalizeEmail(email);
+  if (normEmail) {
+    const filter = { email: normEmail };
+    if (existingId) filter._id = { $ne: existingId };
+    const emailMatch = await Beneficiary.findOne(filter).populate('ambassadorId listingId opportunityId addedBy');
+    if (emailMatch) {
+      return { field: 'email', record: emailMatch };
+    }
+  }
+
+  const normPhone = normalizePhone(phone, country);
+  if (normPhone) {
+    const filter = {
+      $or: [
+        { phoneNormalized: normPhone },
+        { phone: (phone || '').trim() },
+      ],
+    };
+    if (existingId) filter._id = { $ne: existingId };
+    const phoneMatch = await Beneficiary.findOne(filter).populate('ambassadorId listingId opportunityId addedBy');
+    if (phoneMatch) {
+      return { field: 'phone', record: phoneMatch };
+    }
+
+    const candidates = await Beneficiary.find({
+      phone: { $exists: true, $ne: '' },
+      ...(existingId ? { _id: { $ne: existingId } } : {}),
+    }).select('phone country').lean();
+
+    for (const cand of candidates) {
+      if (normalizePhone(cand.phone, cand.country) === normPhone) {
+        const fullRecord = await Beneficiary.findById(cand._id).populate('ambassadorId listingId opportunityId addedBy');
+        return { field: 'phone', record: fullRecord };
+      }
+    }
+  }
+
+  return null;
+};
+
+export const calculateBeneficiaryPace = async (monthQuery) => {
+  const current = new Date().toISOString().slice(0, 7);
+  const month = typeof monthQuery === 'string' && /^\d{4}-\d{2}$/.test(monthQuery) ? monthQuery : current;
+  const [yearStr, monthStr] = month.split('-');
+  const year = parseInt(yearStr, 10);
+  const m = parseInt(monthStr, 10);
+  const daysInMonth = new Date(Date.UTC(year, m, 0)).getUTCDate();
+
+  const today = new Date();
+  let dayOfMonth;
+  if (month === current) {
+    dayOfMonth = Math.min(today.getUTCDate(), daysInMonth);
+  } else if (month < current) {
+    dayOfMonth = daysInMonth;
+  } else {
+    dayOfMonth = 0;
+  }
+
+  const verified = await Beneficiary.countDocuments({
+    verified: true,
+    $or: [
+      { verifiedAt: { $regex: `^${month}` } },
+      { verifiedAt: { $exists: false }, createdAt: { $gte: new Date(`${month}-01T00:00:00.000Z`), $lte: new Date(`${month}-${String(daysInMonth).padStart(2, '0')}T23:59:59.999Z`) } },
+      { verifiedAt: null, createdAt: { $gte: new Date(`${month}-01T00:00:00.000Z`), $lte: new Date(`${month}-${String(daysInMonth).padStart(2, '0')}T23:59:59.999Z`) } },
+    ],
+  });
+
+  const targets = await getTargetsForMonth(month);
+  const targetItem = targets.find((t) => t.kpi === 'beneficiaries_verified' || t.metric === 'beneficiaries_verified')
+    || targets.find((t) => t.kpi === 'beneficiariesVerified' || t.metric === 'beneficiariesVerified');
+  const target = targetItem?.value ?? targetItem?.target ?? 15;
+
+  const thresholds = await getThresholdsInForce(month);
+  const greenRatio = thresholds.greenRatio ?? (thresholds.green / 100);
+  const amberRatio = thresholds.amberRatio ?? (thresholds.amber / 100);
+
+  const pace = daysInMonth > 0 ? (target * dayOfMonth) / daysInMonth : 0;
+  const paceRounded = Math.round(pace);
+
+  let status = 'on_pace';
+  if (target > 0) {
+    if (verified >= pace * greenRatio) {
+      status = 'on_pace';
+    } else if (verified >= pace * amberRatio) {
+      status = 'behind';
+    } else {
+      status = 'far_behind';
+    }
+  }
+
+  const scale = Math.max(Math.ceil(pace * 2), 1);
+  const redEnd = Math.min(100, ((amberRatio * pace) / scale) * 100);
+  const amberEnd = Math.min(100, ((greenRatio * pace) / scale) * 100);
+
+  const PACE_WORDS = { on_pace: 'on pace', behind: 'behind', far_behind: 'far behind' };
+  const percent = (ratio) => `${Math.round(ratio * 100)}%`;
+
+  return {
+    month,
+    verified,
+    target,
+    pace,
+    paceRounded,
+    status,
+    text: `${verified} of ${target} verified, pro-rated pace ${paceRounded}, ${PACE_WORDS[status]}`,
+    hint: `Far behind: below ${percent(amberRatio)} of the pro-rated pace. Behind: ${percent(amberRatio)} to ${percent(greenRatio)}. On pace: ${percent(greenRatio)} and above.`,
+    gauge: {
+      max: Math.max(scale, verified),
+      zones: [
+        { key: 'far_behind', percent: redEnd },
+        { key: 'behind', percent: Math.max(0, amberEnd - redEnd) },
+        { key: 'on_pace', percent: Math.max(0, 100 - amberEnd) },
+      ],
+      markerAt: Math.min(100, (verified / scale) * 100),
+      paceAt: Math.min(100, (pace / scale) * 100),
+      capped: pace > 0 && verified > scale ? (verified / pace).toFixed(1) : null,
+    },
+  };
+};
+
+export const calculateBeneficiarySources = async (monthQuery) => {
+  const matchFilter = {};
+  if (typeof monthQuery === 'string' && /^\d{4}-\d{2}$/.test(monthQuery)) {
+    const [yearStr, monthStr] = monthQuery.split('-');
+    const year = parseInt(yearStr, 10);
+    const m = parseInt(monthStr, 10);
+    const daysInMonth = new Date(Date.UTC(year, m, 0)).getUTCDate();
+    const start = new Date(`${monthQuery}-01T00:00:00.000Z`);
+    const end = new Date(`${monthQuery}-${String(daysInMonth).padStart(2, '0')}T23:59:59.999Z`);
+    matchFilter.$or = [
+      { createdAtDate: { $regex: `^${monthQuery}` } },
+      { createdAt: { $gte: start, $lte: end } },
+    ];
+  }
+
+  const allRecords = await Beneficiary.find(matchFilter).select('source sourceType').lean();
+
+  const counts = {
+    organic: 0,
+    ambassador: 0,
+    event: 0,
+    partner: 0,
+    import: 0,
+  };
+
+  for (const rec of allRecords) {
+    let src = rec.source || rec.sourceType || 'organic';
+    if (src === 'ambassador-referral') src = 'ambassador';
+    else if (src === 'partner-channel') src = 'partner';
+    else if (src === 'bulk-import') src = 'import';
+    if (counts[src] !== undefined) {
+      counts[src]++;
+    } else {
+      counts.organic++;
+    }
+  }
+
+  return CANONICAL_RECORD_SOURCES.map((source) => ({
+    source,
+    label: RECORD_SOURCE_LABELS[source] || source,
+    count: counts[source] || 0,
+  }));
+};
 
 const prepareBeneficiary = (body, existing = {}) => {
-  const email = String(body.email ?? existing.email ?? '').trim().toLowerCase();
-  const phone = String(body.phone ?? existing.phone ?? '').trim();
-  const sourceType = body.sourceType ?? existing.sourceType;
-  const ambassadorId = body.ambassadorId ?? existing.ambassadorId;
-  if (!email && !phone) throw new ApiError(400, 'email or phone is required');
-  if (sourceType === 'ambassador-referral' && !ambassadorId) {
-    throw new ApiError(400, 'ambassadorId is required for ambassador-referral records');
+  const fullName = String(body.fullName ?? body.name ?? existing.fullName ?? existing.name ?? '').trim();
+  const email = body.email !== undefined ? normalizeEmail(body.email) : (existing.email ? normalizeEmail(existing.email) : undefined);
+  const phone = body.phone !== undefined ? String(body.phone || '').trim() : existing.phone;
+  const country = body.country !== undefined ? String(body.country || '').trim() : existing.country;
+  const institution = body.institution !== undefined ? String(body.institution || '').trim() : existing.institution;
+
+  let source = body.source || body.sourceType || existing.source || existing.sourceType || 'organic';
+  if (source === 'ambassador-referral') source = 'ambassador';
+  else if (source === 'partner-channel') source = 'partner';
+  else if (source === 'bulk-import') source = 'import';
+
+  const ambassadorId = body.ambassadorId !== undefined
+    ? (body.ambassadorId ? validId(body.ambassadorId, 'Ambassador') : null)
+    : existing.ambassadorId;
+
+  const listingId = (body.listingId ?? body.opportunityId) !== undefined
+    ? ((body.listingId ?? body.opportunityId) ? validId(body.listingId ?? body.opportunityId, 'Opportunity') : null)
+    : (existing.listingId ?? existing.opportunityId);
+
+  const verified = body.verified !== undefined ? Boolean(body.verified) : Boolean(existing.verified);
+  let verifiedAt = body.verifiedAt !== undefined ? body.verifiedAt : existing.verifiedAt;
+  if (verified && !verifiedAt) {
+    verifiedAt = new Date().toISOString().slice(0, 10);
+  } else if (!verified) {
+    verifiedAt = undefined;
   }
-  return { ...body, email: email || undefined, phone: phone || undefined, sourceType, ambassadorId };
+
+  const createdAtDate = body.createdAt || existing.createdAtDate || (existing.createdAt ? new Date(existing.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+
+  return {
+    fullName,
+    name: fullName,
+    email: email || undefined,
+    phone: phone || undefined,
+    country: country || undefined,
+    institution: institution || undefined,
+    source,
+    sourceType: source === 'ambassador' ? 'ambassador-referral' : (source === 'partner' ? 'partner-channel' : (source === 'import' ? 'bulk-import' : source)),
+    ambassadorId,
+    listingId,
+    opportunityId: listingId,
+    verified,
+    verifiedAt,
+    createdAtDate,
+  };
 };
 
-const findDuplicateBeneficiary = ({ email, phone, existingId }) => {
-  const identifiers = [email && { email }, phone && { phone }].filter(Boolean);
-  const filter = { $or: identifiers };
-  if (existingId) filter._id = { $ne: existingId };
-  return Beneficiary.findOne(filter);
-};
+adminApiRouter.get('/beneficiaries', requireAdminOrStaffAuth, requireScreen('database', 'view'), asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.source) {
+    const s = req.query.source;
+    filter.$or = [{ source: s }, { sourceType: s }];
+    if (s === 'ambassador') filter.$or.push({ sourceType: 'ambassador-referral' });
+    if (s === 'partner') filter.$or.push({ sourceType: 'partner-channel' });
+    if (s === 'import') filter.$or.push({ sourceType: 'bulk-import' });
+  } else if (req.query.sourceType) {
+    filter.sourceType = req.query.sourceType;
+  }
+  if (req.query.verified !== undefined) {
+    filter.verified = req.query.verified === 'true' || req.query.verified === true;
+  }
+  if (req.query.month) {
+    filter.$or = [
+      { verifiedAt: { $regex: `^${req.query.month}` } },
+      { createdAtDate: { $regex: `^${req.query.month}` } },
+    ];
+  }
+  if (req.query.q) {
+    const term = escapedRegex(req.query.q);
+    filter.$or = [
+      { fullName: { $regex: term, $options: 'i' } },
+      { email: { $regex: term, $options: 'i' } },
+      { phone: { $regex: term, $options: 'i' } },
+      { institution: { $regex: term, $options: 'i' } },
+    ];
+  }
 
-adminApiRouter.post('/beneficiaries', requireAdminOrStaffAuth, requirePortalRoles(...BENEFICIARY_ROLES), asyncHandler(async (req, res) => {
+  const { page, skip, limit } = pageOptions(req.query);
+  const total = await Beneficiary.countDocuments(filter);
+  const records = await Beneficiary.find(filter)
+    .populate('ambassadorId', 'fullName name campus profilePhoto photoUrl status')
+    .populate('listingId', 'title organisation status')
+    .populate('opportunityId', 'title organisation status')
+    .populate('addedBy', 'name fullName email')
+    .sort({ createdAt: -1, _id: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  listResponse(res, records.map(toBeneficiaryClientObject), total, page, limit);
+}));
+
+adminApiRouter.get('/beneficiaries/pace', requireAdminOrStaffAuth, requireScreen('database', 'view'), asyncHandler(async (req, res) => {
+  const pace = await calculateBeneficiaryPace(req.query.month);
+  itemResponse(res, pace);
+}));
+
+adminApiRouter.get('/beneficiaries/sources', requireAdminOrStaffAuth, requireScreen('database', 'view'), asyncHandler(async (req, res) => {
+  const sources = await calculateBeneficiarySources(req.query.month);
+  listResponse(res, sources);
+}));
+
+adminApiRouter.get('/beneficiaries/pending-count', requireAdminOrStaffAuth, requireScreen('database', 'view'), asyncHandler(async (req, res) => {
+  const count = await Beneficiary.countDocuments({ verified: false });
+  itemResponse(res, { count });
+}));
+
+adminApiRouter.get('/beneficiaries/:id', requireAdminOrStaffAuth, requireScreen('database', 'view'), asyncHandler(async (req, res) => {
+  const record = await Beneficiary.findById(validId(req.params.id, 'Beneficiary'))
+    .populate('ambassadorId', 'fullName name campus profilePhoto photoUrl status')
+    .populate('listingId', 'title organisation status')
+    .populate('opportunityId', 'title organisation status')
+    .populate('addedBy', 'name fullName email');
+  if (!record) throw notFound('Beneficiary');
+  itemResponse(res, toBeneficiaryClientObject(record));
+}));
+
+adminApiRouter.post('/beneficiaries', requireAdminOrStaffAuth, requireScreen('database', 'edit'), validate(beneficiaryCreateSchema), asyncHandler(async (req, res) => {
   const prepared = prepareBeneficiary(req.body);
-  const existing = await findDuplicateBeneficiary(prepared);
-  if (existing) throw new ApiError(409, 'A beneficiary with this email or phone already exists');
+  const duplicate = await findDuplicateBeneficiary({
+    email: prepared.email,
+    phone: prepared.phone,
+    country: prepared.country,
+  });
+
+  if (duplicate) {
+    return res.status(409).json({
+      error: {
+        message: `A record with this ${duplicate.field} already exists`,
+        field: duplicate.field,
+      },
+      field: duplicate.field,
+      duplicate: toBeneficiaryClientObject(duplicate.record),
+    });
+  }
+
   const record = await Beneficiary.create({ ...prepared, addedBy: req.auth.sub });
+  await record.populate('ambassadorId listingId opportunityId addedBy');
   const sync = await syncManagedRecord('beneficiaries', record);
   await logActivity(req.auth.sub, 'created', 'beneficiaries', record);
-  res.status(201).json({ data: { ...toClientObject(record), sync } });
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.BENEFICIARY_CREATE,
+    resourceType: AUDIT_RESOURCE_TYPES.BENEFICIARY,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: { source: record.source, verified: record.verified },
+  });
+
+  res.status(201).json({ data: { ...toBeneficiaryClientObject(record), sync } });
 }));
 
-adminApiRouter.patch('/beneficiaries/:id', requireAdminOrStaffAuth, requirePortalRoles(...BENEFICIARY_ROLES), asyncHandler(async (req, res) => {
+adminApiRouter.patch('/beneficiaries/:id', requireAdminOrStaffAuth, requireScreen('database', 'edit'), validate(beneficiaryUpdateSchema), asyncHandler(async (req, res) => {
   const record = await Beneficiary.findById(validId(req.params.id, 'Beneficiary'));
   if (!record) throw notFound('Beneficiary');
+
   const prepared = prepareBeneficiary(req.body, record);
-  const duplicate = await findDuplicateBeneficiary({ ...prepared, existingId: record._id });
-  if (duplicate) throw new ApiError(409, 'A beneficiary with this email or phone already exists');
+  const duplicate = await findDuplicateBeneficiary({
+    email: prepared.email,
+    phone: prepared.phone,
+    country: prepared.country,
+    existingId: record._id,
+  });
+
+  if (duplicate) {
+    return res.status(409).json({
+      error: {
+        message: `A record with this ${duplicate.field} already exists`,
+        field: duplicate.field,
+      },
+      field: duplicate.field,
+      duplicate: toBeneficiaryClientObject(duplicate.record),
+    });
+  }
+
   Object.assign(record, prepared);
   await record.save();
+  await record.populate('ambassadorId listingId opportunityId addedBy');
   const sync = await syncManagedRecord('beneficiaries', record);
   await logActivity(req.auth.sub, 'updated', 'beneficiaries', record);
-  itemResponse(res, { ...toClientObject(record), sync });
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.BENEFICIARY_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.BENEFICIARY,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: { source: record.source, verified: record.verified },
+  });
+
+  itemResponse(res, { ...toBeneficiaryClientObject(record), sync });
 }));
 
-adminApiRouter.post('/beneficiaries/:id/verify', requireAdminOrStaffAuth, requirePortalRoles(...BENEFICIARY_ROLES), asyncHandler(async (req, res) => {
+adminApiRouter.delete('/beneficiaries/:id', requireAdminOrStaffAuth, requireScreen('database', 'edit'), asyncHandler(async (req, res) => {
   const record = await Beneficiary.findById(validId(req.params.id, 'Beneficiary'));
   if (!record) throw notFound('Beneficiary');
+
+  await Beneficiary.findByIdAndDelete(record._id);
+  await logActivity(req.auth.sub, 'deleted', 'beneficiaries', record);
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.BENEFICIARY_DELETE,
+    resourceType: AUDIT_RESOURCE_TYPES.BENEFICIARY,
+    resourceId: record._id,
+    outcome: 'success',
+  });
+
+  res.status(200).json({ data: { id: record._id.toString() } });
+}));
+
+adminApiRouter.post('/beneficiaries/:id/verify', requireAdminOrStaffAuth, requireScreen('database', 'edit'), asyncHandler(async (req, res) => {
+  const record = await Beneficiary.findById(validId(req.params.id, 'Beneficiary')).populate('ambassadorId listingId opportunityId addedBy');
+  if (!record) throw notFound('Beneficiary');
+
+  const previousVerified = Boolean(record.verified);
+  const previousVerifiedAt = record.verifiedAt;
+  const undo = {
+    id: record._id.toString(),
+    verified: previousVerified,
+    verifiedAt: previousVerifiedAt,
+  };
+
   record.verified = true;
+  record.verifiedAt = new Date().toISOString().slice(0, 10);
   await record.save();
-  const sync = await syncManagedRecord('beneficiaries', record);
+  await record.populate('ambassadorId listingId opportunityId addedBy');
+
+  const clientRecord = toBeneficiaryClientObject(record);
   await logActivity(req.auth.sub, 'verified', 'beneficiaries', record);
-  itemResponse(res, { ...toClientObject(record), sync });
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.BENEFICIARY_VERIFY,
+    resourceType: AUDIT_RESOURCE_TYPES.BENEFICIARY,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: { verifiedAt: record.verifiedAt },
+  });
+
+  res.json({
+    data: clientRecord,
+    record: clientRecord,
+    undo,
+  });
 }));
 
-adminApiRouter.post('/beneficiaries/:id/retry-wordpress-sync', requireAdminOrStaffAuth, requirePortalRoles(...BENEFICIARY_ROLES), asyncHandler(async (req, res) => {
+const handleUndoVerify = async (req, res) => {
+  const id = req.params.id || req.body.id;
+  if (!id) throw new ApiError(400, 'Beneficiary id is required');
+  const record = await Beneficiary.findById(validId(id, 'Beneficiary')).populate('ambassadorId listingId opportunityId addedBy');
+  if (!record) throw notFound('Beneficiary');
+
+  record.verified = Boolean(req.body.verified);
+  record.verifiedAt = req.body.verifiedAt || undefined;
+  await record.save();
+  await record.populate('ambassadorId listingId opportunityId addedBy');
+
+  const clientRecord = toBeneficiaryClientObject(record);
+  await logActivity(req.auth.sub, 'undo verify', 'beneficiaries', record);
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.BENEFICIARY_UNDO_VERIFY,
+    resourceType: AUDIT_RESOURCE_TYPES.BENEFICIARY,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: { verified: record.verified, verifiedAt: record.verifiedAt },
+  });
+
+  res.json({
+    data: clientRecord,
+    record: clientRecord,
+  });
+};
+
+adminApiRouter.post('/beneficiaries/:id/undo-verify', requireAdminOrStaffAuth, requireScreen('database', 'edit'), validate(beneficiaryUndoVerifySchema), asyncHandler(handleUndoVerify));
+adminApiRouter.post('/beneficiaries/:id/undo', requireAdminOrStaffAuth, requireScreen('database', 'edit'), validate(beneficiaryUndoVerifySchema), asyncHandler(handleUndoVerify));
+adminApiRouter.post('/beneficiaries/undo-verify', requireAdminOrStaffAuth, requireScreen('database', 'edit'), validate(beneficiaryUndoVerifySchema), asyncHandler(handleUndoVerify));
+
+adminApiRouter.post('/beneficiaries/:id/retry-wordpress-sync', requireAdminOrStaffAuth, requireScreen('database', 'edit'), asyncHandler(async (req, res) => {
   const record = await Beneficiary.findById(validId(req.params.id, 'Beneficiary'));
   if (!record) throw notFound('Beneficiary');
-  itemResponse(res, { ...toClientObject(record), sync: await syncManagedRecord('beneficiaries', record) });
+  itemResponse(res, { ...toBeneficiaryClientObject(record), sync: await syncManagedRecord('beneficiaries', record) });
 }));
 
 adminApiRouter.get('/social-posts/monthly-totals', requireAdminOrStaffAuth, requirePortalRoles(...SOCIAL_ROLES), asyncHandler(async (req, res) => {
@@ -1699,8 +2144,20 @@ const dashboardMetrics = async (month) => {
       const summary = await calculateNetworkSummary(month);
       return summary.active;
     })(),
-    Beneficiary.countDocuments({ verified: true }),
-    Beneficiary.countDocuments({ createdAt: { $gte: start, $lt: end } }),
+    Beneficiary.countDocuments({
+      verified: true,
+      $or: [
+        { verifiedAt: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) } },
+        { verifiedAt: { $exists: false }, createdAt: { $gte: start, $lt: end } },
+        { verifiedAt: null, createdAt: { $gte: start, $lt: end } },
+      ],
+    }),
+    Beneficiary.countDocuments({
+      $or: [
+        { createdAtDate: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) } },
+        { createdAt: { $gte: start, $lt: end } },
+      ],
+    }),
     SocialPost.aggregate([{ $match: { postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } }]),
     OpportunityEngagement.countDocuments({ event: 'application', createdAt: { $gte: start, $lt: end } }),
   ]);
@@ -1848,7 +2305,7 @@ adminApiRouter.get('/dashboard', requireAdminOrStaffAuth, requirePortalRoles(...
     sixMonthTrend(month),
   ]);
   const kpis = targetProgress(values, targets);
-  itemResponse(res, { month, kpis, priorities: kpis.filter((kpi) => kpi.target > 0), trend, pipeline, upcomingPrograms: upcomingPrograms.map(toClientObject), recentActivity: activities.map(toClientObject) });
+  itemResponse(res, { month, values, kpis, priorities: kpis.filter((kpi) => kpi.target > 0), trend, pipeline, upcomingPrograms: upcomingPrograms.map(toClientObject), recentActivity: activities.map(toClientObject) });
 }));
 
 adminApiRouter.get('/settings/pipeline-stages', requireAdminOrStaffAuth, requireScreen('settings_admin', 'view'), asyncHandler(async (req, res) => {

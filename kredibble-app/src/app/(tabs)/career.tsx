@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Image, TextInput, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, SlidersHorizontal, Star, Check, Users, Sparkles, X, Filter } from 'lucide-react-native';
+import { Search, SlidersHorizontal, Star, Check } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { mockExperts, Expert } from '../../constants/mockExperts';
 import { authStore } from '../../constants/authStore';
-import { searchSeekers, searchCandidates } from '../../lib/api';
+import { searchSeekers } from '../../lib/api';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 const LogoSVG = () => (

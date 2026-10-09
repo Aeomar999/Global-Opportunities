@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, X, Plus, ChevronRight } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
-import { authStore, ManagedGroup } from '../../constants/authStore';
+import { authStore } from '../../constants/authStore';
 import { getChannels, createChannel, joinChannel } from '../../lib/api';
 import { useToast } from '../../components/ui/ToastProvider';
 
@@ -117,7 +117,7 @@ export default function CommunityScreen() {
       setCreateModalVisible(false);
 
       alert(`Success: Community Channel "${newChannelName}" created successfully!`);
-    } catch (e) {
+    } catch {
       alert('Failed to create channel.');
     }
   };

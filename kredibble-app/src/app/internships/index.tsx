@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { profileStore } from '../../constants/mockProfile';
 import { useToast } from '../../components/ui/ToastProvider';
+import { getOpportunities } from '../../lib/api';
 
 // ─── Shared internship data ───────────────────────────────────────────────────
 
@@ -137,8 +138,6 @@ export const InternshipCard = ({ item, onPress }: { item: Internship; onPress: (
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-
-import { getOpportunities } from '../../lib/api';
 
 export default function InternshipsScreen() {
   const router = useRouter();

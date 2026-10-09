@@ -1178,6 +1178,127 @@ export const getLeaderboardApi = async (month?: string) => {
   return request<LeaderboardRowApiRecord[]>(`/admin/leaderboard${query}`);
 };
 
+export type BeneficiarySource = "organic" | "ambassador" | "event" | "partner" | "import";
+
+export interface BeneficiaryApiRecord {
+  id: string;
+  name: string;
+  fullName?: string;
+  email: string;
+  phone?: string;
+  country: string;
+  institution: string;
+  source: BeneficiarySource;
+  sourceType?: string;
+  verified: boolean;
+  createdAt: string;
+  addedById?: string;
+  addedBy?: string;
+  addedByName?: string;
+  verifiedAt?: string;
+  ambassadorId?: string;
+  ambassadorName?: string;
+  listingId?: string;
+  opportunityId?: string;
+  listingTitle?: string;
+}
+
+export interface BeneficiaryPaceApiRecord {
+  month: string;
+  verified: number;
+  target: number;
+  pace: number;
+  paceRounded: number;
+  status: "on_pace" | "behind" | "far_behind";
+  text: string;
+  hint: string;
+  gauge: {
+    max: number;
+    zones: { key: "on_pace" | "behind" | "far_behind"; percent: number }[];
+    markerAt: number;
+    paceAt: number;
+    capped: string | null;
+  };
+}
+
+export interface BeneficiarySourceCountApiRecord {
+  source: BeneficiarySource;
+  label: string;
+  count: number;
+}
+
+export const getBeneficiaries = async (params?: {
+  page?: number;
+  limit?: number;
+  source?: string;
+  verified?: boolean;
+  month?: string;
+  q?: string;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.source) query.set("source", params.source);
+  if (params?.verified !== undefined) query.set("verified", String(params.verified));
+  if (params?.month) query.set("month", params.month);
+  if (params?.q) query.set("q", params.q);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return requestPage<BeneficiaryApiRecord>(`/admin/beneficiaries${queryString}`);
+};
+
+export const getBeneficiaryById = async (id: string) => {
+  return request<BeneficiaryApiRecord>(`/admin/beneficiaries/${id}`);
+};
+
+export const createBeneficiaryApi = async (data: Partial<BeneficiaryApiRecord>) => {
+  return request<BeneficiaryApiRecord>("/admin/beneficiaries", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateBeneficiaryApi = async (id: string, data: Partial<BeneficiaryApiRecord>) => {
+  return request<BeneficiaryApiRecord>(`/admin/beneficiaries/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteBeneficiaryApi = async (id: string) => {
+  return request<{ id: string }>(`/admin/beneficiaries/${id}`, {
+    method: "DELETE",
+  });
+};
+
+export const verifyBeneficiaryApi = async (id: string) => {
+  return request<{ record: BeneficiaryApiRecord; undo: { id: string; verified: boolean; verifiedAt?: string } }>(
+    `/admin/beneficiaries/${id}/verify`,
+    { method: "POST" }
+  );
+};
+
+export const undoVerifyBeneficiaryApi = async (id: string, data: { verified: boolean; verifiedAt?: string }) => {
+  return request<{ record: BeneficiaryApiRecord }>(`/admin/beneficiaries/${id}/undo-verify`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const getBeneficiariesPaceApi = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<BeneficiaryPaceApiRecord>(`/admin/beneficiaries/pace${query}`);
+};
+
+export const getBeneficiariesSourcesApi = async (month?: string) => {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<BeneficiarySourceCountApiRecord[]>(`/admin/beneficiaries/sources${query}`);
+};
+
+export const getBeneficiariesPendingCountApi = async () => {
+  return request<{ count: number }>("/admin/beneficiaries/pending-count");
+};
+
+
 // There is deliberately no admin self-service signup. Public registration
 // cannot mint the 'admin' role, so admins are provisioned server-side with
 // `npm run user:create-admin -- --email ... --name ...` in kredibble-backend.

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Colors } from '../../constants/design';
-import { View, Text, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, SlidersHorizontal } from 'lucide-react-native';
 import { useRouter } from 'expo-router';

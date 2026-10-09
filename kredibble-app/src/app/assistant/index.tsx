@@ -6,6 +6,7 @@ import { ChevronLeft, Send } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Circle, Ellipse, Polygon } from 'react-native-svg';
 import { authStore } from '../../constants/authStore';
+import { sendAssistantMessage, AssistantChatMessage } from '../../lib/api';
 
 // ─── Wave Penguin Logo SVG ───────────────────────────────────────────────────
 const WaveLogoSVG = () => (
@@ -27,7 +28,8 @@ const WaveLogoSVG = () => (
 const AssistantAvatar = () => (
   <Image source={require('../../../assets/images/logo.png')} style={{ width: 36, height: 36, borderRadius: 18 }} resizeMode="contain" />
 );
-// ─── Mock Job Data matching index.tsx ────────────────────────────────────────
+
+// ─── Job & Candidate Interfaces ─────────────────────────────────────────────
 interface Job {
   id: string;
   title: string;
@@ -35,14 +37,6 @@ interface Job {
   company: string;
   description: string;
 }
-
-const WAVE_JOB: Job = {
-  id: '1',
-  title: 'Senior Product designer',
-  location: 'Ghana (Remote)',
-  company: 'Wave mobile money',
-  description: "In 2017, over half the population in Sub-Saharan Africa had no bank account. That's for good reason....",
-};
 
 interface Candidate {
   id: string;
@@ -100,70 +94,66 @@ export default function AssistantScreen() {
     }, 100);
   }, [messages, isTyping]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmed = inputText.trim();
-    if (!trimmed) return;
+    if (!trimmed || isTyping) return;
 
     // 1. Add User Message
     const userMsgId = Date.now().toString();
-    const newMessages: Message[] = [
-      ...messages,
-      {
-        id: userMsgId,
-        sender: 'user',
-        text: trimmed,
-      },
-    ];
+    const userMessage: Message = {
+      id: userMsgId,
+      sender: 'user',
+      text: trimmed,
+    };
+    const newMessages: Message[] = [...messages, userMessage];
     setMessages(newMessages);
     setInputText('');
 
     // 2. Trigger typing indicator
     setIsTyping(true);
 
-    // 3. Simulating Assistant Response after 1.2s
-    setTimeout(() => {
-      setIsTyping(false);
-      const lower = trimmed.toLowerCase();
+    try {
+      // 3. Format chat payload for backend /api/v1/assistant/chat (keep last 10 messages)
+      const historyPayload: AssistantChatMessage[] = newMessages
+        .filter((msg) => Boolean(msg.text))
+        .slice(-10)
+        .map((msg) => ({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.text,
+        }));
 
-      let reply: Message;
+      const res = await sendAssistantMessage(historyPayload);
+      const replyText = res?.message || 'No response received from assistant.';
 
-      if (isHirer) {
-        const isCandidateQuery = lower.includes('candidate') || lower.includes('applicant') || lower.includes('talent') || lower.includes('hire');
-        if (isCandidateQuery) {
-          const topCandidates = authStore.candidates.slice(0, 2);
-          reply = {
-            id: (Date.now() + 1).toString(),
-            sender: 'ai',
-            text: `Found ${authStore.candidates.length} candidates matching your open roles. Here are the top matches:`,
-            candidates: topCandidates,
-          };
-        } else {
-          reply = {
-            id: (Date.now() + 1).toString(),
-            sender: 'ai',
-            text: "I can help you source candidates, draft a job posting, or review applicants for your open roles. Try asking: \"Show me candidates that match my open roles\"",
-          };
-        }
-      } else {
-        const isJobQuery = lower.includes('job') || lower.includes('suit');
-        if (isJobQuery) {
-          reply = {
-            id: (Date.now() + 1).toString(),
-            sender: 'ai',
-            text: 'In total, 2 jobs are available based on your resume as a software developer.',
-            jobs: [WAVE_JOB, WAVE_JOB], // Displays two cards of the Wave job as shown in the screenshot
-          };
-        } else {
-          reply = {
-            id: (Date.now() + 1).toString(),
-            sender: 'ai',
-            text: "I can help you discover jobs, internships, grants, and prepare for interviews. Try asking: \"What are available jobs out there that suits me?\"",
-          };
-        }
-      }
-
+      const reply: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: replyText,
+      };
       setMessages((prev) => [...prev, reply]);
-    }, 1200);
+    } catch (error: any) {
+      const is503 =
+        error?.status === 503 ||
+        (typeof error?.message === 'string' &&
+          (error.message.includes('503') ||
+            error.message.toLowerCase().includes('unavailable') ||
+            error.message.toLowerCase().includes('not enabled')));
+
+      const fallbackText = is503
+        ? 'AI smart assistant is currently undergoing scheduled maintenance. Please check back shortly.'
+        : error?.message && typeof error.message === 'string'
+        ? `Unable to reach assistant: ${error.message}`
+        : 'AI smart assistant is currently undergoing scheduled maintenance. Please check back shortly.';
+
+      const reply: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: fallbackText,
+      };
+      setMessages((prev) => [...prev, reply]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (

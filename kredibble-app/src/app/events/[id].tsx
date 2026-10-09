@@ -75,9 +75,6 @@ export default function EventDetailScreen() {
     );
   }
 
-  const logoColor = event.logoColor || Colors.primary;
-  const theme = event.theme || event.title;
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen }} edges={['top', 'left', 'right']}>
       {/* Floating Header */}

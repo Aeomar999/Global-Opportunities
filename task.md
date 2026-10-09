@@ -286,6 +286,17 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-116 | No repo hygiene gates: file encoding, workflow lint, shell lint, secret scanning, automated dependency updates | P2 | CI/CD | ✅ Done (Plan 4a, PR #35; Repo hygiene green in CI run 37253915991; Dependabot updates merged in PRs #36, #37, #38, #39, #42, #44, #48) |
 | SEC-117 | Known-password test accounts may exist in real databases (`@test.com` seed accounts; a test admin was created against production; the e2e admin login is a public default) | P1 | Data / Access | Open — Plan 4 track M5 |
 | SEC-118 | EAS Update has never published: every CD App run fails at `expo export` for web (`react-native-css-interop/.cache/web.css` SHA-1 error), so the OTA path described in `AGENTS.md` doesn't work | P1 | Mobile CI/CD | ✅ Done (Plan 4c; platforms scoped to ios/android in app.json and cd-app.yml, single-level staging/dev hostnames in eas.json) |
+<<<<<<< HEAD
+| SEC-119 | Mobile registration blocked on native devices: CV & doc uploads use web DOM input | P0 | Mobile auth | ✅ Done |
+| SEC-120 | Native profile & verification document pickers are web-only (no-op on iOS/Android) | P0 | Mobile app | ✅ Done |
+| SEC-121 | Email verification flow missing in mobile app (blocks high-trust actions with 403) | P0 | Mobile auth | ✅ Done |
+| SEC-122 | Community feed photo attachment and prompt dialogs crash or no-op on native mobile | P1 | Mobile community | ✅ Done |
+| SEC-123 | Event booking payment flow simulated: collects card numbers without payment gateway | P1 | Mobile events | ✅ Done |
+| SEC-124 | App Store & Google Play compliance gaps: policy links, push notifications, offline netinfo | P1 | Mobile store | ✅ Done |
+| SEC-125 | AI Assistant in mobile app is canned setTimeout demo disconnected from backend | P2 | Mobile assistant | ✅ Done |
+| SEC-126 | Mock data fallbacks in notifications, saved items, and hardcoded Wave job descriptions | P2 | Mobile app | ✅ Done |
+| SEC-127 | Hirer postings and managed channels rely on mock in-memory authStore data | P2 | Mobile hirer | ✅ Done |
+=======
 | SEC-119 | Mobile registration blocked on native devices: CV & doc uploads use web DOM input | P0 | Mobile auth | Open |
 | SEC-120 | Native profile & verification document pickers are web-only (no-op on iOS/Android) | P0 | Mobile app | Open |
 | SEC-121 | Email verification flow missing in mobile app (blocks high-trust actions with 403) | P0 | Mobile auth | Open |
@@ -295,6 +306,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-125 | AI Assistant in mobile app is canned setTimeout demo disconnected from backend | P2 | Mobile assistant | Open |
 | SEC-126 | Mock data fallbacks in notifications, saved items, and hardcoded Wave job descriptions | P2 | Mobile app | Open |
 | SEC-127 | Hirer postings and managed channels rely on mock in-memory authStore data | P2 | Mobile hirer | Open |
+>>>>>>> origin/main
 | SEC-128 | Mobile test coverage: 0 screen/UI component tests; 116 ESLint warnings across screens | P2 | Mobile tests | Open |
 
 ---
@@ -1751,7 +1763,10 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | 2026-10-08 | BE-001, BE-018 | feature/BE-001-roles-permission-matrix | ✅ Done | Roles stored as string[] (max 2 per staff member across 12 canonical roles); permission matrix engine in lib/roles-engine.js; requireScreen middleware; Moderator/Support toggles persistence; RolesTab live backend integration; audit trail (ROLES_PERMISSIONS_UPDATE); 15/15 tests pass. |
 | 2026-10-08 | BE-002 | feature/BE-002-targets-history | ✅ Done | TargetChange insert-only collection with schema-enforced immutability and temporal state resolution; GET/POST /admin/targets, GET /admin/targets/history; audit logging (targets.update); admin settings service integration; 11/11 tests pass. |
 | 2026-10-08 | BE-003 | feature/BE-003-dated-thresholds | ✅ Done | ThresholdChange insert-only collection (percentages 1–200, amber < green); shared atomic seq counter with targets; GET /admin/thresholds?month=, GET /admin/thresholds/history, POST /admin/thresholds, combined save in POST /admin/targets, unified GET /admin/change-history; admin settings service integration; 11/11 tests pass. |
+<<<<<<< HEAD
+=======
 | 2026-10-08 | BE-005 | feature/BE-005-programs | ✅ Done | Program.deliveredAt lifecycle field and pre-save hooks; status flow planned, running, delivered, cancelled; GET /admin/programs/upcoming returning next 5 planned or running programs sorted by start date with partner; non-blocking participant warning; monthly metrics and scorecard calculation updated to deliveredAt; admin api client and programs service facade wired; 10/10 tests pass. |
+>>>>>>> origin/main
 
 ---
 
@@ -1888,7 +1903,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | BE-005 | Programs: delivered date, status flow, upcoming list | P1 | – | [x] Done |
 | BE-006 | Partners: stage history, moves, pipeline health, stage names | P1 | – | [x] Done |
 | BE-007 | Ambassadors and the Network: dates, statuses, amplification, leaderboard, summary | P1 | – | [x] Done |
-| BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [ ] Open |
+| BE-008 | Database records: sources, verify and undo, duplicate check, pace | P1 | – | [x] Done |
 | BE-009 | Social posts: logging, validation, monthly totals by platform | P2 | – | [ ] Open |
 | BE-010 | Testimonials: statuses, decisions, counts | P2 | – | [ ] Open |
 | BE-011 | Listings curation: vetting, publish dates, drafts, event date-times | P1 | – | [ ] Open |
@@ -1986,7 +2001,16 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 #### BE-008 — Database records
 - **To do:** fields `source` (organic, ambassador, event, partner, import), `verified`, `verifiedAt`, `createdAt`, `addedBy`, `ambassadorId`, `listingId`. Verify sets `verifiedAt` to today; undo puts back exactly what was there. Duplicate check on create and update: first by email (trimmed, case-insensitive), then by phone (digits only, without the country calling code, the national 0 or a leading + or 00); return which field matched. `GET /admin/beneficiaries/pace?month=` (verified, target, pro-rated pace, status). `GET /admin/beneficiaries/sources?month=`. Pending count for the sidebar pill.
-- **Verify:** "Beneficiaries verified" for a month counts records verified in it, by `verifiedAt`.
+- **Implementation:**
+  - [x] Beneficiary fields: canonical `source` (`organic`, `ambassador`, `event`, `partner`, `import`), `verified`, `verifiedAt`, `createdAt`, `addedBy`, `ambassadorId`, `listingId` / `opportunityId`.
+  - [x] Verification workflow: verify stamps `verifiedAt` to today; undo restores previous `verified` and `verifiedAt` values.
+  - [x] Duplicate detection: checks email first (trimmed, lowercase), then phone (digits only without country calling codes or national leading 0); returns structured `{ error, field: 'email' | 'phone' }`.
+  - [x] `GET /admin/beneficiaries/pace?month=`: calculates verified, target, pro-rated pace, status (`ahead`, `on-track`, `behind`, `critical`), gauge coordinates, and hint texts.
+  - [x] `GET /admin/beneficiaries/sources?month=`: returns counts across the 5 canonical sources.
+  - [x] Pending verification count: `GET /admin/beneficiaries/pending-count` and `pendingRecords` on `GET /dashboard/summary` for sidebar pill.
+  - [x] Verification criteria: "Beneficiaries verified" for a month counts records verified in it, filtered strictly by `verifiedAt`.
+  - [x] Admin client API (`kredibble-admin/src/lib/api.ts`), nav counts service (`kredibble-admin/src/lib/services/nav-counts.ts`), and database service (`kredibble-admin/src/lib/services/database.ts`) wired to live endpoints.
+- **Verify:** "Beneficiaries verified" for a month counts records verified in it, by `verifiedAt`. (Verified with `tests/be-008-beneficiaries.test.js`, 15/15 tests passing; full suite 28 suites / 310 tests passing; admin API contract tests passing; admin typecheck and eslint clean).
 
 #### BE-009 — Social posts
 - **To do:** `platform` (facebook, instagram, x, linkedin, tiktok, youtube, whatsapp, other), `postedAt` (not in the future), `url` (http or https with a real host), `reach`, `engagement`, `status`, `listingId` (optional). `GET /admin/social-posts/monthly-totals?month=` returns posts, reach, engagement and the platform table (leading platform first) that add up to the totals.
@@ -2071,7 +2095,6 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 6. **AI provider and budget (BE-025).**
 7. **Stakeholder segments (BE-023):** can a user be in both segments at once (proposal: an ambassador is also in the general community)?
 
-### Progress Log
 - 2026-10-08 — Backend work plan written (BE-001 to BE-027).
 - 2026-10-08 — BE-001 complete: Multi-role support (up to 2 roles per staff member), server-side permission matrix engine (12 roles x 28 screens), dynamic Moderator/Support toggles persistence in Mongo (`RolePermissionConfig`), `requireScreen` middleware, `/api/v1/admin/roles-permissions` GET/PUT with audit trail (`ROLES_PERMISSIONS_UPDATE`), and admin `RolesTab` wired to live API. All 22 test suites (247 tests) passing.
 - 2026-10-08 — BE-002 complete: Append-only TargetChange model with database-level immutability hooks, temporal target resolution by effectiveFrom month and sequence number (seq), GET /api/v1/admin/targets, GET /api/v1/admin/targets/history, POST /api/v1/admin/targets with Zod batch validation and audit logging (targets.update), and admin settings service sync. All 23 test suites (258 tests) passing.
@@ -2079,7 +2102,18 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - 2026-10-08 — BE-005 complete: Programs lifecycle model with deliveredAt date stamping, status flow (scheduled -> active -> delivered / cancelled), non-blocking operational warning for participant attendance exceeding targets, GET /api/v1/admin/programs/upcoming, dashboard metric counting programs delivered in month, and admin programs service wired. All 25 test suites (279 tests) passing.
 - 2026-10-08 — BE-006 complete: Partners stage history with append-only stageHistory ([{ stage, at, from, by, byName }]), POST /api/v1/admin/partners/:id/move transition endpoint returning closedChange, derived closed status (onboard/renew), GET /api/v1/admin/partners/pipeline-health with 6-month historical moving window conversion analytics and needed deals capacity planning, GET/PUT /api/v1/admin/settings/pipeline-stages with reset support and 24-character case-insensitive uniqueness validation, audit logging (partner.move, pipeline_stages.update), and admin partners/settings services wired. All 26 test suites (287 tests) passing.
 - 2026-10-08 — BE-007 complete: Ambassadors and the Network: joinedAt & dormantSince date tracking, canonical statuses (applicant, onboarding, active, dormant) and tiers (ambassador, senior, lead), referral code engine ("GOD-" + 6 glyphs from 32-char confusable-free alphabet), amplification logging (channel, clicks, note, at), verified beneficiary attribution, GET /api/v1/admin/network/summary, deterministic 4-tier GET /api/v1/admin/leaderboard, and admin network service wired. All 27 test suites (295 tests) passing.
+- 2026-10-09 — BE-008 complete: Database records (beneficiaries): canonical sources (organic, ambassador, event, partner, import), verify & undo-verify transitions with previous-state restoration, prioritized duplicate detection (email first, then normalized phone without dialing codes), GET /api/v1/admin/beneficiaries/pace with status and gauge geometry, GET /api/v1/admin/beneficiaries/sources, GET /api/v1/admin/beneficiaries/pending-count and pendingRecords in /dashboard/summary, month-bound beneficiariesVerified KPI counting, and admin database service wired. All 28 test suites (310 tests) passing.
 - 2026-10-08 — Mobile production readiness audit: Verified ~65–70% completion. Discovered registration broken on native iOS/Android (web DOM file inputs), missing email verification screen, canned AI assistant, unintegrated event payment flow, mock fallbacks in notifications/saved items, missing store policy links, and 0 screen UI tests. Filed SEC-119 through SEC-128 and authored Mobile Work Plan (MOB-010 to MOB-019).
+- 2026-10-08 — MOB-010 complete: Installed and configured `expo-document-picker`, implemented cross-platform file picking engine (`pickDocument`, `pickImage`) in `src/lib/file-picker.ts` (PDF/DOCX/TXT/images up to 5 MB), upgraded `signup.tsx` to enable native CV and company verification documents/logo upload across iOS/Android/Web, added `uploadFile` multipart helper in `src/lib/api.ts` with server-derived upload purpose and Bearer token auth, and added unit test suite (`__tests__/file-picker.test.ts`) covering all picking, size validation, and upload flows (31/31 tests passing).
+- 2026-10-08 — MOB-011 complete: Replaced web DOM file inputs in `hirer-profile/company.tsx`, `recruiter.tsx`, and `verification.tsx` with native `pickImage` and `pickDocument` helpers with Cloudinary upload via `uploadFile`, enforced server-scoped `status: 'pending'` for verification documents, cleaned up require imports across profile screens (lowering ESLint warnings to 111 with 0 errors), and confirmed all 31 tests passing.
+- 2026-10-08 — MOB-012 complete: Implemented mobile email verification screen (`src/app/(auth)/verify-email.tsx`) with 6-digit OTP cells, auto-focus next cell, paste support, 60-second resend countdown, and error alerts; added `requestEmailVerification` and `verifyEmail` methods to `src/lib/api.ts` with `emailVerified` type field on `AuthUser`; built global 403 `EMAIL_VERIFICATION_REQUIRED` interceptor routing directly to verification flow; added comprehensive test suite (`__tests__/email-verification.test.ts`) covering OTP validation, request/verify API methods, and 403 handler routing (39/39 tests passing with 0 type errors).
+- 2026-10-08 — MOB-013 complete: Added native camera capture (`pickCameraImage` / `useCamera`) and cross-platform image picking to `src/lib/file-picker.ts`; replaced web DOM file inputs and mock URLs in `src/app/community/feed.tsx` with Cloudinary upload via `uploadFile`; replaced `window.prompt` dialogs with custom native React Native modal for Poll, Quiz, and Question interactive posts; disabled fake recording bar and fake voice string injection; eliminated `require()` import for `socketService`; added comprehensive test suite (`__tests__/community-feed.test.ts`) covering photo/camera upload, caption fallbacks, cancel handling, upload error propagation, and interactive post generation (48/48 tests passing with 0 type errors and 0 lint warnings).
+- 2026-10-08 — MOB-014 complete: Removed unencrypted credit card inputs (card number, exp, cvv, zip) from `src/app/events/booking.tsx`; implemented 1-click registration for free events with guest validation calling live `POST /events/:id/attendees`; integrated secure external ticketing portal gating via `expo-web-browser` (`openBrowserAsync`) for paid events with verified organizer summary and total calculation; added `ticketUrl?: string` to `EventItem`; added unit test suite (`__tests__/event-booking.test.ts`) covering free booking, server capacity error handling, and paid ticket URL gating (54/54 tests passing with 0 type errors and 0 lint warnings).
+- 2026-10-08 — MOB-015 complete: Installed `@react-native-community/netinfo` and `expo-notifications`; created legal URL helpers (`openPrivacyPolicy`, `openTermsOfService`) using `expo-web-browser` and integrated into `signup.tsx`, `profile/security.tsx`, and `hirer-profile/security.tsx`; built offline connectivity detection with `useNetworkStatus` and `<OfflineBanner />` root banner in `_layout.tsx`; implemented `registerForPushNotificationsAsync` for Expo/APNs/FCM tokens; added unit test suite (`__tests__/store-compliance.test.ts`) covering legal links, offline calculations, and push notification token registration (64/64 tests passing across 8 suites with 0 type errors).
+- 2026-10-08 — MOB-016 complete: Implemented `sendAssistantMessage` API caller in `src/lib/api.ts` with Bearer session authentication; replaced 1.2s `setTimeout` and mock jobs/candidates in `src/app/assistant/index.tsx` with real-time `POST /api/v1/assistant/chat` integration; added automatic 503 maintenance fallback handling ("AI smart assistant is currently undergoing scheduled maintenance. Please check back shortly."); added comprehensive unit test suite (`__tests__/assistant.test.ts`) covering single/multi message payloads, Bearer auth headers, 503 error mapping, and chat history payload management (69/69 tests passing across 9 suites with 0 type errors).
+- 2026-10-08 — MOB-017 complete: Removed hardcoded Google LLC notifications from `mockNotifications.ts` and updated `notifications/index.tsx` with static imports and empty state sync; initialized `profileStore.saved` to empty array in `mockProfile.ts` and removed stale fallback guard in `profile/saved.tsx`; removed hardcoded Wave mission statement and static design responsibilities from `jobs/[id].tsx` in favor of live description and dynamic requirements parsing; wired native document picker (`pickDocument`) and Cloudinary upload (`uploadFile`) into `grants/apply.tsx` with file preview and payload attachment; added unit test suite (`__tests__/mock-fallback-removal.test.ts`) confirming empty initialization and dynamic requirements parsing (77/77 tests passing across 10 suites with 0 type errors).
+- 2026-10-08 — MOB-018 complete: Upgraded `hirer-profile/postings.tsx` to fetch caller-scoped opportunities via `getOpportunities()`, added live `deleteOpportunity` with confirmation alert and state sync, and added "Post an Opportunity" empty state action; upgraded `hirer-profile/channels.tsx` to fetch live channels via `getChannels()`, added live `deleteChannel`, added empty state and create banner; added `updateChannel` and `deleteChannel` API callers in `src/lib/api.ts`; cleaned up unused mock initial arrays in `authStore.ts`; added unit test suite (`__tests__/hirer-management.test.ts`) covering channel deletion/updates, opportunity scoping, and model mappings (83/83 tests passing across 11 suites with 0 type errors).
+- 2026-10-09 — MOB-019 complete: Swept all 95 ESLint warnings across the entire mobile codebase down to zero (0 errors, 0 warnings); resolved unused variables, duplicate imports, and forbidden require() calls with clean static imports; created comprehensive mobile screen integration test suite (`__tests__/screen-integration.test.ts`) covering login/registration validation, 6-digit email OTP verification, opportunity detail & job application submission, hirer listings deletion, applicant status reviews, and community channels CRUD; all 12 test suites (95/95 tests) passing with 0 TypeScript errors and 0 encoding issues.
 
 ---
 
@@ -2089,16 +2123,16 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 
 | Task ID | Finding | Title | Priority | Status |
 |---|---|---|---|---|
-| MOB-010 | SEC-119 | Native document & CV upload in registration | P0 | [ ] Open |
-| MOB-011 | SEC-120 | Native profile media & verification doc pickers | P0 | [ ] Open |
-| MOB-012 | SEC-121 | Mobile email verification screen & 403 gate handling | P0 | [ ] Open |
-| MOB-013 | SEC-122 | Community feed native attachments & modal inputs | P1 | [ ] Open |
-| MOB-014 | SEC-123 | Event booking payment gateway / ticket URL gating | P1 | [ ] Open |
-| MOB-015 | SEC-124 | Store compliance: in-app policy links, push notifications, netinfo | P1 | [ ] Open |
-| MOB-016 | SEC-125 | AI Assistant live backend integration (`/api/v1/assistant`) | P2 | [ ] Open |
-| MOB-017 | SEC-126 | Mock fallback removal: notifications, saved items, Wave text | P2 | [ ] Open |
-| MOB-018 | SEC-127 | Live Hirer management: my postings & community channels | P2 | [ ] Open |
-| MOB-019 | SEC-128 | Mobile screen integration test suite & ESLint zero-warning sweep | P2 | [ ] Open |
+| MOB-010 | SEC-119 | Native document & CV upload in registration | P0 | [x] Completed |
+| MOB-011 | SEC-120 | Native profile media & verification doc pickers | P0 | [x] Completed |
+| MOB-012 | SEC-121 | Mobile email verification screen & 403 gate handling | P0 | [x] Completed |
+| MOB-013 | SEC-122 | Community feed native attachments & modal inputs | P1 | [x] Completed |
+| MOB-014 | SEC-123 | Event booking payment gateway / ticket URL gating | P1 | [x] Completed |
+| MOB-015 | SEC-124 | Store compliance: in-app policy links, push notifications, netinfo | P1 | [x] Completed |
+| MOB-016 | SEC-125 | AI Assistant live backend integration (`/api/v1/assistant`) | P2 | [x] Completed |
+| MOB-017 | SEC-126 | Mock fallback removal: notifications, saved items, Wave text | P2 | [x] Completed |
+| MOB-018 | SEC-127 | Live Hirer management: my postings & community channels | P2 | [x] Completed |
+| MOB-019 | SEC-128 | Mobile screen integration test suite & ESLint zero-warning sweep | P2 | [x] Completed |
 
 ---
 

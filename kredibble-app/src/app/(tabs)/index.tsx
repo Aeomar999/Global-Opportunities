@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, TextInput, useWindowDimensions, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Target, Compass, Users, Check, Clock, TrendingUp, Sparkles, Building, Bell } from 'lucide-react-native';
-import Svg, { G, Rect, Defs, ClipPath, RadialGradient, Stop, Ellipse } from 'react-native-svg';
+import { Search, Users, TrendingUp, Bell } from 'lucide-react-native';
+import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { authStore } from '../../constants/authStore';
 import { notificationStore } from '../../constants/mockNotifications';
-import { syncNotifications } from '../../lib/notifications';
-import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
-import { getOpportunities } from '../../lib/api';
+import { syncNotifications } from '../../lib/notificationSync';
+import { Colors } from '../../constants/design';
+import { getOpportunities, getApplicants } from '../../lib/api';
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 
@@ -124,7 +124,6 @@ export default function HomeScreen() {
   const [role, setRole] = useState(authStore.role);
   const [company, setCompany] = useState(authStore.company);
   const [opps, setOpps] = useState(authStore.opportunities);
-  notificationStore.init(authStore.role === 'hirer' ? 'hirer' : 'seeker');
   const [unreadNotifications, setUnreadNotifications] = useState(notificationStore.unreadCount);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -137,7 +136,6 @@ export default function HomeScreen() {
           authStore.setOpportunities(data);
         } else {
           // Hirer needs their opportunities and the applicants for pipeline math
-          const { getApplicants } = require('../../lib/api');
           const data = await getOpportunities();
           
           // Fetch applicants for each opportunity to calculate pipeline stats
@@ -146,7 +144,7 @@ export default function HomeScreen() {
               try {
                 const applicants = await getApplicants(opp.id);
                 return { ...opp, applicants, applicantsCount: applicants.length || opp.applicantsCount || 0 };
-              } catch (e) {
+              } catch {
                 return { ...opp, applicants: [], applicantsCount: 0 };
               }
             })

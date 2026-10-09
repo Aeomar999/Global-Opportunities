@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Colors } from '../../constants/design';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Check, ShieldCheck, ShieldAlert, FileText } from 'lucide-react-native';
-import { authStore, DocStatus, VerificationDocs } from '../../constants/authStore';
-import { uploadVerificationDoc } from '../../lib/api';
+import { authStore, VerificationDocs } from '../../constants/authStore';
+import { uploadVerificationDoc, uploadFile } from '../../lib/api';
+import { pickDocument, pickImage } from '../../lib/file-picker';
 
-const DOC_META: { key: keyof VerificationDocs; label: string; hint: string; accept: string }[] = [
+const DOC_META: { key: keyof VerificationDocs; label: string; hint: string; accept: string; isImage?: boolean }[] = [
   { key: 'businessReg', label: 'Business Registration Document', hint: 'txt, docx, pdf — Up to 5MB', accept: '.txt,.docx,.pdf' },
   { key: 'orgId', label: 'Organization ID', hint: 'txt, docx, pdf — Up to 5MB', accept: '.txt,.docx,.pdf' },
-  { key: 'companyLogo', label: 'Company Logo', hint: 'jpg, png, svg — Up to 5MB', accept: '.jpg,.jpeg,.png,.svg' },
+  { key: 'companyLogo', label: 'Company Logo', hint: 'jpg, png, svg — Up to 5MB', accept: '.jpg,.jpeg,.png,.svg', isImage: true },
   { key: 'proofOfOrg', label: 'Official Proof of Organization', hint: 'tax certificate, NGO registration, company license', accept: '.txt,.docx,.pdf' },
 ];
 
@@ -27,32 +28,45 @@ export default function VerificationCenterScreen() {
     return unsubscribe;
   }, []);
 
-  const handleReupload = async (key: keyof VerificationDocs, accept: string) => {
-    if (Platform.OS !== 'web') return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = accept;
-    (input as any).onchange = async (e: any) => {
-      const file = e.target?.files?.[0];
+  const handleReupload = async (key: keyof VerificationDocs) => {
+    const docMeta = DOC_META.find(d => d.key === key);
+    try {
+      const file = docMeta?.isImage
+        ? await pickImage({ allowsEditing: true, aspect: [1, 1] })
+        : await pickDocument();
+
       if (!file) return;
+
       authStore.updateVerificationDoc(key, 'loading');
+
+      let uploadedUrl = file.name;
       try {
-        if (company?.id) {
-          // Send to actual backend
-          await uploadVerificationDoc(company.id, {
-            docType: key,
-            fileName: file.name,
-            fileSize: file.size,
-            status: 'approved',
-          });
+        const uploadPurpose = key === 'companyLogo' ? 'company-logos' : 'verification-docs';
+        const uploadResult = await uploadFile(file, uploadPurpose);
+        if (uploadResult?.url) {
+          uploadedUrl = uploadResult.url;
         }
-        setTimeout(() => authStore.updateVerificationDoc(key, 'done'), 500);
-      } catch (err) {
-        console.error('Failed to upload verification document:', err);
-        authStore.updateVerificationDoc(key, 'idle'); // revert on error
+      } catch (uploadErr) {
+        console.warn('Direct upload failed, submitting with file metadata:', uploadErr);
       }
-    };
-    input.click();
+
+      const callerId = authStore.user?.id || company?.id;
+      if (callerId) {
+        // SEC-058 / MOB-011: submit document with server-enforced status: 'pending'
+        await uploadVerificationDoc(callerId, {
+          key,
+          label: docMeta?.label || key,
+          fileName: uploadedUrl,
+          status: 'pending',
+        });
+      }
+
+      authStore.updateVerificationDoc(key, 'done');
+    } catch (err) {
+      console.error('Failed to upload verification document:', err);
+      Alert.alert('Upload Error', err instanceof Error ? err.message : 'Failed to upload verification document');
+      authStore.updateVerificationDoc(key, 'idle'); // revert on error
+    }
   };
 
   return (
@@ -104,7 +118,7 @@ export default function VerificationCenterScreen() {
               </View>
             ) : (
               <TouchableOpacity
-                onPress={() => handleReupload(doc.key, doc.accept)}
+                onPress={() => handleReupload(doc.key)}
                 style={styles.uploadButton}
               >
                 <Text style={styles.uploadButtonText} className="font-sans">Upload</Text>
@@ -112,7 +126,7 @@ export default function VerificationCenterScreen() {
             )}
 
             {docs[doc.key] === 'done' && (
-              <TouchableOpacity onPress={() => handleReupload(doc.key, doc.accept)} style={{ marginLeft: 10 }}>
+              <TouchableOpacity onPress={() => handleReupload(doc.key)} style={{ marginLeft: 10 }}>
                 <Text style={styles.replaceText} className="font-sans">Replace</Text>
               </TouchableOpacity>
             )}

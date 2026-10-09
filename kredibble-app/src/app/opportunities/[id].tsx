@@ -60,7 +60,7 @@ export default function OpportunityDetailScreen() {
       // Fallback: update local store so UI instantly reflects
       authStore.updateApplicantStatus(opp.id, applicantId, status);
       showToast(`Applicant status changed to ${status}`, 'success');
-    } catch (err) {
+    } catch {
       showToast('Failed to update status', 'info');
     }
   };
@@ -74,7 +74,7 @@ export default function OpportunityDetailScreen() {
         authStore.deleteOpportunity(opp.id);
         showToast('Opportunity deleted successfully', 'info');
         router.back();
-      } catch (err) {
+      } catch {
         showToast('Failed to delete opportunity', 'info');
       }
     };

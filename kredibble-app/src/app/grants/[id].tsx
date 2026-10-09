@@ -70,12 +70,6 @@ export default function GrantDetailScreen() {
     );
   }
 
-  const shortLocation = grant.location ? grant.location.split(', ').slice(0, 3).join(', ') : 'Global';
-  const hasMoreLocation = grant.location ? grant.location.split(', ').length > 3 : false;
-  const orgName = grant.org || grant.funder || 'Organization';
-  const initial = (orgName || 'G').charAt(0).toUpperCase();
-  const logoColor = grant.logoColor || Colors.purple700;
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: Colors.bgScreen }} edges={['top', 'left', 'right']}>
       {/* Navigation Header */}

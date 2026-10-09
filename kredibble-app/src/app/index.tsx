@@ -26,7 +26,7 @@ export default function SplashScreen() {
     };
 
     checkFirstLaunch();
-  }, []);
+  }, [router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F7F7F9', justifyContent: 'center', alignItems: 'center' }}>

@@ -7,9 +7,8 @@ import {
 } from 'lucide-react-native';
 import { Colors, Radius } from '../../constants/design';
 import { Header } from '../../components/ui/Header';
-import { authStore } from '../../constants/authStore';
 import { markNotificationRead } from '../../lib/api';
-import { isServerNotificationId, syncNotifications } from '../../lib/notifications';
+import { isServerNotificationId, syncNotifications } from '../../lib/notificationSync';
 import { notificationStore, NotificationItem, NotificationType } from '../../constants/mockNotifications';
 
 // Icon colour is the dot value of each state colour; the tinted circle behind it is the same colour at low opacity.
@@ -29,10 +28,7 @@ type Filter = 'all' | 'unread';
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const [items, setItems] = useState<NotificationItem[]>(() => {
-    notificationStore.init(authStore.role === 'hirer' ? 'hirer' : 'seeker');
-    return [...notificationStore.items];
-  });
+  const [items, setItems] = useState<NotificationItem[]>(() => [...notificationStore.items]);
   const [filter, setFilter] = useState<Filter>('all');
 
   useEffect(() => {

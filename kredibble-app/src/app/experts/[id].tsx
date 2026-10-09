@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Image, Modal, Clipboard, Styl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Star, Check, Copy, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
+import { Colors, FontWeight, Radius } from '../../constants/design';
 import { mockExperts } from '../../constants/mockExperts';
 import { authStore } from '../../constants/authStore';
 

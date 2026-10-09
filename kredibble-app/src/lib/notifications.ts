@@ -1,50 +1,79 @@
-import { notificationStore, NotificationItem, NotificationType } from '../constants/mockNotifications';
-import { authStore } from '../constants/authStore';
-import { getNotifications } from './api';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import * as Device from 'expo-device';
+import { getMobileToken, API_BASE_URL } from './api';
 
-const KNOWN_TYPES: NotificationType[] = [
-  'applicant', 'message', 'channel', 'verification', 'system', 'opportunity', 'application', 'event', 'ambassador',
-];
-
-const timeAgo = (iso?: string) => {
-  const t = iso ? new Date(iso).getTime() : NaN;
-  if (!Number.isFinite(t)) return '';
-  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
-  if (m < 1) return 'Just now';
-  if (m < 60) return `${m}m ago`;
-  if (m < 1440) return `${Math.round(m / 60)}h ago`;
-  return `${Math.round(m / 1440)}d ago`;
-};
-
-/** Turns a server notification (title, message, type, createdAt, readAt) into the shape the app screens use. */
-const fromApi = (n: any): NotificationItem => {
-  const id = String(n._id ?? n.id);
-  const existing = notificationStore.items.find(i => i.id === id);
-  return {
-    id,
-    type: KNOWN_TYPES.includes(n.type) ? n.type : 'system',
-    title: n.title ?? 'Notification',
-    body: n.message ?? n.body ?? '',
-    time: timeAgo(n.createdAt) || n.time || '',
-    read: existing?.read ?? !!n.readAt,
-  };
-};
-
-/** True for ids that belong to a real server record (the sample notifications use short ids such as "s-1"). */
-export const isServerNotificationId = (id: string) => /^[a-f\d]{24}$/i.test(id);
+// Configure notification presentation when app is foregrounded
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 /**
- * Loads the signed-in user's notifications from the server into the shared store, so the Home bell and the
- * Notifications screen agree. The sample list stays when the server has nothing yet or cannot be reached.
+ * Requests push notification permissions and registers APNs/FCM tokens with backend.
+ * Safely handles simulator/emulators, web, and denied permissions.
  */
-export async function syncNotifications(): Promise<void> {
-  if (!authStore.user?.id) return;
+export async function registerForPushNotificationsAsync(
+  targetPlatform: string = Platform.OS
+): Promise<string | null> {
+  if (targetPlatform === 'web') {
+    return null;
+  }
+
+  if (!Device.isDevice) {
+    // Physical hardware required for APNs/FCM device push tokens
+    return null;
+  }
+
   try {
-    const api = await getNotifications();
-    if (!Array.isArray(api) || api.length === 0) return;
-    notificationStore.items = api.map(fromApi);
-    notificationStore.notify();
-  } catch (err) {
-    console.warn('Failed to load notifications from API', err);
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      return null;
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    const pushToken = tokenData.data;
+
+    // Send token to backend if caller has an active session
+    const authToken = await getMobileToken();
+    if (authToken && pushToken) {
+      await fetch(`${API_BASE_URL}/users/me/push-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ token: pushToken, platform: Platform.OS }),
+      }).catch(err => {
+        // Backend push endpoint is non-blocking
+        console.warn('Backend push token registration failed:', err);
+      });
+    }
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#6671E4',
+      });
+    }
+
+    return pushToken;
+  } catch (error) {
+    console.warn('Error configuring push notifications:', error);
+    return null;
   }
 }
