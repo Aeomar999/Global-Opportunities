@@ -70,6 +70,11 @@ describe('ambassador requests (admin side)', () => {
     expect(approved.body.data.status).toBe('approved');
     expect(second.status).toBe(409);
     expect(await Ambassador.countDocuments({ linkedUserId: user._id })).toBe(1);
+    const registered = await Ambassador.findOne({ linkedUserId: user._id });
+    expect(registered.referralCode).toMatch(/^GOD-[2-9A-HJ-NP-Z]{6}$/);
+    expect(registered.joinedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(registered).toMatchObject({ status: 'onboarding', memberType: 'student', tier: 'ambassador' });
+    expect(registered.dormantSince).toBeUndefined();
     expect((await CommunityMembership.findOne({ channelId: channel._id, userId: user._id })).status).toBe('active');
 
     const mineNotes = await request(app).get(api('/notifications')).set(bearer(user));
@@ -214,7 +219,9 @@ describe('removing an approved ambassador', () => {
 
     expect((await CommunityMembership.findOne({ channelId: channel._id, userId: user._id })).status).toBe('removed');
     expect((await CommunityMembership.findOne({ channelId: own._id, userId: user._id })).status).toBe('active');
-    expect((await Ambassador.findOne({ linkedUserId: user._id })).status).toBe('dormant');
+    const dormant = await Ambassador.findOne({ linkedUserId: user._id });
+    expect(dormant.status).toBe('dormant');
+    expect(dormant.dormantSince).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(await Notification.countDocuments({ userId: user._id, title: 'Ambassador status update' })).toBe(1);
 
     const mine = await request(app).get(api('/ambassador-requests/me')).set(bearer(user));

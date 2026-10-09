@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { AuditLog } from '../models/User.js';
 import logger from './logger.js';
 import crypto from 'node:crypto';
@@ -24,6 +25,15 @@ export const AUDIT_ACTIONS = {
   ADMIN_OPPORTUNITY_MODERATE: 'admin.opportunity.moderate',
   AMBASSADOR_REQUEST: 'ambassador.request',
   ADMIN_AMBASSADOR_DECISION: 'admin.ambassador.decision',
+  ROLES_PERMISSIONS_UPDATE: 'ROLES_PERMISSIONS_UPDATE',
+  TARGETS_UPDATE: 'targets.update',
+  THRESHOLDS_UPDATE: 'thresholds.update',
+  PARTNER_MOVE: 'partner.move',
+  PIPELINE_STAGES_UPDATE: 'pipeline_stages.update',
+  AMBASSADOR_CREATE: 'ambassador.create',
+  AMBASSADOR_UPDATE: 'ambassador.update',
+  AMBASSADOR_DELETE: 'ambassador.delete',
+  AMBASSADOR_AMPLIFICATION: 'ambassador.amplification',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',
@@ -39,6 +49,9 @@ export const AUDIT_ACTIONS = {
 
 export const AUDIT_RESOURCE_TYPES = {
   USER: 'user',
+  SETTINGS: 'settings',
+  PARTNER: 'partner',
+  AMBASSADOR: 'ambassador',
   SEEKER_PROFILE: 'seeker_profile',
   HIRER_ACCOUNT: 'hirer_account',
   OPPORTUNITY: 'opportunity',
@@ -76,17 +89,25 @@ export const AUDIT_RESOURCE_TYPES = {
  */
 export async function auditLog(params) {
   try {
+    const validResourceId = params.resourceId && mongoose.isValidObjectId(params.resourceId)
+      ? params.resourceId
+      : null;
+    const metadata = { ...(params.metadata || {}) };
+    if (params.resourceId && !validResourceId && !metadata.resourceIdentifier) {
+      metadata.resourceIdentifier = String(params.resourceId);
+    }
+
     await AuditLog.create({
       actorId: params.actorId || null,
       actorRole: params.actorRole,
       action: params.action,
       resourceType: params.resourceType || null,
-      resourceId: params.resourceId || null,
+      resourceId: validResourceId,
       ip: params.ip || null,
       userAgent: params.userAgent || null,
       requestId: params.requestId || null,
       outcome: params.outcome,
-      metadata: params.metadata || {},
+      metadata,
     });
   } catch (error) {
     // Audit logging must never break the main flow

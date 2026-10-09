@@ -32,6 +32,7 @@ import { Article, Notification } from '../models/Content.js';
 import { Ambassador, AmbassadorRequest, OpportunityEngagement, Testimonial } from '../models/AdminPortal.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 import { searchLimiter, chatLimiter } from '../lib/rate-limiters.js';
+import { normalizeLegacyRole } from '../lib/permissions.js';
 import { postChannelMessage, listChannelMessages, getThread, findPost } from '../lib/chat.js';
 import { evictFromChannelRoom } from '../socket.js';
 import { chatMessageSchema } from '../schemas/ambassador.js';
@@ -694,11 +695,15 @@ const mountAdminDataRoutes = (router) => {
     if (await StaffMember.exists({ userId: user._id })) {
       throw new ApiError(409, 'That account is already on the staff list');
     }
+    const roles = req.body.roles && req.body.roles.length > 0
+      ? req.body.roles
+      : normalizeLegacyRole(req.body.role);
     const staff = await StaffMember.create({
       userId: user._id,
       name: user.name,
       email: user.email,
-      role: req.body.role,
+      roles,
+      role: req.body.role || roles.join(','),
       status: 'active',
       joinedDate: new Date().toISOString().slice(0, 10),
     });
@@ -707,7 +712,7 @@ const mountAdminDataRoutes = (router) => {
       resourceType: AUDIT_RESOURCE_TYPES.USER,
       resourceId: user._id,
       outcome: 'success',
-      metadata: { staffInvite: true, role: req.body.role },
+      metadata: { staffInvite: true, roles, role: req.body.role || roles.join(',') },
     });
     res.status(201).json({ data: toClientObject(staff) });
   }));

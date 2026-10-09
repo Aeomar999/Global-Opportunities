@@ -76,7 +76,13 @@ class RolePermissionsStore {
     return cloneGrants(this.saved);
   }
 
-  /** TODO(backend): persist this change. Today it only updates this in-memory copy. */
+  /** Loaded from live backend API or initial config. */
+  load(next: RoleGrants) {
+    this.saved = cloneGrants(next);
+    this.revision += 1;
+    this.listeners.forEach((listener) => listener());
+  }
+
   save(next: RoleGrants) {
     this.saved = cloneGrants(next);
     this.revision += 1;

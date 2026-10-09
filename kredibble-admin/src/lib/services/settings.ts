@@ -26,6 +26,8 @@ import { currentMonth, kpiStatus, kpiTarget, kpiThresholds, monthsBefore } from 
 import { PARTNER_STAGES, PARTNER_STAGE_LABELS, type KpiThresholds, type MonthKey, type PartnerStage, type TargetChange, type ThresholdChange } from "@/lib/mock-entities";
 import { getMockCollection, getPartnerStageLabels, setMockCollection, setPartnerStageLabels } from "@/lib/mock-store";
 import { currentStaffMember, todayIsoDate } from "@/lib/services/listings";
+import { saveTargetsApi, saveThresholdsApi, updatePipelineStagesApi, hasAdminSession } from "@/lib/api";
+import { isMockMode } from "@/lib/services/mock-mode";
 
 // ---- targets ----------------------------------------------------------------------------------------------------------
 
@@ -95,6 +97,14 @@ export function saveTargets(changes: { kpi: KpiKey; value: number }[], effective
     seq: base + index,
   }));
   setMockCollection("targetHistory", [...history, ...added], { always: true });
+
+  // BE-002: Persist to backend API when connected or in real mode
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    saveTargetsApi(effectiveFrom, changes.map((c) => ({ kpi: c.kpi, value: c.value }))).catch((err) => {
+      console.warn("Could not persist targets to backend API", err);
+    });
+  }
+
   return changes.length;
 }
 
@@ -142,6 +152,13 @@ export function saveThresholds(green: number, amber: number, effectiveFrom: Mont
     seq: nextSeq(),
   };
   setMockCollection("thresholdHistory", [...history, row], { always: true });
+
+  // BE-003: Persist to backend API when connected or in real mode
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    saveThresholdsApi(green, amber, effectiveFrom).catch((err) => {
+      console.warn("Could not persist thresholds to backend API", err);
+    });
+  }
 }
 
 /** The thresholds already saved to start in a LATER month (the newest of them), or undefined. */
@@ -269,10 +286,22 @@ export function validateStageLabels(labels: Record<PartnerStage, string>): Parti
 
 export function saveStageLabels(labels: Record<PartnerStage, string>): void {
   setPartnerStageLabels(labels);
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updatePipelineStagesApi(labels).catch((err) => {
+      console.warn("Could not persist stage labels to backend API", err);
+    });
+  }
 }
 
 export function resetStageLabels(): void {
   setPartnerStageLabels({ ...PARTNER_STAGE_LABELS });
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updatePipelineStagesApi(undefined, true).catch((err) => {
+      console.warn("Could not reset stage labels on backend API", err);
+    });
+  }
 }
 
 // ---- integrations (write-only credentials) ---------------------------------------------------------------------------
