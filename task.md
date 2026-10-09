@@ -1829,22 +1829,22 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | # | Task | Status |
 |---|------|--------|
 | 1 | Opportunity Listings | [ ] Open |
-| 2 | News Category | [ ] Open |
-| 3 | App Colours | [ ] Open |
+| 2 | News Category | [x] Done |
+| 3 | App Colours | [x] Done |
 | 4 | Stakeholder Segments | [ ] Open |
-| 5 | Ambassador Registration | [ ] Open |
-| 6 | AI Assistant | [ ] Open |
+| 5 | Ambassador Registration | [x] Done |
+| 6 | AI Assistant | [x] Done |
 | 7 | Website–App Integration | [ ] Open |
-| 8 | Email Verification | [ ] Open |
+| 8 | Email Verification | [x] Done |
 
 ### 1. Opportunity Listings
 - [ ] Tally the opportunities and categories on the GOD website with what is currently on the app.
 
 ### 2. News Category
-- [ ] Add a News category to the app for Insight Ghana and The African Journal content.
+- [x] Add a News category to the app for Insight Ghana and The African Journal content.
 
 ### 3. App Colours
-- [ ] Work on the app's colours.
+- [x] Work on the app's colours.
 
 ### 4. Stakeholder Segments
 - [ ] Create separate sections for:
@@ -1852,16 +1852,16 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
   - [ ] GOD Ambassador Community
 
 ### 5. Ambassador Registration
-- [ ] Add an option for users to register/join as GOD Ambassadors.
+- [x] Add an option for users to register/join as GOD Ambassadors.
 
 ### 6. AI Assistant
-- [ ] Integrate an AI assistant into the app.
+- [x] Integrate an AI assistant into the app.
 
 ### 7. Website–App Integration
 - [ ] Link the GOD website data with the app so that updates made on the website automatically reflect on the app, including ambassador data and other relevant information.
 
 ### 8. Email Verification
-- [ ] Add an email verification screen.
+- [x] Add an email verification screen.
 
 ### Notes from this file (what already exists, so nothing is built twice)
 - **AI assistant (item 6):** the backend already mounts `/api/v1/assistant`, gated behind `AI_ENABLED=true` (503 when no provider is configured). See *v1 scope (SEC-045, SEC-082)*.
@@ -1916,16 +1916,16 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | BE-015 | Scorecard: composite, grace period, team view, who did what | P2 | BE-004, BE-001 | [ ] Open |
 | BE-016 | Settings: integrations (write-only credentials), my account, password | P1 | BE-001 | [ ] Open |
 | BE-017 | Remaining collections: notifications, reference data, team, invitations | P3 | BE-001 | [ ] Open |
-| BE-018 | Audit trail for every settings and role change | P1 | – | [ ] Open |
+| BE-018 | Audit trail for every settings and role change | P1 | – | [x] Done |
 | BE-019 | Performance, indexes, pagination, OpenAPI, tests | P1 | all | [ ] Open |
 | BE-020 | Demo seed for the real-mode test run | P3 | BE-001 to BE-011 | [ ] Open |
 | BE-021 | Product item 1: tally website opportunities and categories with the app | P1 | BE-026 | [ ] Open |
 | BE-022 | Product item 2: News category (Insight Ghana, The African Journal) | P2 | BE-026 | [ ] Open |
 | BE-023 | Product item 4: stakeholder segments | P2 | – | [ ] Open |
-| BE-024 | Product item 5: ambassador registration (apply, review, approve) | P1 | BE-007 | [ ] Open |
+| BE-024 | Product item 5: ambassador registration (apply, review, approve) | P1 | BE-007 | [x] Done |
 | BE-025 | Product item 6: AI assistant hardening | P2 | – | [ ] Open |
 | BE-026 | Product item 7: website to app sync (inbound) | P1 | BE-011, BE-007 | [ ] Open |
-| BE-027 | Product item 8: email verification screen support | P1 | – | [ ] Open |
+| BE-027 | Product item 8: email verification screen support | P1 | – | [x] Done |
 
 (Product item 3, App Colours, is frontend only: no backend task.)
 

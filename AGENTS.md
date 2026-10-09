@@ -17,7 +17,7 @@ Global-Opportunities/
 **Tech Stack:**
 - Backend: Node 20+, Express 4.19, Mongoose 9, JWT (jsonwebtoken), bcryptjs, Zod, Helmet, express-rate-limit, Socket.io, Cloudinary, Swagger
 - Mobile: Expo Router 57, React 19, NativeWind v4, expo-secure-store, socket.io-client
-- Admin: Next.js 16 App Router, React 19, Tailwind v4, localStorage auth
+- Admin: Next.js 16 App Router, React 19, Tailwind v4, httpOnly cookie auth
 
 ---
 
@@ -60,6 +60,9 @@ Verified authorization state per endpoint enforced by live route manifest testin
 | `GET /api/v1/health` | Public | — | Public liveness & database status check |
 | `GET /api/v1/dashboard/summary` | ✅ Admin | admin | Platform totals & pending moderation queues (SEC-003, SEC-046) |
 | `CRUD /api/v1/users` | ✅ Admin | admin | Admin-only access; non-admin requests receive 403 (SEC-054) |
+| `POST /api/v1/users/me/push-token` | ✅ Bearer | all | Push notification APNs/FCM token registration |
+| `POST /api/v1/ambassador-requests` | ✅ Bearer | seeker, hirer | Apply to become an ambassador with server snapshot (BE-024) |
+| `GET /api/v1/ambassador-requests/me` | ✅ Bearer | all | Caller active ambassador application status |
 | `CRUD /api/v1/seekers` | ✅ Bearer | seeker, hirer, admin | Scoped by role policy and ownerField ownership (SEC-002) |
 | `CRUD /api/v1/hirers` | ✅ Bearer | hirer, admin | Scoped by role policy and ownerField ownership (SEC-002) |
 | `CRUD /api/v1/opportunities` | ✅ / Scoped | all / hirer / admin | Reads scoped to approved listings; writes owner/admin scoped (SEC-002, SEC-048) |
