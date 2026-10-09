@@ -264,7 +264,7 @@ describe('BE-008: Database Records (Beneficiaries)', () => {
     });
 
     it('rejects update when attempting to take another record’s email or phone', async () => {
-      const first = await request(app)
+      await request(app)
         .post('/api/v1/admin/beneficiaries')
         .set('Cookie', adminCookie)
         .send({

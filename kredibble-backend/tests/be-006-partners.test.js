@@ -1,9 +1,9 @@
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { User, StaffMember, AuditLog } from '../src/models/User.js';
-import { Partner, PipelineStageConfig, DEFAULT_PIPELINE_STAGE_LABELS } from '../src/models/AdminPortal.js';
-import { signAdminToken, signToken } from '../src/middleware/auth.js';
-import { preparePartner, toPartnerClientObject, calculatePipelineHealth } from '../src/routes/admin-api.js';
+import { Partner, PipelineStageConfig } from '../src/models/AdminPortal.js';
+import { signAdminToken } from '../src/middleware/auth.js';
+import { preparePartner, toPartnerClientObject } from '../src/routes/admin-api.js';
 
 const api = (path) => `/api/v1${path}`;
 
@@ -108,7 +108,6 @@ describe('BE-006: Partner Moves & Pipeline API', () => {
   let adminUser;
   let adminCookie;
   let partnershipsOfficer;
-  let partnershipsToken;
 
   beforeEach(async () => {
     await Partner.deleteMany({});
@@ -138,7 +137,6 @@ describe('BE-006: Partner Moves & Pipeline API', () => {
       roles: ['partnerships_officer'],
       status: 'active',
     });
-    partnershipsToken = signToken(partnershipsOfficer);
   });
 
   it('POST /admin/partners creates a partner with initialized stage history', async () => {
@@ -239,7 +237,7 @@ describe('BE-006: Partner Moves & Pipeline API', () => {
 
     // Create 3 partners:
     // Partner 1: outreach -> onboard (closed in window)
-    const p1 = await Partner.create({
+    await Partner.create({
       organizationName: 'P1 Tech',
       partnerType: 'tech',
       stage: 'onboard',
@@ -251,7 +249,7 @@ describe('BE-006: Partner Moves & Pipeline API', () => {
     });
 
     // Partner 2: reached outreach, currently in proposal (open deal)
-    const p2 = await Partner.create({
+    await Partner.create({
       organizationName: 'P2 Foundation',
       partnerType: 'foundation',
       stage: 'proposal',
@@ -263,7 +261,7 @@ describe('BE-006: Partner Moves & Pipeline API', () => {
     });
 
     // Partner 3: in prospect (open deal)
-    const p3 = await Partner.create({
+    await Partner.create({
       organizationName: 'P3 Media',
       partnerType: 'media',
       stage: 'prospect',
