@@ -703,5 +703,29 @@ export const verifyEmail = async (
   return result;
 };
 
+export interface AssistantChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AssistantChatResponse {
+  provider?: string;
+  model?: string;
+  message: string;
+}
+
+export const sendAssistantMessage = async (
+  messages: AssistantChatMessage[] | string
+): Promise<AssistantChatResponse> => {
+  const body = typeof messages === 'string'
+    ? { message: messages }
+    : { messages };
+
+  return request<AssistantChatResponse>('/assistant/chat', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+};
+
 
 

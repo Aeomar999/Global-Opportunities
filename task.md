@@ -292,7 +292,7 @@ Note: the audit's own text reached the same conclusion on #10 ("Actually this on
 | SEC-122 | Community feed photo attachment and prompt dialogs crash or no-op on native mobile | P1 | Mobile community | ✅ Done |
 | SEC-123 | Event booking payment flow simulated: collects card numbers without payment gateway | P1 | Mobile events | ✅ Done |
 | SEC-124 | App Store & Google Play compliance gaps: policy links, push notifications, offline netinfo | P1 | Mobile store | ✅ Done |
-| SEC-125 | AI Assistant in mobile app is canned setTimeout demo disconnected from backend | P2 | Mobile assistant | Open |
+| SEC-125 | AI Assistant in mobile app is canned setTimeout demo disconnected from backend | P2 | Mobile assistant | ✅ Done |
 | SEC-126 | Mock data fallbacks in notifications, saved items, and hardcoded Wave job descriptions | P2 | Mobile app | Open |
 | SEC-127 | Hirer postings and managed channels rely on mock in-memory authStore data | P2 | Mobile hirer | Open |
 | SEC-128 | Mobile test coverage: 0 screen/UI component tests; 116 ESLint warnings across screens | P2 | Mobile tests | Open |
@@ -2066,6 +2066,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - 2026-10-08 — MOB-013 complete: Added native camera capture (`pickCameraImage` / `useCamera`) and cross-platform image picking to `src/lib/file-picker.ts`; replaced web DOM file inputs and mock URLs in `src/app/community/feed.tsx` with Cloudinary upload via `uploadFile`; replaced `window.prompt` dialogs with custom native React Native modal for Poll, Quiz, and Question interactive posts; disabled fake recording bar and fake voice string injection; eliminated `require()` import for `socketService`; added comprehensive test suite (`__tests__/community-feed.test.ts`) covering photo/camera upload, caption fallbacks, cancel handling, upload error propagation, and interactive post generation (48/48 tests passing with 0 type errors and 0 lint warnings).
 - 2026-10-08 — MOB-014 complete: Removed unencrypted credit card inputs (card number, exp, cvv, zip) from `src/app/events/booking.tsx`; implemented 1-click registration for free events with guest validation calling live `POST /events/:id/attendees`; integrated secure external ticketing portal gating via `expo-web-browser` (`openBrowserAsync`) for paid events with verified organizer summary and total calculation; added `ticketUrl?: string` to `EventItem`; added unit test suite (`__tests__/event-booking.test.ts`) covering free booking, server capacity error handling, and paid ticket URL gating (54/54 tests passing with 0 type errors and 0 lint warnings).
 - 2026-10-08 — MOB-015 complete: Installed `@react-native-community/netinfo` and `expo-notifications`; created legal URL helpers (`openPrivacyPolicy`, `openTermsOfService`) using `expo-web-browser` and integrated into `signup.tsx`, `profile/security.tsx`, and `hirer-profile/security.tsx`; built offline connectivity detection with `useNetworkStatus` and `<OfflineBanner />` root banner in `_layout.tsx`; implemented `registerForPushNotificationsAsync` for Expo/APNs/FCM tokens; added unit test suite (`__tests__/store-compliance.test.ts`) covering legal links, offline calculations, and push notification token registration (64/64 tests passing across 8 suites with 0 type errors).
+- 2026-10-08 — MOB-016 complete: Implemented `sendAssistantMessage` API caller in `src/lib/api.ts` with Bearer session authentication; replaced 1.2s `setTimeout` and mock jobs/candidates in `src/app/assistant/index.tsx` with real-time `POST /api/v1/assistant/chat` integration; added automatic 503 maintenance fallback handling ("AI smart assistant is currently undergoing scheduled maintenance. Please check back shortly."); added comprehensive unit test suite (`__tests__/assistant.test.ts`) covering single/multi message payloads, Bearer auth headers, 503 error mapping, and chat history payload management (69/69 tests passing across 9 suites with 0 type errors).
 
 ---
 
@@ -2081,7 +2082,7 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 | MOB-013 | SEC-122 | Community feed native attachments & modal inputs | P1 | [x] Completed |
 | MOB-014 | SEC-123 | Event booking payment gateway / ticket URL gating | P1 | [x] Completed |
 | MOB-015 | SEC-124 | Store compliance: in-app policy links, push notifications, netinfo | P1 | [x] Completed |
-| MOB-016 | SEC-125 | AI Assistant live backend integration (`/api/v1/assistant`) | P2 | [ ] Open |
+| MOB-016 | SEC-125 | AI Assistant live backend integration (`/api/v1/assistant`) | P2 | [x] Completed |
 | MOB-017 | SEC-126 | Mock fallback removal: notifications, saved items, Wave text | P2 | [ ] Open |
 | MOB-018 | SEC-127 | Live Hirer management: my postings & community channels | P2 | [ ] Open |
 | MOB-019 | SEC-128 | Mobile screen integration test suite & ESLint zero-warning sweep | P2 | [ ] Open |
