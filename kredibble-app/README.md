@@ -2,23 +2,23 @@
 
 Expo mobile app for Kredibble.
 
-## Get Started On Windows
+## Get Started
 
-Open PowerShell and go to the mobile app directory:
+Open terminal and navigate to the mobile app directory:
 
-```powershell
-cd "C:\Users\suadi\OneDrive\Desktop\Global-Opportunities\kredibble-app"
+```bash
+cd kredibble-app
 ```
 
 Install dependencies:
 
-```powershell
+```bash
 npm install
 ```
 
 Start Expo:
 
-```powershell
+```bash
 npm run start
 ```
 
@@ -28,19 +28,19 @@ The start script skips Expo's online dependency-version check and starts the loc
 
 Android emulator:
 
-```powershell
+```bash
 npm run android:windows
 ```
 
 Web browser:
 
-```powershell
+```bash
 npm run web
 ```
 
 Expo Go on a physical phone:
 
-```powershell
+```bash
 npm run start
 ```
 
@@ -48,34 +48,30 @@ Then scan the QR code from the Expo terminal.
 
 ## Useful Commands
 
-```powershell
+```bash
 npm run lint
+npm run typecheck
+npm test
 npm run web
 npm run start
 ```
 
 If testing against the backend from a physical phone, the phone cannot use `localhost` for your computer. Use your computer's LAN IP address for API URLs.
 
-## Backend Login
+## Backend Integration
 
-Login and signup call the backend auth routes:
+Login and signup call the versioned backend auth routes:
 
 ```text
-POST /api/auth/login
-POST /api/auth/register
-GET  /api/auth/me
+POST /api/v1/auth/login
+POST /api/v1/auth/register
+GET  /api/v1/auth/me
 ```
 
 The mobile API URL is controlled by `EXPO_PUBLIC_API_URL` in `.env`.
 
 - Leave it blank for defaults.
-- Android emulator default: `http://10.0.2.2:4000/api`
-- Expo web default: `http://localhost:4000/api`
-- Physical phone: set it to your computer LAN IP, for example `http://192.168.1.25:4000/api`
-
-Seeded demo accounts after `npm run db:seed`:
-
-```text
-Seeker: enoch.mensah@gmail.com / password123
-Hirer:  s.jenkins@google.com / password123
-```
+- Android emulator default: `http://10.0.2.2:4000/api/v1`
+- Expo web default: `http://localhost:4000/api/v1`
+- Physical phone: set it to your computer LAN IP, for example `http://192.168.1.25:4000/api/v1`
+- Production: `https://kredibble-api.onrender.com/api/v1` (managed via EAS secrets / `eas.json`)
