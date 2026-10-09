@@ -9,59 +9,10 @@ export interface NotificationItem {
   read: boolean;
 }
 
-const initialHirerNotifications: NotificationItem[] = [
-  {
-    id: 'n-1',
-    type: 'applicant',
-    title: 'New applicant',
-    body: 'Kojo Boateng applied to Senior Product Designer with a 96% match score.',
-    time: '5m ago',
-    read: false,
-  },
-  {
-    id: 'n-2',
-    type: 'applicant',
-    title: 'New applicant',
-    body: 'Ama Serwaa applied to UX Research Intern.',
-    time: '1h ago',
-    read: false,
-  },
-  {
-    id: 'n-3',
-    type: 'message',
-    title: 'New message',
-    body: 'Elona Blankson sent you a message about the Senior Product Designer role.',
-    time: '2h ago',
-    read: false,
-  },
-  {
-    id: 'n-4',
-    type: 'channel',
-    title: 'Channel activity',
-    body: '3 new members joined Google Tech Circle.',
-    time: '6h ago',
-    read: true,
-  },
-  {
-    id: 'n-5',
-    type: 'verification',
-    title: 'Verification approved',
-    body: 'Your company documents were reviewed and Google LLC is now a Verified Enterprise.',
-    time: '1d ago',
-    read: true,
-  },
-  {
-    id: 'n-6',
-    type: 'system',
-    title: 'Welcome to Kredibble',
-    body: 'Post your first opportunity to start receiving applicants.',
-    time: '3d ago',
-    read: true,
-  },
-];
+
 
 class NotificationStateStore {
-  items: NotificationItem[] = [...initialHirerNotifications];
+  items: NotificationItem[] = [];
 
   private listeners: (() => void)[] = [];
 

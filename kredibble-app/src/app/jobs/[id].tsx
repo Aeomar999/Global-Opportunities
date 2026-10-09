@@ -1,20 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Bookmark, Sparkles, Users, MapPin, ChevronDown, ChevronUp, Clock } from 'lucide-react-native';
+import { ChevronLeft, Bookmark, Sparkles, Users, MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getOpportunityById, applyForOpportunity } from '../../lib/api';
 import { Colors, FontSize, FontWeight, Radius } from '../../constants/design';
 import { useToast } from '../../components/ui/ToastProvider';
-
-const ABOUT = `Our mission\nWe're making Africa the first cashless continent.\n\nIn 2017, over half the population in Sub-Saharan Africa had no bank account. That's for good reason—the fees are too high, the closest branch can be miles away, and nobody takes cards. Without access to financial institutions, people are forced to keep their savings under the mattress. Small business owners rely on lenders who charge extortionate rates. Parents spend hours waiting in line to pay school fees in cash.\n\nWe're solving this by building financial services that just work: no account fees, instantly available, and accepted everywhere. In places where electricity, water and roads don't always work, you can still send money with Wave. In 2017, we launched a mobile app in Senegal for cash deposit, withdrawal, and peer-to-peer and business payments. Now, we have millions of users across 9 countries and are growing fast.\n\nOur goal is to make Africa the first cashless continent and that's where you come in...\n\nHow you'll help us achieve it\n\nWave is now the largest financial institution in Senegal and Côte d'Ivoire, with millions of users, growing rapidly year-on-year. And, we're still in the early days of our product roadmap and potential impact on people's everyday lives.`;
-
-const RESPONSIBILITIES = [
-  "Partner with product managers and engineers to define and align on product goals and requirements.",
-  "Develop high-fidelity mockups, user flows, and interactive prototypes for mobile platforms.",
-  "Conduct user research and translate insights into clean, intuitive design iterations.",
-  "Maintain and expand the company's shared design system libraries."
-];
 
 export default function JobDetailScreen() {
   const router = useRouter();
@@ -94,7 +85,12 @@ export default function JobDetailScreen() {
     );
   }
 
-  const fullDescription = job.description ? `${job.description}\n\n${ABOUT}` : ABOUT;
+  const fullDescription = job.description?.trim() || 'No job description provided.';
+  const requirementsList: string[] = Array.isArray(job.requirements)
+    ? job.requirements
+    : typeof job.requirements === 'string' && job.requirements.trim()
+    ? job.requirements.split('\n').map((s: string) => s.trim().replace(/^[•\-*]\s*/, '')).filter(Boolean)
+    : [];
   const initial = (job.company || 'J').charAt(0).toUpperCase();
 
   return (
@@ -200,20 +196,22 @@ export default function JobDetailScreen() {
           </View>
         </View>
 
-        {/* Panel 3: Key Responsibilities */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle} className="font-sans">
-            Role & Responsibilities
-          </Text>
-          {RESPONSIBILITIES.map((resp, idx) => (
-            <View key={idx} style={styles.bulletRow}>
-              <Text style={styles.bulletSymbol}>•</Text>
-              <Text style={styles.bulletText} className="font-sans">
-                {resp}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {/* Panel 3: Key Responsibilities / Requirements */}
+        {requirementsList.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle} className="font-sans">
+              Role & Responsibilities
+            </Text>
+            {requirementsList.map((resp, idx) => (
+              <View key={idx} style={styles.bulletRow}>
+                <Text style={styles.bulletSymbol}>•</Text>
+                <Text style={styles.bulletText} className="font-sans">
+                  {resp}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* Sticky Footer Apply CTA */}

@@ -5,6 +5,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { profileStore } from '../../constants/mockProfile';
 import { useToast } from '../../components/ui/ToastProvider';
+import { getGrants } from '../../lib/api';
 
 // ─── Shared grant data ────────────────────────────────────────────────────────
 
@@ -159,8 +160,6 @@ export const GrantCard = ({ grant, onPress }: { grant: GrantCardData; onPress: (
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-
-import { getGrants } from '../../lib/api';
 
 export default function GrantsScreen() {
   const router = useRouter();

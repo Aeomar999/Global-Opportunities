@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Modal, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput, Modal, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Plus, X, Trash2 } from 'lucide-react-native';
 import { profileStore } from '../../constants/mockProfile';
+import { authStore } from '../../constants/authStore';
+import { updateSeekerProfile } from '../../lib/api';
 
 const ALL_AVAILABLE_SKILLS = [
   'HTML5', 'CSS3', 'JavaScript', 'React', 'Bootstrap', 'Figma', 'TypeScript', 
@@ -28,9 +30,6 @@ export default function EditProfileScreen() {
 
   const handleSave = async () => {
     try {
-      const { authStore } = require('../../constants/authStore');
-      const { updateSeekerProfile } = require('../../lib/api');
-      
       const seekerId = (authStore as any).user?.seeker?.id;
       if (seekerId) {
         await updateSeekerProfile(seekerId, user);
@@ -39,7 +38,7 @@ export default function EditProfileScreen() {
       profileStore.updateProfile(user);
       router.replace('/profile/manage');
     } catch (err) {
-      alert('Failed to save profile');
+      Alert.alert('Error', 'Failed to save profile');
       console.error(err);
     }
   };

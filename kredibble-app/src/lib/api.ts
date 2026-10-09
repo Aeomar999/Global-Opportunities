@@ -45,6 +45,7 @@ export type EventItem = {
   eventType?: string;
   logoColor?: string;
   virtualUrl?: string;
+  ticketUrl?: string;
 };
 
 export type Grant = {
@@ -77,6 +78,7 @@ export type AuthUser = {
   name: string;
   email: string;
   role: AuthRole | string;
+  emailVerified?: boolean;
   seeker?: unknown;
   hirer?: unknown;
   staff?: unknown;
@@ -159,6 +161,34 @@ let refreshSubscribers: ((token: string) => void)[] = [];
 const onRefreshed = (token: string) => {
   refreshSubscribers.forEach((callback) => callback(token));
   refreshSubscribers = [];
+};
+
+export class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export const isEmailVerificationError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { code?: string; status?: number; message?: string };
+  return (
+    err.code === 'EMAIL_VERIFICATION_REQUIRED' ||
+    (err.status === 403 &&
+      typeof err.message === 'string' &&
+      err.message.toLowerCase().includes('email verification'))
+  );
+};
+
+let emailVerificationHandler: (() => void) | null = null;
+export const setEmailVerificationHandler = (handler: (() => void) | null) => {
+  emailVerificationHandler = handler;
 };
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -246,7 +276,15 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const errorMsg = payload?.error?.message || `Request failed with status ${response.status}`;
-    throw new Error(errorMsg);
+    const apiError = new ApiRequestError(errorMsg, response.status, payload?.error?.code);
+    if (isEmailVerificationError(apiError) && emailVerificationHandler) {
+      try {
+        emailVerificationHandler();
+      } catch (handlerErr) {
+        console.warn('Error invoking email verification handler:', handlerErr);
+      }
+    }
+    throw apiError;
   }
 
   return payload.data as T;
@@ -411,6 +449,19 @@ export const createChannel = async (data: any) => {
     body: JSON.stringify(data),
   });
 };
+
+export const updateChannel = async (id: string, data: any) => {
+  return request<any>(`/community/channels/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteChannel = async (id: string) => {
+  return request<any>(`/community/channels/${id}`, {
+    method: 'DELETE',
+  });
+};
 export const getChannelPosts = async (channelId: string) => {
   return request<any[]>(`/community/channels/${channelId}/posts`);
 };
@@ -573,6 +624,120 @@ export const deleteMyAccount = async (password: string) => {
 
 export const getMyGrantApplications = async () => {
   return request<any[]>('/users/me/grant-applications');
+};
+
+export interface UploadResponse {
+  url: string;
+  publicId: string;
+  format: string;
+  bytes: number;
+  folder?: string;
+  originalName?: string;
+  mimeType?: string;
+}
+
+export const uploadFile = async (
+  file: { uri: string; name: string; mimeType?: string },
+  purpose: 'cvs' | 'avatars' | 'company-logos' | 'verification-docs' = 'cvs'
+): Promise<UploadResponse> => {
+  const token = await getMobileToken();
+  const formData = new FormData();
+
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType || 'application/octet-stream',
+  } as any);
+
+  const response = await fetch(`${API_BASE_URL}/upload?purpose=${encodeURIComponent(purpose)}`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const errorMsg = payload?.error?.message || `Upload failed with status ${response.status}`;
+    throw new Error(errorMsg);
+  }
+
+  return payload.data;
+};
+
+export const requestEmailVerification = async (
+  email?: string
+): Promise<{ email: string; expiresInMinutes: number }> => {
+  let targetEmail = email;
+  if (!targetEmail) {
+    const user = await getMobileUser();
+    targetEmail = user?.email;
+  }
+  if (!targetEmail) {
+    throw new Error('Email address is required to request verification code');
+  }
+
+  return request<{ email: string; expiresInMinutes: number }>('/auth/verification-code/send', {
+    method: 'POST',
+    body: JSON.stringify({ email: targetEmail }),
+  });
+};
+
+export const verifyEmail = async (
+  code: string,
+  email?: string
+): Promise<{ email: string; verified: boolean }> => {
+  let targetEmail = email;
+  if (!targetEmail) {
+    const user = await getMobileUser();
+    targetEmail = user?.email;
+  }
+  if (!targetEmail) {
+    throw new Error('Email address is required to verify code');
+  }
+
+  const result = await request<{ email: string; verified: boolean }>('/auth/verification-code/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email: targetEmail, code }),
+  });
+
+  // Update stored user if matching
+  try {
+    const currentUser = await getMobileUser();
+    if (currentUser) {
+      currentUser.emailVerified = true;
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(currentUser));
+    }
+  } catch {
+    // Non-fatal if secure store update fails
+  }
+
+  return result;
+};
+
+export interface AssistantChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AssistantChatResponse {
+  provider?: string;
+  model?: string;
+  message: string;
+}
+
+export const sendAssistantMessage = async (
+  messages: AssistantChatMessage[] | string
+): Promise<AssistantChatResponse> => {
+  const body = typeof messages === 'string'
+    ? { message: messages }
+    : { messages };
+
+  return request<AssistantChatResponse>('/assistant/chat', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 };
 
 

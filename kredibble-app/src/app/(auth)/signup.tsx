@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Eye, EyeOff, ChevronDown, ChevronLeft, Search, Upload, Check, Home } from 'lucide-react-native';
-import Svg, { G, Rect, Defs, ClipPath } from 'react-native-svg';
+import { Eye, EyeOff, ChevronDown, ChevronLeft, Search, Upload, Check } from 'lucide-react-native';
 import { authStore } from '../../constants/authStore';
 import { profileStore } from '../../constants/mockProfile';
-import { signupMobile } from '../../lib/api';
+import { signupMobile, uploadFile } from '../../lib/api';
+import { pickDocument, pickImage, PickedFile } from '../../lib/file-picker';
+import { openPrivacyPolicy, openTermsOfService } from '../../lib/legal';
 
 type Country = { name: string; code: string; dialCode: string };
 type PickerType =
@@ -167,7 +168,6 @@ const getFlag = (code: string) =>
   code.toUpperCase().split('').map(c => String.fromCodePoint(c.charCodeAt(0) + 127397)).join('');
 
 const LOGO_CLEARANCE = 114;
-const TOTAL_STEPS = 4;
 
 const MULTI_PICKERS: PickerType[] = ['skills', 'prefCountries'];
 const isMulti = (t: PickerType) => MULTI_PICKERS.includes(t);
@@ -286,11 +286,13 @@ const UploadCard = ({
   onPress,
   typesHint,
   isImage = false,
+  fileName,
 }: {
   status: 'idle' | 'loading' | 'done';
   onPress: () => void;
   typesHint: string;
   isImage?: boolean;
+  fileName?: string;
 }) => {
   return (
     <View
@@ -350,7 +352,16 @@ const UploadCard = ({
           >
             <Check size={18} color="#FFFFFF" strokeWidth={2.5} />
           </View>
-          <Text style={{ fontSize: 13, color: '#8A8D9F', marginTop: 4 }} className="font-sans">Uploaded</Text>
+          <Text
+            style={{ fontSize: 13, color: '#1A1A1A', fontWeight: '600', marginTop: 4, textAlign: 'center' }}
+            numberOfLines={1}
+            className="font-sans"
+          >
+            {fileName || 'Uploaded'}
+          </Text>
+          <TouchableOpacity onPress={onPress} style={{ marginTop: 2 }}>
+            <Text style={{ fontSize: 12, color: '#6671E4', fontWeight: '500' }} className="font-sans">Change file</Text>
+          </TouchableOpacity>
         </>
       )}
     </View>
@@ -420,6 +431,7 @@ export default function SignupScreen() {
 
   // Step 4 (seeker)
   const [cvStatus, setCvStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [cvFile, setCvFile] = useState<PickedFile | null>(null);
 
   // Hirer Step 1 (Company Details)
   const [companyName, setCompanyName] = useState('');
@@ -440,9 +452,13 @@ export default function SignupScreen() {
 
   // Hirer Step 3 (Verification Documents)
   const [docBusinessRegStatus, setDocBusinessRegStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [docBusinessRegFile, setDocBusinessRegFile] = useState<PickedFile | null>(null);
   const [docOrgIdStatus, setDocOrgIdStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [docOrgIdFile, setDocOrgIdFile] = useState<PickedFile | null>(null);
   const [docCompanyLogoStatus, setDocCompanyLogoStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [docCompanyLogoFile, setDocCompanyLogoFile] = useState<PickedFile | null>(null);
   const [docProofOfOrgStatus, setDocProofOfOrgStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [docProofOfOrgFile, setDocProofOfOrgFile] = useState<PickedFile | null>(null);
   const [authError, setAuthError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -505,7 +521,7 @@ export default function SignupScreen() {
     }
   };
 
-  const getPickerItems = (): Array<Country | string> => {
+  const getPickerItems = (): (Country | string)[] => {
     const q = searchQuery.toLowerCase();
     switch (activePicker) {
       case 'country':
@@ -579,51 +595,48 @@ export default function SignupScreen() {
   const isNextActive = isStepValid();
 
   // Document upload handler for Hirer
-  const handleDocUpload = (docType: 'businessReg' | 'orgId' | 'companyLogo' | 'proofOfOrg') => {
-    if (Platform.OS === 'web') {
-      const input = document.createElement('input');
-      input.type = 'file';
+  const handleDocUpload = async (docType: 'businessReg' | 'orgId' | 'companyLogo' | 'proofOfOrg') => {
+    try {
+      setAuthError('');
       if (docType === 'companyLogo') {
-        input.accept = '.jpg,.jpeg,.png,.svg';
+        const file = await pickImage({ allowsEditing: true, aspect: [1, 1] });
+        if (!file) return;
+        setDocCompanyLogoFile(file);
+        setDocCompanyLogoStatus('loading');
+        setTimeout(() => setDocCompanyLogoStatus('done'), 500);
       } else {
-        input.accept = '.txt,.docx,.pdf';
-      }
-      (input as any).onchange = (e: any) => {
-        const file = e.target?.files?.[0];
-        if (file) {
-          if (docType === 'businessReg') {
-            setDocBusinessRegStatus('loading');
-            setTimeout(() => setDocBusinessRegStatus('done'), 2000);
-          } else if (docType === 'orgId') {
-            setDocOrgIdStatus('loading');
-            setTimeout(() => setDocOrgIdStatus('done'), 2000);
-          } else if (docType === 'companyLogo') {
-            setDocCompanyLogoStatus('loading');
-            setTimeout(() => setDocCompanyLogoStatus('done'), 2000);
-          } else if (docType === 'proofOfOrg') {
-            setDocProofOfOrgStatus('loading');
-            setTimeout(() => setDocProofOfOrgStatus('done'), 2000);
-          }
+        const file = await pickDocument();
+        if (!file) return;
+        if (docType === 'businessReg') {
+          setDocBusinessRegFile(file);
+          setDocBusinessRegStatus('loading');
+          setTimeout(() => setDocBusinessRegStatus('done'), 500);
+        } else if (docType === 'orgId') {
+          setDocOrgIdFile(file);
+          setDocOrgIdStatus('loading');
+          setTimeout(() => setDocOrgIdStatus('done'), 500);
+        } else if (docType === 'proofOfOrg') {
+          setDocProofOfOrgFile(file);
+          setDocProofOfOrgStatus('loading');
+          setTimeout(() => setDocProofOfOrgStatus('done'), 500);
         }
-      };
-      input.click();
+      }
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Failed to select document');
     }
   };
 
-  // CV file picker (web)
-  const handleBrowseFiles = () => {
-    if (Platform.OS === 'web') {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.txt,.docx,.pdf';
-      (input as any).onchange = (e: any) => {
-        const file = e.target?.files?.[0];
-        if (file) {
-          setCvStatus('loading');
-          setTimeout(() => setCvStatus('done'), 2500);
-        }
-      };
-      input.click();
+  // CV file picker (cross-platform: native iOS/Android + Web)
+  const handleBrowseFiles = async () => {
+    try {
+      setAuthError('');
+      const file = await pickDocument();
+      if (!file) return;
+      setCvFile(file);
+      setCvStatus('loading');
+      setTimeout(() => setCvStatus('done'), 500);
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Failed to select CV');
     }
   };
 
@@ -666,6 +679,16 @@ export default function SignupScreen() {
       authStore.setRole(role);
 
       if (role === 'hirer') {
+        let uploadedLogoUrl = docCompanyLogoFile?.uri || '';
+        if (docCompanyLogoFile) {
+          try {
+            const uploaded = await uploadFile(docCompanyLogoFile, 'company-logos');
+            if (uploaded?.url) uploadedLogoUrl = uploaded.url;
+          } catch (uploadErr) {
+            console.warn('Could not upload company logo:', uploadErr);
+          }
+        }
+
         authStore.updateCompany({
           name: companyName,
           companyEmail,
@@ -673,6 +696,7 @@ export default function SignupScreen() {
           industry: selectedIndustry,
           companySize: selectedCompanySize,
           location: selectedCompanyCountry?.name ?? '',
+          logo: uploadedLogoUrl,
           recruiterName,
           recruiterRole: recruiterPosition,
           recruiterEmail,
@@ -684,6 +708,16 @@ export default function SignupScreen() {
         authStore.updateVerificationDoc('companyLogo', docCompanyLogoStatus);
         authStore.updateVerificationDoc('proofOfOrg', docProofOfOrgStatus);
       } else {
+        let resumeUrl = cvFile?.name || '';
+        if (cvFile) {
+          try {
+            const uploaded = await uploadFile(cvFile, 'cvs');
+            if (uploaded?.url) resumeUrl = uploaded.url;
+          } catch (uploadErr) {
+            console.warn('Could not upload CV file:', uploadErr);
+          }
+        }
+
         profileStore.updateProfile({
           name: fullName,
           email,
@@ -695,6 +729,7 @@ export default function SignupScreen() {
           education: [
             { degree: program, institution: university, duration: graduationYear },
           ],
+          resumeUrl,
         });
       }
 
@@ -977,6 +1012,7 @@ export default function SignupScreen() {
                 <UploadCard
                   status={docBusinessRegStatus}
                   onPress={() => handleDocUpload('businessReg')}
+                  fileName={docBusinessRegFile?.name}
                   typesHint="txt, docx, pdf - Up to 5MB"
                 />
               </View>
@@ -986,6 +1022,7 @@ export default function SignupScreen() {
                 <UploadCard
                   status={docOrgIdStatus}
                   onPress={() => handleDocUpload('orgId')}
+                  fileName={docOrgIdFile?.name}
                   typesHint="txt, docx, pdf - Up to 5MB"
                 />
               </View>
@@ -995,6 +1032,7 @@ export default function SignupScreen() {
                 <UploadCard
                   status={docCompanyLogoStatus}
                   onPress={() => handleDocUpload('companyLogo')}
+                  fileName={docCompanyLogoFile?.name}
                   typesHint="jpg, png, svg - Up to 5MB"
                   isImage
                 />
@@ -1005,6 +1043,7 @@ export default function SignupScreen() {
                 <UploadCard
                   status={docProofOfOrgStatus}
                   onPress={() => handleDocUpload('proofOfOrg')}
+                  fileName={docProofOfOrgFile?.name}
                   typesHint="txt, docx, pdf - Up to 5MB"
                 />
                 <Text style={{ fontSize: 12, color: '#DC2626', marginTop: -10, marginBottom: 10, lineHeight: 16 }} className="font-sans">
@@ -1029,6 +1068,7 @@ export default function SignupScreen() {
                   alignItems: 'center',
                   backgroundColor: '#F5F6FA',
                   gap: 8,
+                  paddingHorizontal: 16,
                 }}
               >
                 {cvStatus === 'idle' && (
@@ -1045,6 +1085,7 @@ export default function SignupScreen() {
                       style={{
                         borderWidth: 1, borderColor: '#C0C0C8', borderRadius: 8,
                         paddingHorizontal: 20, paddingVertical: 8,
+                        backgroundColor: '#FFFFFF',
                       }}
                     >
                       <Text style={{ fontSize: 13, color: '#595959' }} className="font-sans">Browse files</Text>
@@ -1072,7 +1113,16 @@ export default function SignupScreen() {
                     >
                       <Check size={22} color="#FFFFFF" strokeWidth={2.5} />
                     </View>
-                    <Text style={{ fontSize: 14, color: '#8A8D9F', marginTop: 6 }} className="font-sans">Done</Text>
+                    <Text
+                      style={{ fontSize: 14, color: '#1A1A1A', fontWeight: '600', marginTop: 4, textAlign: 'center', paddingHorizontal: 16 }}
+                      numberOfLines={1}
+                      className="font-sans"
+                    >
+                      {cvFile?.name || 'Resume Attached'}
+                    </Text>
+                    <TouchableOpacity onPress={handleBrowseFiles} style={{ marginTop: 2 }}>
+                      <Text style={{ fontSize: 12, color: '#6671E4', fontWeight: '500' }} className="font-sans">Change file</Text>
+                    </TouchableOpacity>
                   </>
                 )}
               </View>
@@ -1086,6 +1136,21 @@ export default function SignupScreen() {
           {authError}
         </Text>
       ) : null}
+
+      {/* Legal Compliance Notice (Apple App Store Guideline 5.1.1 & Google Play) */}
+      <View style={{ paddingHorizontal: 24, paddingVertical: 8, alignItems: 'center', backgroundColor: '#F7F7F9' }}>
+        <Text style={{ fontSize: 11, color: '#8A8D9F', textAlign: 'center', lineHeight: 16 }} className="font-sans">
+          By creating an account, you agree to Kredibble&apos;s{' '}
+          <Text onPress={openTermsOfService} style={{ color: '#6671E4', fontWeight: '600', textDecorationLine: 'underline' }}>
+            Terms of Service
+          </Text>{' '}
+          and{' '}
+          <Text onPress={openPrivacyPolicy} style={{ color: '#6671E4', fontWeight: '600', textDecorationLine: 'underline' }}>
+            Privacy Policy
+          </Text>
+          .
+        </Text>
+      </View>
 
       {/* Fixed bottom buttons */}
       <View

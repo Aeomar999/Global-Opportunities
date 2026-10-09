@@ -5,6 +5,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { profileStore } from '../../constants/mockProfile';
 import { useToast } from '../../components/ui/ToastProvider';
+import { getOpportunities } from '../../lib/api';
 
 // ─── Shared job data ──────────────────────────────────────────────────────────
 
@@ -145,8 +146,6 @@ export const JobCard = ({ job, onPress }: { job: Job; onPress: () => void }) => 
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-
-import { getOpportunities } from '../../lib/api';
 
 export default function JobsScreen() {
   const router = useRouter();

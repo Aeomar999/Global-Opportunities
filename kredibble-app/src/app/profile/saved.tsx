@@ -48,11 +48,9 @@ export default function SavedOpportunitiesScreen() {
           return { id: String(item.itemId || item._id), type: mappedType };
         });
 
-        if (mappedSaved.length > 0) {
-          profileStore.saved = mappedSaved;
-          setSavedItems(mappedSaved);
-          profileStore.notify();
-        }
+        profileStore.saved = mappedSaved;
+        setSavedItems(mappedSaved);
+        profileStore.notify();
 
         // Map opportunities to jobs and internships
         const jobsList: Job[] = [];

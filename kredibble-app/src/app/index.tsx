@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import { Image } from 'react-native';
 
 const LogoSVG = () => (
   <Image
@@ -32,7 +31,7 @@ export default function SplashScreen() {
     };
 
     checkFirstLaunch();
-  }, []);
+  }, [router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F7F7F9', justifyContent: 'center', alignItems: 'center' }}>

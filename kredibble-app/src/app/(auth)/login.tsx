@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Check, X, Eye, EyeOff, Home } from 'lucide-react-native';
+import { Check, X, Eye, EyeOff } from 'lucide-react-native';
 import Svg, { G, Rect, Defs, ClipPath, Path } from 'react-native-svg';
 import { authStore } from '../../constants/authStore';
 import { loginMobile, requestForgotPassword, resetPassword } from '../../lib/api';

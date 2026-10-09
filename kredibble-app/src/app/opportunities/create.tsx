@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet, Alert, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, StyleSheet, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronDown } from 'lucide-react-native';
@@ -936,11 +936,12 @@ export default function CreateOpportunityScreen() {
           {/* Submit Button */}
           <TouchableOpacity
             onPress={handlePostOpportunity}
-            style={styles.button}
+            disabled={isSubmitting}
+            style={[styles.button, isSubmitting && { opacity: 0.6 }]}
             activeOpacity={0.8}
           >
             <Text style={{ fontSize: 15, color: '#FFFFFF', fontWeight: 'bold' }} className="font-sans">
-              {isEditing ? 'Save Changes' : 'Publish Listing'}
+              {isSubmitting ? 'Submitting...' : isEditing ? 'Save Changes' : 'Publish Listing'}
             </Text>
           </TouchableOpacity>
         </View>
