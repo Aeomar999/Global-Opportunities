@@ -20,6 +20,7 @@ import { authStore } from '../../constants/authStore';
 import { profileStore } from '../../constants/mockProfile';
 import { signupMobile, uploadFile } from '../../lib/api';
 import { pickDocument, pickImage, PickedFile } from '../../lib/file-picker';
+import { openPrivacyPolicy, openTermsOfService } from '../../lib/legal';
 
 type Country = { name: string; code: string; dialCode: string };
 type PickerType =
@@ -1137,6 +1138,21 @@ export default function SignupScreen() {
           {authError}
         </Text>
       ) : null}
+
+      {/* Legal Compliance Notice (Apple App Store Guideline 5.1.1 & Google Play) */}
+      <View style={{ paddingHorizontal: 24, paddingVertical: 8, alignItems: 'center', backgroundColor: '#F7F7F9' }}>
+        <Text style={{ fontSize: 11, color: '#8A8D9F', textAlign: 'center', lineHeight: 16 }} className="font-sans">
+          By creating an account, you agree to Kredibble&apos;s{' '}
+          <Text onPress={openTermsOfService} style={{ color: '#6671E4', fontWeight: '600', textDecorationLine: 'underline' }}>
+            Terms of Service
+          </Text>{' '}
+          and{' '}
+          <Text onPress={openPrivacyPolicy} style={{ color: '#6671E4', fontWeight: '600', textDecorationLine: 'underline' }}>
+            Privacy Policy
+          </Text>
+          .
+        </Text>
+      </View>
 
       {/* Fixed bottom buttons */}
       <View
