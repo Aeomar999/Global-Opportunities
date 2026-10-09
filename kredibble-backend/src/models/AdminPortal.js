@@ -65,6 +65,29 @@ const ambassadorSchema = new mongoose.Schema({
   wordpressSync: syncField(),
 }, { timestamps: true });
 
+// A signed-in user's request to become an ambassador. The snapshot is built by the server from the
+// user's own records, never from the request body, so the review queue shows trustworthy details.
+const ambassadorRequestSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  role: { type: String, enum: ['seeker', 'hirer'], required: true },
+  name: { type: String, required: true },
+  email: { type: String, required: true, lowercase: true, trim: true },
+  phone: String,
+  country: String,
+  city: String,
+  profession: String,
+  organisation: String,
+  motivation: { type: String, maxlength: 1000 },
+  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
+  reviewNote: { type: String, maxlength: 1000 },
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reviewedAt: Date,
+  channelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel' },
+  ambassadorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ambassador' },
+}, { timestamps: true });
+// One open request per user at a time.
+ambassadorRequestSchema.index({ userId: 1 }, { unique: true, partialFilterExpression: { status: 'pending' } });
+
 const ambassadorAmplificationSchema = new mongoose.Schema({
   ambassadorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ambassador', required: true, index: true },
   channel: { type: String, required: true },
@@ -142,6 +165,7 @@ const activitySchema = new mongoose.Schema({
 export const Program = mongoose.model('Program', programSchema);
 export const Partner = mongoose.model('Partner', partnerSchema);
 export const Ambassador = mongoose.model('Ambassador', ambassadorSchema);
+export const AmbassadorRequest = mongoose.model('AmbassadorRequest', ambassadorRequestSchema);
 export const AmbassadorAmplification = mongoose.model('AmbassadorAmplification', ambassadorAmplificationSchema);
 export const Beneficiary = mongoose.model('Beneficiary', beneficiarySchema);
 export const SocialPost = mongoose.model('SocialPost', socialPostSchema);

@@ -22,6 +22,8 @@ export const AUDIT_ACTIONS = {
   ADMIN_DELETE: 'admin.delete',
   ADMIN_USER_UPDATE: 'admin.user.update',
   ADMIN_OPPORTUNITY_MODERATE: 'admin.opportunity.moderate',
+  AMBASSADOR_REQUEST: 'ambassador.request',
+  ADMIN_AMBASSADOR_DECISION: 'admin.ambassador.decision',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',
@@ -53,6 +55,8 @@ export const AUDIT_RESOURCE_TYPES = {
   ARTICLE: 'article',
   SAVED_ITEM: 'saved_item',
   EVENT_ATTENDEE: 'event_attendee',
+  AMBASSADOR_REQUEST: 'ambassador_request',
+  CHANNEL_MESSAGE: 'channel_message',
 };
 
 /**

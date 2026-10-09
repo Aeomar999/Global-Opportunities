@@ -56,6 +56,19 @@ const channelPostSchema = new mongoose.Schema({
 // SEC-031: Text index for search on title, body
 channelPostSchema.index({ title: 'text', body: 'text' });
 
+// A persisted group-chat message (distinct from ChannelPost, which is a feed post).
+const channelMessageSchema = new mongoose.Schema({
+  channelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel', required: true, index: true },
+  senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  senderName: { type: String, required: true },
+  senderRole: { type: String, enum: ['seeker', 'hirer', 'admin'], required: true },
+  body: { type: String, required: true, maxlength: 2000 },
+  // null = an announcement; otherwise the announcement this message replies to.
+  parentId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChannelMessage', default: null, index: true },
+  allowReplies: { type: Boolean, default: false },
+}, { timestamps: true });
+channelMessageSchema.index({ channelId: 1, createdAt: -1 });
+
 const reportSchema = new mongoose.Schema({
   targetType: { type: String, required: true, index: true }, // e.g. post, profile
   targetLabel: { type: String, index: true },
@@ -72,5 +85,6 @@ reportSchema.index({ reason: 'text', details: 'text' });
 
 export const Channel = mongoose.model('Channel', channelSchema);
 export const ChannelPost = mongoose.model('ChannelPost', channelPostSchema);
+export const ChannelMessage = mongoose.model('ChannelMessage', channelMessageSchema);
 export const CommunityMembership = mongoose.model('CommunityMembership', communityMembershipSchema);
 export const Report = mongoose.model('Report', reportSchema);

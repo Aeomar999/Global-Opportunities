@@ -342,3 +342,11 @@ export const reauthLimiter = createRateLimiter({
   message: { error: { message: 'Too many password attempts, please try again after an hour' } },
   keyGenerator: (req) => String(req.auth?.sub || 'unknown'),
 });
+
+/** 30 chat messages per minute per IP — keeps a group chat from being flooded. */
+export const chatLimiter = createRateLimiter({
+  prefix: 'chat',
+  windowMs: 60 * 1000,
+  limit: 30,
+  message: { error: { message: 'You are sending messages too quickly, please slow down' } },
+});

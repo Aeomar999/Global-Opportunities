@@ -45,7 +45,7 @@ export const setAdminRefreshCookie = (res, token) => {
     secure: env.isProduction,
     sameSite: 'strict',
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    path: '/auth/admin',
+    path: '/',
   });
 };
 
@@ -63,7 +63,7 @@ export const clearAdminRefreshCookie = (res) => {
     httpOnly: true,
     secure: env.isProduction,
     sameSite: 'strict',
-    path: '/auth/admin',
+    path: '/',
   });
 };
 

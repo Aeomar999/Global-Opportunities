@@ -127,6 +127,16 @@ export const initSocket = (server) => {
   return io;
 };
 
+/** Emit to a room if realtime is running (a no-op in tests and scripts that never start Socket.io). */
+export const emitToRoom = (room, event, payload) => {
+  if (io) io.to(room).emit(event, payload);
+};
+
+/** Remove every socket of a user from a channel room (used when a member is removed or banned). */
+export const evictFromChannelRoom = (channelId, userId) => {
+  if (io && channelId && userId) io.in(`user_${userId}`).socketsLeave(`channel_${channelId}`);
+};
+
 export const getIO = () => {
   if (!io) {
     throw new Error('Socket.io is not initialized!');
