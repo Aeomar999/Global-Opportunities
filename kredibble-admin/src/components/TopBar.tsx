@@ -34,7 +34,7 @@ import { ROLES, type Role } from "@/config/roles";
 import { MAX_DEV_ROLES } from "@/config/dev-roles";
 import { findNavMatch } from "@/lib/nav";
 import type { NavCounts } from "@/lib/services/nav-counts";
-import { getUnreadCount, isMockMode } from "@/lib/services/mock-mode";
+import { getUnreadCount, isMockMode, setMockMode } from "@/lib/services/mock-mode";
 import { cn } from "@/lib/cn";
 import { Avatar } from "@/components/ui/Avatar";
 import { Breadcrumbs, type Crumb } from "@/components/ui/Breadcrumbs";
@@ -115,11 +115,24 @@ export function TopBar({ onOpenNav, counts }: TopBarProps) {
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-        {mock && (
-          <span className="hidden sm:inline-flex">
-            <TagPill>Mock data</TagPill>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={mock}
+          aria-label="Mock data"
+          data-testid="mock-data-toggle"
+          onClick={() => setMockMode(!mock)}
+          className="hidden h-10 items-center gap-2 rounded-control px-2 text-ink transition-colors duration-150 hover:bg-neutral-soft sm:inline-flex"
+        >
+          <span className="caption font-semibold">Mock data</span>
+          <span className="caption w-6 font-semibold">{mock ? "On" : "Off"}</span>
+          <span
+            aria-hidden="true"
+            className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-pill border transition-colors duration-150", mock ? "border-purple-600 bg-purple-600" : "border-input bg-neutral-soft")}
+          >
+            <span className={cn("inline-block size-4 rounded-pill shadow-card transition-transform duration-150", mock ? "translate-x-6 bg-white" : "translate-x-1 bg-muted")} />
           </span>
-        )}
+        </button>
         {/* Development only: which role(s) the app is being viewed as. Change them in the account menu.
             Hidden below 640px (it crowds the bar); the account menu names the current role(s) as text instead. */}
         {devSwitcher && (

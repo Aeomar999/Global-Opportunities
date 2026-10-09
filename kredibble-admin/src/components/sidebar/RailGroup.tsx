@@ -136,8 +136,8 @@ export function RailGroup({ group, pathname, counts, flyoutOpen, onFlyoutChange 
                       )}
                     >
                       <ChildIcon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-                      <span className="flex-1">{child.label}</span>
-                      {count !== undefined && count > 0 && <CountPill count={count} onDark label="pending" />}
+                      <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                      {count !== undefined && count > 0 && <span className="shrink-0"><CountPill count={count} onDark label="pending" /></span>}
                     </Link>
                   </li>
                 );

@@ -26,9 +26,11 @@ import { IconButton } from "@/components/ui/IconButton";
 import { KeyValueList } from "@/components/ui/KeyValueList";
 import { MiniStat } from "@/components/ui/MiniStat";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { RealChannelPage } from "@/components/community/RealChannelPage";
+import { isMockMode } from "@/lib/services/mock-mode";
 import { useToast } from "@/components/ui/Toast";
 
-export default function ChannelReviewPage() {
+function MockChannelReviewPage() {
   const { id } = useParams<{ id: string }>();
   const load = useCallback(() => Promise.resolve(channels.find((c) => c.id === id)), [id]);
   const { status, record: channel, setRecord, error, retry } = useDetailData(load, { collection: "channels" });
@@ -160,4 +162,9 @@ export default function ChannelReviewPage() {
       {dialog}
     </>
   );
+}
+
+/** Real mode shows the live channel (members and group chat); mock mode keeps the sample moderation view. */
+export default function ChannelReviewPage() {
+  return isMockMode() ? <MockChannelReviewPage /> : <RealChannelPage />;
 }
