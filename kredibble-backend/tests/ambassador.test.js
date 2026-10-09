@@ -256,3 +256,14 @@ describe('channel list for members', () => {
     expect(after.body.data.find((c) => c.id === String(publicChannel._id)).followed).toBe(true);
   });
 });
+
+describe('ambassador request indexes', () => {
+  it('enforces one pending request per user in the database itself', async () => {
+    await AmbassadorRequest.init();
+    const user = await createSeeker();
+    const doc = { userId: user._id, role: 'seeker', name: 'Ama Mensah', email: 'ama@example.com' };
+    await AmbassadorRequest.create({ ...doc, status: 'pending' });
+    await expect(AmbassadorRequest.create({ ...doc, status: 'pending' })).rejects.toMatchObject({ code: 11000 });
+    await expect(AmbassadorRequest.create({ ...doc, status: 'rejected' })).resolves.toBeTruthy();
+  });
+});

@@ -134,7 +134,7 @@ const ambassadorSchema = new mongoose.Schema({
 // A signed-in user's request to become an ambassador. The snapshot is built by the server from the
 // user's own records, never from the request body, so the review queue shows trustworthy details.
 const ambassadorRequestSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   role: { type: String, enum: ['seeker', 'hirer'], required: true },
   name: { type: String, required: true },
   email: { type: String, required: true, lowercase: true, trim: true },
@@ -151,8 +151,11 @@ const ambassadorRequestSchema = new mongoose.Schema({
   channelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Channel' },
   ambassadorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ambassador' },
 }, { timestamps: true });
-// One open request per user at a time.
+// One open request per user at a time. (A second `index: true` on userId would clash with this one and silently
+// stop the unique rule from being created, so the field itself carries no index.)
 ambassadorRequestSchema.index({ userId: 1 }, { unique: true, partialFilterExpression: { status: 'pending' } });
+// Looking up a user's latest request.
+ambassadorRequestSchema.index({ userId: 1, createdAt: -1 });
 ambassadorSchema.virtual('name')
   .get(function () { return this.fullName; })
   .set(function (value) { this.fullName = value; });

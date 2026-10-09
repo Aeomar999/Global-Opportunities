@@ -721,7 +721,8 @@ const LIST_PAGES = [
   { path: '/opportunities', title: 'Opportunities Queue', mockOnly: true },
   { path: '/seekers', title: 'Seekers Directory' },
   { path: '/hirers', title: 'Hirers Directory' },
-  { path: '/community', title: 'Community Channels' },
+  // Channels come from the real API outside mock mode, and the e2e API has none, so rows only exist in mock mode.
+  { path: '/community', title: 'Community Channels', mockOnly: true },
   { path: '/reports', title: 'Reports Queue' },
   { path: '/content/articles', title: 'Career Resources' },
   { path: '/events', title: 'Events' },
@@ -734,8 +735,8 @@ test.describe('List pages: smoke', () => {
 
   for (const { path, title, mockOnly, detailBase = path } of LIST_PAGES) {
     test(`${title}: renders, logs no console errors, and a row opens its detail page`, async ({ page }) => {
-      // The two queues call the real API outside mock mode (and then show an inline error instead of rows).
-      test.skip(!!mockOnly && !MOCK_RUN, 'the queues need mock mode for rows');
+      // The queues and Channels call the real API outside mock mode (the queues then show an inline error instead of rows).
+      test.skip(!!mockOnly && !MOCK_RUN, 'these pages need mock mode for rows');
       const problems: string[] = [];
       page.on('pageerror', (error) => problems.push(error.message));
       page.on('console', (message) => {
@@ -823,6 +824,7 @@ test.describe('List pages: template', () => {
   });
 
   test('a flagged channel shows a flag icon and the word "Flagged", never an emoji', async ({ page }) => {
+    test.skip(!MOCK_RUN, 'the sample channels only exist in mock mode');
     await page.goto(`${BASE_URL}/community`);
     const flagged = page.locator('main tbody tr').filter({ hasText: 'Flagged' });
     await expect(flagged).toHaveCount(1);
@@ -902,6 +904,7 @@ test.describe('Truncated cells', () => {
   test.use({ viewport: { width: 1024, height: 900 } });
 
   test('a cut-off title has a title attribute and shows the full text in the tooltip on hover and on focus', async ({ page }) => {
+    test.skip(!MOCK_RUN, 'the sample channels only exist in mock mode');
     await page.context().addCookies([{ name: 'sidebar', value: 'expanded', url: BASE_URL }]);
     await signedIn(page);
     await page.goto(`${BASE_URL}/community`);
@@ -923,6 +926,7 @@ test.describe('Truncated cells', () => {
   });
 
   test('text that fits has no title, no tooltip and is not a tab stop', async ({ page }) => {
+    test.skip(!MOCK_RUN, 'the sample channels only exist in mock mode');
     await signedIn(page);
     await page.goto(`${BASE_URL}/community`);
     const short = page.getByRole('link', { name: 'Google Tech Circle' });
@@ -1846,7 +1850,7 @@ const AUDIT_ROUTES: { path: string; mockOnly?: string }[] = [
   { path: '/hirers' },
   { path: '/hirers/hirer-1', mockOnly: 'hirer-1 is a mock record id' },
   { path: '/community' },
-  { path: '/community/ch-1' },
+  { path: '/community/ch-1', mockOnly: 'the channel comes from the mock records' },
   { path: '/content/articles' },
   { path: '/content/articles/article-1' },
   { path: '/content/articles/new' },

@@ -117,8 +117,7 @@ export function TopBar({ onOpenNav, counts }: TopBarProps) {
       <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
         <button
           type="button"
-          role="switch"
-          aria-checked={mock}
+          aria-pressed={mock}
           aria-label="Mock data"
           data-testid="mock-data-toggle"
           onClick={() => setMockMode(!mock)}
