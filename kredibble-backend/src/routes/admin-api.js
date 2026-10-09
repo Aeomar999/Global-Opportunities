@@ -29,7 +29,6 @@ import {
   CANONICAL_SOCIAL_PLATFORMS,
   SOCIAL_PLATFORM_LABELS,
   normalizeSocialPlatform,
-  SOCIAL_POST_STATUSES,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
