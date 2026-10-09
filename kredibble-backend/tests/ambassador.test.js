@@ -46,6 +46,28 @@ describe('ambassador requests (user side)', () => {
     expect((await request(app).post(api('/ambassador-requests')).send({ motivation: 'I would love to represent Kredibble at my campus' })).status).toBe(401);
     expect((await request(app).post(api('/ambassador-requests')).set(bearer(admin)).send({ motivation: 'I would love to represent Kredibble at my campus' })).status).toBe(403);
   });
+
+  it('detects existing ambassador by email when linkedUserId is unset and blocks duplicate application', async () => {
+    const user = await createSeeker('unlinked.ambassador@example.com');
+    await Ambassador.create({
+      fullName: 'Unlinked Ambassador',
+      email: 'unlinked.ambassador@example.com',
+      memberType: 'graduate',
+      status: 'active',
+      referralCode: 'GOD-7K2M4Q',
+    });
+
+    const res = await request(app)
+      .post(api('/ambassador-requests'))
+      .set(bearer(user))
+      .send({ motivation: 'I would love to represent Kredibble at my campus' });
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toMatch(/already a Kredibble ambassador/i);
+
+    const meRes = await request(app).get(api('/ambassador-requests/me')).set(bearer(user));
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.data.isAmbassador).toBe(true);
+  });
 });
 
 describe('ambassador requests (admin side)', () => {
@@ -121,6 +143,40 @@ describe('ambassador requests (admin side)', () => {
     expect(listed.status).toBe(200);
     expect(listed.body.data).toHaveLength(1);
     expect(asUser.status).toBe(401);
+  });
+
+  it('links pre-existing ambassador by email on approval without creating a duplicate record or minting a new referral code', async () => {
+    const admin = await createAdmin();
+    const user = await createSeeker('manual.lead@example.com');
+    // Pre-create ambassador record manually (e.g. via network registry) without linkedUserId
+    const existing = await Ambassador.create({
+      fullName: 'Manual Lead',
+      email: 'manual.lead@example.com',
+      memberType: 'staff',
+      status: 'applicant',
+      referralCode: 'GOD-9XY3Z2',
+    });
+
+    const pending = (await request(app)
+      .post(api('/ambassador-requests'))
+      .set(bearer(user))
+      .send({ motivation: 'I want to link my mobile account to my ambassador role' })).body.data;
+
+    const approved = await request(app)
+      .post(api(`/admin/ambassador-requests/${pending.id}/approve`))
+      .set('Cookie', adminCookie(admin))
+      .send({});
+
+    expect(approved.status).toBe(200);
+    // Must NOT have created a second document
+    expect(await Ambassador.countDocuments({ email: 'manual.lead@example.com' })).toBe(1);
+
+    const linked = await Ambassador.findOne({ email: 'manual.lead@example.com' });
+    expect(String(linked._id)).toBe(String(existing._id));
+    expect(String(linked.linkedUserId)).toBe(String(user._id));
+    expect(linked.referralCode).toBe('GOD-9XY3Z2'); // Kept original referral code
+    expect(linked.memberType).toBe('staff'); // Preserved existing memberType
+    expect(linked.status).toBe('onboarding');
   });
 });
 

@@ -55,13 +55,27 @@ const buildSnapshot = async (user) => {
   };
 };
 
-const ownAmbassador = (userId) => Ambassador.findOne({ linkedUserId: userId, status: { $in: ['onboarding', 'active'] } }).lean();
+const ownAmbassador = async (userOrId) => {
+  if (!userOrId) return null;
+  const user = typeof userOrId === 'object' && userOrId._id
+    ? userOrId
+    : await User.findById(userOrId).select('email').lean();
+  if (!user) return null;
+  const email = user.email ? String(user.email).trim().toLowerCase() : undefined;
+  return Ambassador.findOne({
+    $or: [
+      { linkedUserId: user._id },
+      ...(email ? [{ email }] : []),
+    ],
+    status: { $in: ['onboarding', 'active'] },
+  }).lean();
+};
 
 ambassadorRouter.post('/', requireAuth, validate(createAmbassadorRequestSchema), asyncHandler(async (req, res) => {
   const user = await User.findById(req.auth.sub);
   if (!user || !['seeker', 'hirer'].includes(user.role)) throw new ApiError(403, 'Only seekers and hirers can apply to become an ambassador');
 
-  if (await ownAmbassador(user._id)) throw new ApiError(409, 'You are already a Kredibble ambassador');
+  if (await ownAmbassador(user)) throw new ApiError(409, 'You are already a Kredibble ambassador');
   if (await AmbassadorRequest.exists({ userId: user._id, status: 'pending' })) {
     throw new ApiError(409, 'You already have a pending ambassador request');
   }
