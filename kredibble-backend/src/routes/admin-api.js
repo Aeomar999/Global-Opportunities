@@ -33,6 +33,7 @@ import {
   ALLOWED_TESTIMONIAL_TRANSITIONS,
   TESTIMONIAL_ACTIONS_MAP,
   WebsiteMonth,
+  MonthlyReport,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
@@ -70,6 +71,8 @@ import {
   opportunityUpdateSchema,
   websiteMonthInputSchema,
   websiteAudienceQuerySchema,
+  monthlyReportCreateSchema,
+  monthlyReportQuerySchema,
 } from '../schemas/admin.js';
 import { syncWebsiteAudienceFromGa4 } from '../lib/ga4-sync.js';
 import { validate } from '../middleware/validate.js';
@@ -2668,7 +2671,7 @@ const metricStatus = (value, target, thresholds = {}) => {
 
 const dashboardMetrics = async (month) => {
   const { start, end } = monthBounds(month);
-  const [opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified, beneficiariesAdded, social, applications, websiteAudienceDoc] = await Promise.all([
+  const [opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified, beneficiariesAdded, social, applications, websiteAudienceDoc, monthlyReportsDocCount] = await Promise.all([
     Opportunity.countDocuments({
       vetted: true,
       $or: [
@@ -2751,11 +2754,13 @@ const dashboardMetrics = async (month) => {
     ]),
     OpportunityEngagement.countDocuments({ event: 'application', createdAt: { $gte: start, $lt: end } }),
     WebsiteMonth.findOne({ month }),
+    MonthlyReport.countDocuments({ generatedAt: { $gte: start, $lt: end } }),
   ]);
   const publishedPosts = social[0]?.posts || 0;
   const reachVal = social[0]?.reach || 0;
   const engagementVal = social[0]?.engagement || 0;
   const websiteViews = websiteAudienceDoc?.views || 0;
+  const monthlyReportsCount = monthlyReportsDocCount || 0;
   return {
     opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified,
     beneficiariesAdded,
@@ -2768,6 +2773,8 @@ const dashboardMetrics = async (month) => {
     opportunityApplications: applications,
     websiteViews,
     website_views: websiteViews,
+    monthlyReports: monthlyReportsCount,
+    monthly_reports: monthlyReportsCount,
   };
 };
 
@@ -3216,33 +3223,158 @@ adminApiRouter.delete('/testimonials/:id', requireAdminOrStaffAuth, requireScree
   itemResponse(res, { deleted: true, id: req.params.id });
 }));
 
-adminApiRouter.get('/reports/monthly', requireAdminOrStaffAuth, requirePortalRoles(...ALL_PORTAL_ROLES), asyncHandler(async (req, res) => {
-  const { month } = monthBounds(req.query.month);
-  const audience = req.query.audience === 'partner' ? 'partner' : 'internal';
+const formatMonthLabel = (monthStr) => {
+  try {
+    const [year, month] = monthStr.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, 1));
+    return date.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  } catch {
+    return monthStr;
+  }
+};
+
+const buildPartnerReport = async (month, now = new Date()) => {
   const { start, end } = monthBounds(month);
   const previousDate = new Date(start);
   previousDate.setUTCMonth(previousDate.getUTCMonth() - 1);
   const previousMonth = previousDate.toISOString().slice(0, 7);
-  const [metrics, pipeline, networkSize, social, targets, recordsBySource, topFive, activityCount, previousMetrics, websiteAudienceDoc] = await Promise.all([
-    dashboardMetrics(month), partnerPipelineHealth(month), Ambassador.countDocuments({ status: 'active' }), SocialPost.aggregate([{ $match: { status: 'published', postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } }]),
-    MonthlyTarget.find({ month }),
-    Beneficiary.aggregate([{ $match: { createdAt: { $gte: start, $lt: end } } }, { $group: { _id: '$sourceType', count: { $sum: 1 } } }]),
-    leaderboardEntries(month, 5),
-    AmbassadorAmplification.distinct('ambassadorId', { createdAt: { $gte: start, $lt: end } }),
+  const previousBounds = monthBounds(previousMonth);
+
+  const [
+    metrics,
+    previousMetrics,
+    targets,
+    pipeline,
+    networkSize,
+    socialAgg,
+    recordsBySource,
+    activityCount,
+    websiteAudienceDoc,
+    previousWebsiteAudienceDoc,
+    socialPlatformAgg,
+    audienceTrendDocs,
+    newAmbassadorsCount,
+    prevNewAmbassadorsCount,
+  ] = await Promise.all([
+    dashboardMetrics(month),
     dashboardMetrics(previousMonth),
+    MonthlyTarget.find({ month }),
+    partnerPipelineHealth(month),
+    Ambassador.countDocuments({ status: 'active' }),
+    SocialPost.aggregate([
+      { $match: { status: 'published', postedAt: { $gte: start, $lt: end } } },
+      { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } },
+    ]),
+    Beneficiary.aggregate([
+      { $match: { createdAt: { $gte: start, $lt: end } } },
+      { $group: { _id: '$sourceType', count: { $sum: 1 } } },
+    ]),
+    AmbassadorAmplification.distinct('ambassadorId', { createdAt: { $gte: start, $lt: end } }),
     WebsiteMonth.findOne({ month }),
+    WebsiteMonth.findOne({ month: previousMonth }),
+    SocialPost.aggregate([
+      {
+        $match: {
+          status: 'published',
+          $or: [
+            { postedAt: { $gte: start, $lt: end } },
+            { postedAtDate: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: '$platform',
+          posts: { $sum: 1 },
+          reach: { $sum: '$reach' },
+          engagement: { $sum: '$engagement' },
+        },
+      },
+      { $sort: { reach: -1, posts: -1 } },
+    ]),
+    WebsiteMonth.find({ month: { $lte: month } }).sort({ month: -1 }).limit(6),
+    Ambassador.countDocuments({
+      status: { $ne: 'applicant' },
+      $or: [
+        { joinedAt: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) } },
+        { joinedAt: { $gte: start, $lt: end } },
+        { createdAt: { $gte: start, $lt: end } },
+      ],
+    }),
+    Ambassador.countDocuments({
+      status: { $ne: 'applicant' },
+      $or: [
+        { joinedAt: { $gte: previousBounds.start.toISOString().slice(0, 10), $lt: previousBounds.end.toISOString().slice(0, 10) } },
+        { joinedAt: { $gte: previousBounds.start, $lt: previousBounds.end } },
+        { createdAt: { $gte: previousBounds.start, $lt: previousBounds.end } },
+      ],
+    }),
   ]);
+
   const targetsByMetric = new Map(targets.map((target) => [target.metric, target]));
   const percentGrowth = (value, prior) => prior ? Math.round(((value - prior) / prior) * 100) : null;
-  const report = {
+
+  const nowMonth = now.toISOString().slice(0, 7);
+  const isCurrentMonth = month === nowMonth;
+  const currentMonthDays = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+  const elapsedDays = isCurrentMonth ? Math.min(now.getUTCDate(), currentMonthDays) : currentMonthDays;
+
+  const prevMonthDays = new Date(Date.UTC(Number(previousMonth.slice(0, 4)), Number(previousMonth.slice(5, 7)), 0)).getUTCDate();
+  const prevShare = isCurrentMonth ? Math.min(1, elapsedDays / prevMonthDays) : 1;
+  const prevDaysCount = Math.round(prevMonthDays * prevShare);
+
+  const dailyFirstVisitsSum = Math.round((websiteAudienceDoc?.dailyFirstVisits || 0) * elapsedDays);
+  const prevDailyFirstVisitsSum = previousWebsiteAudienceDoc ? Math.round((previousWebsiteAudienceDoc.dailyFirstVisits || 0) * prevDaysCount) : null;
+
+  const dailyVisitorsSum = Math.round((websiteAudienceDoc?.dailyVisitors || 0) * elapsedDays);
+  const prevDailyVisitorsSum = previousWebsiteAudienceDoc ? Math.round((previousWebsiteAudienceDoc.dailyVisitors || 0) * prevDaysCount) : null;
+
+  const againstLabel = isCurrentMonth ? 'the same period last month, estimated' : formatMonthLabel(previousMonth);
+
+  const computeDelta = (val, prevVal) => {
+    if (prevVal === null || prevVal === undefined) return { kind: 'none', text: '—', percent: null };
+    if (prevVal === 0) return { kind: 'na', text: 'n/a', percent: null };
+    const pct = Math.round(((val - prevVal) / prevVal) * 100);
+    const sign = pct > 0 ? '+' : '';
+    const kind = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+    return { kind, text: `${sign}${pct}% vs ${againstLabel}`, percent: pct };
+  };
+
+  const partnerMetrics = [
+    { id: 'website_views', label: 'Website views', description: 'Pages opened across the Desk website', value: metrics.website_views, previous: previousMetrics.website_views !== null ? Math.round(previousMetrics.website_views * prevShare) : null, delta: computeDelta(metrics.website_views, previousMetrics.website_views !== null ? Math.round(previousMetrics.website_views * prevShare) : null) },
+    { id: 'daily_first_visits', label: 'Daily first visits (sum)', description: 'Daily counts; returning people can appear again on another day', value: dailyFirstVisitsSum, previous: prevDailyFirstVisitsSum, delta: computeDelta(dailyFirstVisitsSum, prevDailyFirstVisitsSum) },
+    { id: 'daily_visitors', label: 'Daily visitors (sum)', description: 'Visitor-days, not unique monthly people; cached page loads may be missed', value: dailyVisitorsSum, previous: prevDailyVisitorsSum, delta: computeDelta(dailyVisitorsSum, prevDailyVisitorsSum) },
+    { id: 'social_reach', label: 'Social reach', description: 'People reached across our channels', value: metrics.social_reach, previous: previousMetrics.social_reach !== null ? Math.round(previousMetrics.social_reach * prevShare) : null, delta: computeDelta(metrics.social_reach, previousMetrics.social_reach !== null ? Math.round(previousMetrics.social_reach * prevShare) : null) },
+    { id: 'social_engagement', label: 'Social engagement', description: 'Likes, shares, comments and saves', value: metrics.social_engagement, previous: previousMetrics.social_engagement !== null ? Math.round(previousMetrics.social_engagement * prevShare) : null, delta: computeDelta(metrics.social_engagement, previousMetrics.social_engagement !== null ? Math.round(previousMetrics.social_engagement * prevShare) : null) },
+    { id: 'posts_published', label: 'Posts published', description: 'Across all social channels', value: metrics.posts_published, previous: Math.round(previousMetrics.posts_published * prevShare), delta: computeDelta(metrics.posts_published, Math.round(previousMetrics.posts_published * prevShare)) },
+    { id: 'new_ambassadors', label: 'New ambassadors', description: 'Young people who joined the network', value: newAmbassadorsCount, previous: Math.round(prevNewAmbassadorsCount * prevShare), delta: computeDelta(newAmbassadorsCount, Math.round(prevNewAmbassadorsCount * prevShare)) },
+    { id: 'new_partners', label: 'New partners', description: 'Organisations that came on board', value: metrics.partnersClosed, previous: Math.round(previousMetrics.partnersClosed * prevShare), delta: computeDelta(metrics.partnersClosed, Math.round(previousMetrics.partnersClosed * prevShare)) },
+    { id: 'opportunities_published', label: 'Opportunities published', description: 'Scholarships, grants and roles shared publicly', value: metrics.opportunitiesPublished, previous: Math.round(previousMetrics.opportunitiesPublished * prevShare), delta: computeDelta(metrics.opportunitiesPublished, Math.round(previousMetrics.opportunitiesPublished * prevShare)) },
+    { id: 'projects_organised', label: 'Projects organised', description: 'Trainings, workshops and projects GOD ran', value: metrics.programsDelivered, previous: Math.round(previousMetrics.programsDelivered * prevShare), delta: computeDelta(metrics.programsDelivered, Math.round(previousMetrics.programsDelivered * prevShare)) },
+  ];
+
+  const trend = [...audienceTrendDocs].reverse().map((doc) => ({ month: doc.month, value: doc.views }));
+  const channels = socialPlatformAgg.map((item) => ({
+    channel: item._id,
+    platform: item._id,
+    posts: item.posts,
+    reach: item.reach,
+    engagement: item.engagement,
+  }));
+
+  return {
     month,
-    audience,
+    audience: 'partner',
+    audienceTrend: trend,
+    trend,
+    metrics: partnerMetrics,
+    channels,
     kpis: targetProgress(metrics, targets),
     pipeline,
     databasePace: await databasePace(month, targetsByMetric),
     recordsBySource: recordsBySource.map((item) => ({ sourceType: item._id, count: item.count })),
     ambassadorNetwork: { size: networkSize, activityRate: networkSize ? Math.round((activityCount.length / networkSize) * 100) : 0 },
-    social: social[0] || { reach: 0, engagement: 0 },
+    social: socialAgg[0] || { reach: 0, engagement: 0 },
     websiteAudience: websiteAudienceDoc ? toClientObject(websiteAudienceDoc) : null,
     monthOverMonthGrowth: {
       opportunitiesPublished: percentGrowth(metrics.opportunitiesPublished, previousMetrics.opportunitiesPublished),
@@ -3251,12 +3383,204 @@ adminApiRouter.get('/reports/monthly', requireAdminOrStaffAuth, requirePortalRol
       websiteViews: percentGrowth(metrics.websiteViews, previousMetrics.websiteViews),
     },
   };
-  if (audience === 'internal') {
-    const staffMembers = await StaffMember.find({ status: 'active' });
-    report.topAmbassadors = topFive;
-    report.teamScorecards = await Promise.all(staffMembers.map((staff) => scorecardForStaff(staff, month, targetsByMetric)));
-  }
+};
+
+const buildTeamReport = async (month, now = new Date()) => {
+  const { start, end } = monthBounds(month);
+  const previousDate = new Date(start);
+  previousDate.setUTCMonth(previousDate.getUTCMonth() - 1);
+  const previousMonth = previousDate.toISOString().slice(0, 7);
+
+  const [
+    metrics,
+    previousMetrics,
+    targets,
+    pipeline,
+    networkSize,
+    socialAgg,
+    recordsBySource,
+    topFive,
+    activityCount,
+    websiteAudienceDoc,
+    socialPlatformAgg,
+    staffMembers,
+  ] = await Promise.all([
+    dashboardMetrics(month),
+    dashboardMetrics(previousMonth),
+    MonthlyTarget.find({ month }),
+    partnerPipelineHealth(month),
+    Ambassador.countDocuments({ status: 'active' }),
+    SocialPost.aggregate([
+      { $match: { status: 'published', postedAt: { $gte: start, $lt: end } } },
+      { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } },
+    ]),
+    Beneficiary.aggregate([
+      { $match: { createdAt: { $gte: start, $lt: end } } },
+      { $group: { _id: '$sourceType', count: { $sum: 1 } } },
+    ]),
+    leaderboardEntries(month, 5),
+    AmbassadorAmplification.distinct('ambassadorId', { createdAt: { $gte: start, $lt: end } }),
+    WebsiteMonth.findOne({ month }),
+    SocialPost.aggregate([
+      {
+        $match: {
+          status: 'published',
+          $or: [
+            { postedAt: { $gte: start, $lt: end } },
+            { postedAtDate: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) } },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: '$platform',
+          posts: { $sum: 1 },
+          reach: { $sum: '$reach' },
+          engagement: { $sum: '$engagement' },
+        },
+      },
+      { $sort: { reach: -1, posts: -1 } },
+    ]),
+    StaffMember.find({ status: 'active' }),
+  ]);
+
+  const targetsByMetric = new Map(targets.map((target) => [target.metric, target]));
+  const percentGrowth = (value, prior) => prior ? Math.round(((value - prior) / prior) * 100) : null;
+  const nowMonth = now.toISOString().slice(0, 7);
+  const isCurrentMonth = month === nowMonth;
+  const tooEarly = isCurrentMonth && now.getUTCDate() < 5;
+
+  const pipelineTarget = targetsByMetric.get('partners_onboarded')?.target || 0;
+  const pace = await databasePace(month, targetsByMetric);
+  const teamScorecards = await Promise.all(staffMembers.map((staff) => scorecardForStaff(staff, month, targetsByMetric)));
+
+  return {
+    month,
+    audience: 'team',
+    kpis: targetProgress(metrics, targets),
+    pipeline,
+    pipelineTarget,
+    pace,
+    databasePace: pace,
+    sources: recordsBySource.map((item) => ({ sourceType: item._id, count: item.count })),
+    recordsBySource: recordsBySource.map((item) => ({ sourceType: item._id, count: item.count })),
+    network: {
+      size: networkSize,
+      active: activityCount.length,
+      activityRate: networkSize ? Math.round((activityCount.length / networkSize) * 100) : 0,
+    },
+    ambassadorNetwork: {
+      size: networkSize,
+      activityRate: networkSize ? Math.round((activityCount.length / networkSize) * 100) : 0,
+    },
+    top: topFive,
+    topAmbassadors: topFive,
+    social: {
+      reach: socialAgg[0]?.reach || 0,
+      engagement: socialAgg[0]?.engagement || 0,
+      posts: metrics.posts_published,
+      platforms: socialPlatformAgg.map((item) => ({
+        channel: item._id,
+        platform: item._id,
+        posts: item.posts,
+        reach: item.reach,
+        engagement: item.engagement,
+      })),
+    },
+    people: teamScorecards,
+    teamScorecards,
+    tooEarly,
+    websiteAudience: websiteAudienceDoc ? toClientObject(websiteAudienceDoc) : null,
+    monthOverMonthGrowth: {
+      opportunitiesPublished: percentGrowth(metrics.opportunitiesPublished, previousMetrics.opportunitiesPublished),
+      beneficiariesAdded: percentGrowth(metrics.beneficiariesAdded, previousMetrics.beneficiariesAdded),
+      socialReach: percentGrowth(metrics.socialReach, previousMetrics.socialReach),
+      websiteViews: percentGrowth(metrics.websiteViews, previousMetrics.websiteViews),
+    },
+  };
+};
+
+// BE-013: Monthly reports endpoints
+adminApiRouter.get('/reports/partner', requireAdminOrStaffAuth, requireScreen('monthly_report', 'view'), asyncHandler(async (req, res) => {
+  const { month } = monthBounds(req.query.month);
+  const report = await buildPartnerReport(month);
   itemResponse(res, report);
+}));
+
+adminApiRouter.get('/reports/team', requireAdminOrStaffAuth, requirePortalRoles('super_admin', 'desk_lead', 'Super Admin', 'Desk Lead'), asyncHandler(async (req, res) => {
+  const { month } = monthBounds(req.query.month);
+  const report = await buildTeamReport(month);
+  itemResponse(res, report);
+}));
+
+adminApiRouter.get('/reports/monthly', requireAdminOrStaffAuth, requirePortalRoles(...ALL_PORTAL_ROLES), asyncHandler(async (req, res) => {
+  const { month } = monthBounds(req.query.month);
+  const audience = req.query.audience === 'partner' ? 'partner' : 'internal';
+  if (audience === 'partner') {
+    const report = await buildPartnerReport(month);
+    return itemResponse(res, report);
+  }
+  const report = await buildTeamReport(month);
+  itemResponse(res, report);
+}));
+
+adminApiRouter.post('/monthly-reports', requireAdminOrStaffAuth, requireScreen('monthly_report', 'view'), validate(monthlyReportCreateSchema), asyncHandler(async (req, res) => {
+  const { reportMonth, view } = req.body;
+  const now = req.body.generatedAt ? new Date(req.body.generatedAt) : new Date();
+
+  const genYear = now.getUTCFullYear();
+  const genMonth = now.getUTCMonth();
+  const startOfCalendarMonth = new Date(Date.UTC(genYear, genMonth, 1));
+  const endOfCalendarMonth = new Date(Date.UTC(genYear, genMonth + 1, 1));
+
+  const existing = await MonthlyReport.findOne({
+    reportMonth,
+    view,
+    generatedAt: { $gte: startOfCalendarMonth, $lt: endOfCalendarMonth },
+  });
+
+  if (existing) {
+    return itemResponse(res, toClientObject(existing), 200);
+  }
+
+  const report = await MonthlyReport.create({
+    reportMonth,
+    view,
+    generatedAt: now,
+    generatedBy: req.auth.sub,
+    generatedByName: req.auth.name || req.auth.email || 'Admin',
+  });
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.MONTHLY_REPORT_GENERATE,
+    resourceType: AUDIT_RESOURCE_TYPES.MONTHLY_REPORT,
+    resourceId: report._id,
+    outcome: 'success',
+    metadata: {
+      reportMonth,
+      view,
+      generatedAt: report.generatedAt.toISOString(),
+    },
+  });
+
+  res.status(201).json({ data: toClientObject(report) });
+}));
+
+adminApiRouter.get('/monthly-reports', requireAdminOrStaffAuth, requireScreen('monthly_report', 'view'), validate(monthlyReportQuerySchema), asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.reportMonth) {
+    filter.reportMonth = req.query.reportMonth;
+  }
+  if (req.query.view) {
+    filter.view = req.query.view;
+  }
+  if (req.query.month) {
+    const { start, end } = monthBounds(req.query.month);
+    filter.generatedAt = { $gte: start, $lt: end };
+  }
+  const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+  const records = await MonthlyReport.find(filter).sort({ generatedAt: -1 }).limit(limit);
+  listResponse(res, records.map(toClientObject));
 }));
 
 adminApiRouter.get('/roles-permissions', requireAdminOrStaffAuth, requireScreen('roles_permissions', 'view'), asyncHandler(async (req, res) => {
