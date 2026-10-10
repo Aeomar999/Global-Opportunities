@@ -55,6 +55,7 @@ export const AUDIT_ACTIONS = {
   WEBSITE_AUDIENCE_UPDATE: 'website_audience.update',
   WEBSITE_AUDIENCE_SYNC: 'website_audience.sync',
   MONTHLY_REPORT_GENERATE: 'monthly_report.generate',
+  SETTINGS_UPDATE: 'settings.update',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',

@@ -37,6 +37,13 @@ const userSchema = new mongoose.Schema({
   pushToken: { type: String },
   pushPlatform: { type: String, enum: ['ios', 'android', 'web', 'other'] },
   pushTokenUpdatedAt: { type: Date },
+  // BE-016: Notification preferences
+  notificationPreferences: {
+    digest: { type: Boolean, default: true },
+    verifications: { type: Boolean, default: true },
+    reports: { type: Boolean, default: true },
+    testimonials: { type: Boolean, default: false },
+  },
 }, { timestamps: true });
 
 // Virtuals to mimic the previous Prisma/Native structure for the frontend

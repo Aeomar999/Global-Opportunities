@@ -26,7 +26,17 @@ import { currentMonth, kpiStatus, kpiTarget, kpiThresholds, monthsBefore } from 
 import { PARTNER_STAGES, PARTNER_STAGE_LABELS, type KpiThresholds, type MonthKey, type PartnerStage, type TargetChange, type ThresholdChange } from "@/lib/mock-entities";
 import { getMockCollection, getPartnerStageLabels, setMockCollection, setPartnerStageLabels } from "@/lib/mock-store";
 import { currentStaffMember, todayIsoDate } from "@/lib/services/listings";
-import { saveTargetsApi, saveThresholdsApi, updatePipelineStagesApi, hasAdminSession } from "@/lib/api";
+import {
+  saveTargetsApi,
+  saveThresholdsApi,
+  updatePipelineStagesApi,
+  hasAdminSession,
+  getIntegrationsSettingsApi,
+  updateIntegrationApi,
+  testIntegrationApi,
+  updateAccountProfileApi,
+  changePasswordApi,
+} from "@/lib/api";
 import { isMockMode } from "@/lib/services/mock-mode";
 
 // ---- targets ----------------------------------------------------------------------------------------------------------
@@ -336,27 +346,69 @@ export const subscribeIntegrations = (listener: () => void) => {
 export const getIntegrationsVersion = () => integrationVersion;
 export const getIntegration = (kind: IntegrationKind): IntegrationStatus => integrations[kind];
 
+/** Refreshes integration statuses from backend API in real mode. */
+export async function refreshIntegrations(): Promise<void> {
+  if (typeof window === "undefined" || (isMockMode() && !hasAdminSession())) return;
+  try {
+    const data = await getIntegrationsSettingsApi();
+    if (data.wordpress) {
+      integrations.wordpress = {
+        saved: Boolean(data.wordpress.saved),
+        tail: data.wordpress.tail || "",
+        identifier: data.wordpress.identifier || "",
+      };
+    }
+    if (data.analytics) {
+      integrations.analytics = {
+        saved: Boolean(data.analytics.saved),
+        tail: data.analytics.tail || "",
+        identifier: data.analytics.identifier || "",
+      };
+    }
+    emitIntegrations();
+  } catch (err) {
+    console.warn("Could not load integrations from backend API", err);
+  }
+}
+
 /** The masked tail as the screen shows it: "••••3f9a". */
 export const maskedTail = (tail: string): string => `••••${tail}`;
 
 /**
  * Saves a credential. Returns nothing: the value is read here, only its last four characters are kept, and everything else is forgotten when
- * this function returns. (A credential of fewer than four characters keeps what it has.) TODO(backend): send it to the server, which stores it.
+ * this function returns. (A credential of fewer than four characters keeps what it has.) Persists to backend API when connected.
  */
 export function saveCredential(kind: IntegrationKind, secret: string): void {
   const tail = secret.slice(-4);
   integrations[kind] = { ...integrations[kind], saved: secret.length > 0, tail };
   emitIntegrations();
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updateIntegrationApi(kind, { secret }).catch((err) => {
+      console.warn(`Could not persist ${kind} credential to backend API`, err);
+    });
+  }
 }
 
 /** Saves the non-secret setting (the site address or the property ID). */
 export function saveIdentifier(kind: IntegrationKind, identifier: string): void {
   integrations[kind] = { ...integrations[kind], identifier: identifier.trim() };
   emitIntegrations();
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updateIntegrationApi(kind, { identifier: identifier.trim() }).catch((err) => {
+      console.warn(`Could not persist ${kind} identifier to backend API`, err);
+    });
+  }
 }
 
-/** A mock "Test connection": succeeds after 800 ms. It takes no value and sends nothing anywhere. TODO(backend): ask the server to test it. */
-export function testConnection(kind: IntegrationKind): Promise<{ ok: true; kind: IntegrationKind }> {
+/** Tests integration connection: calls backend in real mode, or mocks after 800 ms. */
+export function testConnection(kind: IntegrationKind): Promise<{ ok: boolean; kind: IntegrationKind }> {
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    return testIntegrationApi(kind)
+      .then((res) => ({ ok: Boolean(res.success), kind }))
+      .catch(() => ({ ok: false, kind }));
+  }
   return new Promise((resolve) => setTimeout(() => resolve({ ok: true, kind }), 800));
 }
 
@@ -410,13 +462,19 @@ export const currentProfile = (): { id: string; name: string; email: string } | 
   return person ? { id: person.id, name: person.name, email: person.email } : undefined;
 };
 
-/** Saves the person's name. A mock: it updates the team record. TODO(backend): persist this change. */
+/** Saves the person's name. Persists to team record and backend API. */
 export function saveProfileName(id: string, name: string): void {
   setMockCollection(
     "staff",
     getMockCollection("staff").map((person) => (person.id === id ? { ...person, name: name.trim() } : person)),
     { always: true },
   );
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updateAccountProfileApi({ name: name.trim() }).catch((err) => {
+      console.warn("Could not persist profile name to backend API", err);
+    });
+  }
 }
 
 export const NOTIFICATION_PREFERENCES = [
@@ -429,7 +487,23 @@ export type NotificationKey = (typeof NOTIFICATION_PREFERENCES)[number]["key"];
 
 let preferences: Record<NotificationKey, boolean> = { digest: true, verifications: true, reports: true, testimonials: false };
 export const getNotificationPreferences = (): Record<NotificationKey, boolean> => ({ ...preferences });
-/** Saves the preferences (a mock). TODO(backend): persist this change. */
+
+/** Saves the preferences. Persists to store and backend API. */
 export function saveNotificationPreferences(next: Record<NotificationKey, boolean>): void {
   preferences = { ...next };
+
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    updateAccountProfileApi({ notificationPreferences: next }).catch((err) => {
+      console.warn("Could not persist notification preferences to backend API", err);
+    });
+  }
 }
+
+/** Changes password via backend API or mock. */
+export async function changePassword(current: string, next: string): Promise<{ success: boolean; message: string }> {
+  if (typeof window !== "undefined" && (!isMockMode() || hasAdminSession())) {
+    return changePasswordApi({ currentPassword: current, newPassword: next });
+  }
+  return { success: true, message: "Password updated successfully" };
+}
+

@@ -648,6 +648,40 @@ export const scorecardQuerySchema = z.object({
   }).optional(),
 });
 
+// BE-016: Settings & Integrations schemas
+export const integrationUpdateSchema = z.object({
+  body: z.object({
+    identifier: z.string().trim().max(500).optional(),
+    secret: z.string().trim().max(1000).optional(),
+  }).refine((data) => data.identifier !== undefined || data.secret !== undefined, {
+    message: 'Must provide either identifier or secret to update',
+  }),
+});
+
+export const accountProfileUpdateSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(1, 'Name cannot be empty').max(100).optional(),
+    notificationPreferences: z.object({
+      digest: z.boolean().optional(),
+      verifications: z.boolean().optional(),
+      reports: z.boolean().optional(),
+      testimonials: z.boolean().optional(),
+    }).optional(),
+  }),
+});
+
+export const passwordChangeSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1, 'Current password is required').optional(),
+    current: z.string().min(1, 'Current password is required').optional(),
+    newPassword: z.string().min(8, 'New password must be at least 8 characters').optional(),
+    next: z.string().min(8, 'New password must be at least 8 characters').optional(),
+  }).refine((data) => (data.currentPassword || data.current) && (data.newPassword || data.next), {
+    message: 'Current password and new password are required',
+  }),
+});
+
+
 
 
 
