@@ -32,6 +32,7 @@ import {
   TESTIMONIAL_STATUSES,
   ALLOWED_TESTIMONIAL_TRANSITIONS,
   TESTIMONIAL_ACTIONS_MAP,
+  WebsiteMonth,
 } from '../models/AdminPortal.js';
 import { deleteFromWordpress, syncToWordpress } from '../lib/wordpress-sync.js';
 import { env } from '../config/env.js';
@@ -67,7 +68,10 @@ import {
   testimonialUpdateSchema,
   opportunityCreateSchema,
   opportunityUpdateSchema,
+  websiteMonthInputSchema,
+  websiteAudienceQuerySchema,
 } from '../schemas/admin.js';
+import { syncWebsiteAudienceFromGa4 } from '../lib/ga4-sync.js';
 import { validate } from '../middleware/validate.js';
 import { postChannelMessage, listChannelMessages, getThread, findPost, setAllowReplies } from '../lib/chat.js';
 import { notifyUser } from '../lib/user-notify.js';
@@ -2664,7 +2668,7 @@ const metricStatus = (value, target, thresholds = {}) => {
 
 const dashboardMetrics = async (month) => {
   const { start, end } = monthBounds(month);
-  const [opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified, beneficiariesAdded, social, applications] = await Promise.all([
+  const [opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified, beneficiariesAdded, social, applications, websiteAudienceDoc] = await Promise.all([
     Opportunity.countDocuments({
       vetted: true,
       $or: [
@@ -2746,10 +2750,12 @@ const dashboardMetrics = async (month) => {
       },
     ]),
     OpportunityEngagement.countDocuments({ event: 'application', createdAt: { $gte: start, $lt: end } }),
+    WebsiteMonth.findOne({ month }),
   ]);
   const publishedPosts = social[0]?.posts || 0;
   const reachVal = social[0]?.reach || 0;
   const engagementVal = social[0]?.engagement || 0;
+  const websiteViews = websiteAudienceDoc?.views || 0;
   return {
     opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified,
     beneficiariesAdded,
@@ -2760,6 +2766,8 @@ const dashboardMetrics = async (month) => {
     socialEngagement: engagementVal,
     social_engagement: engagementVal,
     opportunityApplications: applications,
+    websiteViews,
+    website_views: websiteViews,
   };
 };
 
@@ -3215,13 +3223,14 @@ adminApiRouter.get('/reports/monthly', requireAdminOrStaffAuth, requirePortalRol
   const previousDate = new Date(start);
   previousDate.setUTCMonth(previousDate.getUTCMonth() - 1);
   const previousMonth = previousDate.toISOString().slice(0, 7);
-  const [metrics, pipeline, networkSize, social, targets, recordsBySource, topFive, activityCount, previousMetrics] = await Promise.all([
+  const [metrics, pipeline, networkSize, social, targets, recordsBySource, topFive, activityCount, previousMetrics, websiteAudienceDoc] = await Promise.all([
     dashboardMetrics(month), partnerPipelineHealth(month), Ambassador.countDocuments({ status: 'active' }), SocialPost.aggregate([{ $match: { status: 'published', postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' }, engagement: { $sum: '$engagement' } } }]),
     MonthlyTarget.find({ month }),
     Beneficiary.aggregate([{ $match: { createdAt: { $gte: start, $lt: end } } }, { $group: { _id: '$sourceType', count: { $sum: 1 } } }]),
     leaderboardEntries(month, 5),
     AmbassadorAmplification.distinct('ambassadorId', { createdAt: { $gte: start, $lt: end } }),
     dashboardMetrics(previousMonth),
+    WebsiteMonth.findOne({ month }),
   ]);
   const targetsByMetric = new Map(targets.map((target) => [target.metric, target]));
   const percentGrowth = (value, prior) => prior ? Math.round(((value - prior) / prior) * 100) : null;
@@ -3234,10 +3243,12 @@ adminApiRouter.get('/reports/monthly', requireAdminOrStaffAuth, requirePortalRol
     recordsBySource: recordsBySource.map((item) => ({ sourceType: item._id, count: item.count })),
     ambassadorNetwork: { size: networkSize, activityRate: networkSize ? Math.round((activityCount.length / networkSize) * 100) : 0 },
     social: social[0] || { reach: 0, engagement: 0 },
+    websiteAudience: websiteAudienceDoc ? toClientObject(websiteAudienceDoc) : null,
     monthOverMonthGrowth: {
       opportunitiesPublished: percentGrowth(metrics.opportunitiesPublished, previousMetrics.opportunitiesPublished),
       beneficiariesAdded: percentGrowth(metrics.beneficiariesAdded, previousMetrics.beneficiariesAdded),
       socialReach: percentGrowth(metrics.socialReach, previousMetrics.socialReach),
+      websiteViews: percentGrowth(metrics.websiteViews, previousMetrics.websiteViews),
     },
   };
   if (audience === 'internal') {
@@ -3292,4 +3303,139 @@ adminApiRouter.put('/roles-permissions', requireAdminOrStaffAuth, requireScreen(
 
   const matrix = computeFullMatrix(toggles);
   itemResponse(res, { toggles, matrix });
+}));
+
+// BE-012: Website audience endpoints
+adminApiRouter.get('/website-audience', requireAdminOrStaffAuth, requireScreen(['insights', 'overview', 'monthly_report'], 'view'), validate(websiteAudienceQuerySchema), asyncHandler(async (req, res) => {
+  const months = Math.min(36, Math.max(1, Number.parseInt(req.query.months, 10) || 6));
+  const order = req.query.order === 'desc' ? 'desc' : 'asc';
+  const filter = {};
+  if (req.query.month) {
+    filter.month = { $lte: req.query.month };
+  }
+  let records = await WebsiteMonth.find(filter).sort({ month: -1 }).limit(months);
+  if (order === 'asc') {
+    records = records.reverse();
+  }
+  listResponse(res, records.map(toClientObject));
+}));
+
+adminApiRouter.get('/website-audience/:month', requireAdminOrStaffAuth, requireScreen(['insights', 'overview', 'monthly_report'], 'view'), asyncHandler(async (req, res) => {
+  const { month } = req.params;
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new ApiError(400, 'Invalid month format (expected YYYY-MM)');
+  }
+  const record = await WebsiteMonth.findOne({ month });
+  if (!record) {
+    throw notFound(`Website audience for month ${month}`);
+  }
+  itemResponse(res, toClientObject(record));
+}));
+
+const handleWebsiteMonthSave = async (req, res) => {
+  const month = req.params.month || req.body.month;
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    throw new ApiError(400, 'Valid month is required (YYYY-MM)');
+  }
+
+  const existing = await WebsiteMonth.findOne({ month });
+  const previous = existing ? {
+    views: existing.views,
+    dailyFirstVisits: existing.dailyFirstVisits,
+    dailyVisitors: existing.dailyVisitors,
+    channels: existing.channels,
+    source: existing.source,
+  } : null;
+
+  let staffName = 'Admin';
+  if (req.portalStaff?.name) staffName = req.portalStaff.name;
+  else if (req.auth?.name) staffName = req.auth.name;
+
+  let document;
+  if (existing) {
+    if (req.body.views !== undefined) existing.views = req.body.views;
+    if (req.body.channels !== undefined) existing.channels = req.body.channels;
+    if (req.body.dailyFirstVisits !== undefined) existing.dailyFirstVisits = req.body.dailyFirstVisits;
+    if (req.body.dailyVisitors !== undefined) existing.dailyVisitors = req.body.dailyVisitors;
+    existing.source = req.body.source || 'manual';
+    existing.updatedBy = req.auth.sub;
+    existing.updatedByName = staffName;
+    document = await existing.save();
+  } else {
+    document = new WebsiteMonth({
+      month,
+      views: req.body.views,
+      dailyFirstVisits: req.body.dailyFirstVisits,
+      dailyVisitors: req.body.dailyVisitors,
+      channels: req.body.channels,
+      source: req.body.source || 'manual',
+      updatedBy: req.auth.sub,
+      updatedByName: staffName,
+    });
+    document = await document.save();
+  }
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.WEBSITE_AUDIENCE_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.WEBSITE_AUDIENCE,
+    resourceId: document._id,
+    outcome: 'success',
+    metadata: {
+      month,
+      previous,
+      updated: {
+        views: document.views,
+        dailyFirstVisits: document.dailyFirstVisits,
+        dailyVisitors: document.dailyVisitors,
+        channels: document.channels,
+        source: document.source,
+      },
+    },
+  });
+
+  await logActivity(req.auth.sub, existing ? 'updated' : 'created', 'website_audience', {
+    _id: document._id,
+    title: `Website audience for ${month}`,
+  });
+
+  itemResponse(res, toClientObject(document));
+};
+
+adminApiRouter.put('/website-audience/:month', requireAdminOrStaffAuth, requireScreen('insights', 'edit'), validate(websiteMonthInputSchema), asyncHandler(handleWebsiteMonthSave));
+adminApiRouter.post('/website-audience', requireAdminOrStaffAuth, requireScreen('insights', 'edit'), validate(websiteMonthInputSchema), asyncHandler(handleWebsiteMonthSave));
+
+adminApiRouter.post('/website-audience/sync', requireAdminOrStaffAuth, requireScreen('insights', 'edit'), asyncHandler(async (req, res) => {
+  const month = req.body?.month || req.query?.month || new Date().toISOString().slice(0, 7);
+  let staffName = 'Admin';
+  if (req.portalStaff?.name) staffName = req.portalStaff.name;
+  else if (req.auth?.name) staffName = req.auth.name;
+
+  const result = await syncWebsiteAudienceFromGa4(month, req.auth.sub, staffName);
+
+  if (result.status === 'synced') {
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.WEBSITE_AUDIENCE_SYNC,
+      resourceType: AUDIT_RESOURCE_TYPES.WEBSITE_AUDIENCE,
+      resourceId: result.document._id,
+      outcome: 'success',
+      metadata: { month, source: 'ga4', views: result.document.views },
+    });
+
+    await logActivity(req.auth.sub, 'synced', 'website_audience', {
+      _id: result.document._id,
+      title: `GA4 sync for ${month}`,
+    });
+
+    return itemResponse(res, {
+      status: 'synced',
+      month,
+      record: toClientObject(result.document),
+    });
+  }
+
+  itemResponse(res, {
+    status: result.status,
+    message: result.message,
+    month,
+  });
 }));

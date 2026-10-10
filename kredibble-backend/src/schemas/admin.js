@@ -578,6 +578,43 @@ export const opportunityModerateDecisionSchema = z.object({
   }),
 });
 
+// BE-012: Website Audience schemas
+export const websiteChannelSchema = z.object({
+  channel: z.string().trim().min(1, 'Channel name is required').max(100, 'Channel name is too long'),
+  views: z.number().int('Views must be an integer').min(0, 'Views must be non-negative'),
+});
+
+export const websiteMonthInputSchema = z.object({
+  body: z.object({
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format').optional(),
+    views: z.number().int('Views must be an integer').min(0, 'Views must be non-negative').optional(),
+    dailyFirstVisits: z.number().int('dailyFirstVisits must be an integer').min(0, 'dailyFirstVisits must be non-negative').optional(),
+    dailyVisitors: z.number().int('dailyVisitors must be an integer').min(0, 'dailyVisitors must be non-negative').optional(),
+    channels: z.array(websiteChannelSchema).optional(),
+    source: z.enum(['manual', 'ga4']).default('manual').optional(),
+  }).refine((data) => {
+    if (data.views !== undefined && data.channels && data.channels.length > 0) {
+      const sum = data.channels.reduce((acc, c) => acc + c.views, 0);
+      return sum === data.views;
+    }
+    return data.views !== undefined || (data.channels && data.channels.length > 0);
+  }, {
+    message: 'Channel views must add up to total views',
+    path: ['channels'],
+  }),
+  params: z.object({
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format').optional(),
+  }).optional(),
+});
+
+export const websiteAudienceQuerySchema = z.object({
+  query: z.object({
+    months: z.coerce.number().int().min(1).max(36).default(6).optional(),
+    order: z.enum(['asc', 'desc']).default('asc').optional(),
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format').optional(),
+  }).optional(),
+});
+
 
 
 

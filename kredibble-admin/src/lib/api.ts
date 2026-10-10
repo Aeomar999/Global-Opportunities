@@ -810,6 +810,48 @@ export const getOpportunityMetricsApi = async (id: string) => {
   return request<{ listingId: string; views: { website: number; app: number }; applications: { website: number; app: number } }>(`/admin/opportunities/${id}/metrics`);
 };
 
+// BE-012: Website Audience API
+export interface WebsiteChannelRecord {
+  channel: string;
+  views: number;
+}
+
+export interface WebsiteMonthRecord {
+  id?: string;
+  month: string;
+  views: number;
+  dailyFirstVisits: number;
+  dailyVisitors: number;
+  channels: WebsiteChannelRecord[];
+  source?: "manual" | "ga4";
+  updatedBy?: string;
+  updatedByName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const getWebsiteAudienceApi = async (months: number = 6, order: "asc" | "desc" = "asc") => {
+  return request<WebsiteMonthRecord[]>(`/admin/website-audience?months=${months}&order=${order}`);
+};
+
+export const getWebsiteMonthApi = async (month: string) => {
+  return request<WebsiteMonthRecord>(`/admin/website-audience/${month}`);
+};
+
+export const updateWebsiteMonthApi = async (month: string, data: Partial<WebsiteMonthRecord>) => {
+  return request<WebsiteMonthRecord>(`/admin/website-audience/${month}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+};
+
+export const syncWebsiteAudienceApi = async (month?: string) => {
+  return request<{ status: string; message?: string; month?: string; record?: WebsiteMonthRecord }>(`/admin/website-audience/sync`, {
+    method: "POST",
+    body: JSON.stringify(month ? { month } : {}),
+  });
+};
+
 export interface RolesPermissionsPayload {
   roleIds: string[];
   screens: string[];
