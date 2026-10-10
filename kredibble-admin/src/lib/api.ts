@@ -1835,3 +1835,35 @@ export const getTeamReportApi = async (month?: string) => {
   const queryString = month ? `?month=${encodeURIComponent(month)}` : "";
   return request<TeamReportResponse>(`/admin/reports/team${queryString}`);
 };
+
+// BE-014: Overview feed and attention types and API callers
+export interface AttentionCountsResponse {
+  pendingVerifications: number;
+  openReports: number;
+  pendingTestimonials: number;
+  draftListings: number;
+  unvettedDrafts?: number;
+  pendingRecords: number;
+  pendingAmbassadorRequests: number;
+}
+
+export interface OverviewFeedItem {
+  key: string;
+  kind: "ambassador" | "partner" | "listing" | "program" | "record" | "testimonial";
+  title: string;
+  description: string;
+  at: string;
+  time: string;
+}
+
+export const getOverviewAttentionApi = async (): Promise<AttentionCountsResponse> => {
+  return request<AttentionCountsResponse>("/admin/overview/attention");
+};
+
+export const getOverviewActivityApi = async (limit?: number): Promise<OverviewFeedItem[]> => {
+  const query = new URLSearchParams();
+  if (typeof limit === "number") query.set("limit", String(limit));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<OverviewFeedItem[]>(`/admin/overview/activity${queryString}`);
+};
+

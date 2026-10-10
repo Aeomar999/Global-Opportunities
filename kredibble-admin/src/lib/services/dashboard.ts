@@ -17,7 +17,7 @@
  * - A PAST month is a read-only snapshot: the value reached against the target and thresholds that applied THEN (the final status).
  */
 import { KPI_KEYS, isRunningTotal } from "@/config/kpis";
-import { ApiError, getDashboardSummary } from "@/lib/api";
+import { ApiError, getDashboardSummary, getOverviewAttentionApi, getOverviewActivityApi } from "@/lib/api";
 import { formatDate, formatMonth } from "@/lib/format";
 import { attainment, currentMonth, isPastMonth, kpiStatus, kpiTarget, kpiMonthProgress, kpiThresholds, kpiValue, monthsBefore, storeData, type KpiData } from "@/lib/kpi";
 import { getMockCollection, getPartnerStageLabels } from "@/lib/mock-store";
@@ -247,16 +247,45 @@ function buildForcedMockOverview(state: Exclude<ForcedState, "loading">, month: 
 // ---- real API ----------------------------------------------------------------------------------------------------------
 
 async function fetchRealOverview(month: MonthKey): Promise<OverviewResult> {
-  const [summary] = await Promise.allSettled([getDashboardSummary() as Promise<unknown> as Promise<Record<string, number>>]);
-  const count = (key: string): number | null => (summary.status === "fulfilled" && typeof summary.value[key] === "number" ? summary.value[key] : null);
+  const [attentionRes, activityRes, summaryRes] = await Promise.allSettled([
+    getOverviewAttentionApi(),
+    getOverviewActivityApi(),
+    getDashboardSummary() as Promise<unknown> as Promise<Record<string, number>>,
+  ]);
+
+  const summary = summaryRes.status === "fulfilled" ? summaryRes.value : null;
+  const count = (key: string): number | null => (summary && typeof summary[key] === "number" ? summary[key] : null);
+
+  let attention: AttentionCounts | null = null;
+  if (attentionRes.status === "fulfilled") {
+    const a = attentionRes.value;
+    attention = {
+      pendingVerifications: a.pendingVerifications ?? null,
+      openReports: a.openReports ?? null,
+      pendingTestimonials: a.pendingTestimonials ?? null,
+      draftListings: a.draftListings ?? a.unvettedDrafts ?? null,
+    };
+  } else if (summary) {
+    attention = {
+      pendingVerifications: count("pendingVerifications"),
+      openReports: count("openReports"),
+      pendingTestimonials: count("pendingTestimonials"),
+      draftListings: count("unvettedDrafts"),
+    };
+  }
+
+  const activity = activityRes.status === "fulfilled" ? activityRes.value : null;
+
   const data: OverviewData = {
     ...unavailable(month),
     source: "api",
     notConnected: true,
-    // The API has no verified testimonials queue or drafts yet: only the two counts it does report.
-    attention: { pendingVerifications: count("pendingVerifications"), openReports: count("openReports"), pendingTestimonials: null, draftListings: null },
+    attention,
+    activity,
   };
-  return { data, issue: classifyIssue(summary) };
+
+  const primaryFailure = attentionRes.status === "rejected" ? attentionRes : (activityRes.status === "rejected" ? activityRes : summaryRes);
+  return { data, issue: classifyIssue(primaryFailure) };
 }
 
 /** Turns the settled request into at most one banner-worthy issue. */
