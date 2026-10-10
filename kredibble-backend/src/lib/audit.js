@@ -52,6 +52,8 @@ export const AUDIT_ACTIONS = {
   OPPORTUNITY_PUBLISH: 'opportunity.publish',
   OPPORTUNITY_UNPUBLISH: 'opportunity.unpublish',
   OPPORTUNITY_VET: 'opportunity.vet',
+  WEBSITE_AUDIENCE_UPDATE: 'website_audience.update',
+  WEBSITE_AUDIENCE_SYNC: 'website_audience.sync',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',
@@ -68,6 +70,7 @@ export const AUDIT_ACTIONS = {
 export const AUDIT_RESOURCE_TYPES = {
   USER: 'user',
   SETTINGS: 'settings',
+  WEBSITE_AUDIENCE: 'website_audience',
   PARTNER: 'partner',
   AMBASSADOR: 'ambassador',
   BENEFICIARY: 'beneficiary',

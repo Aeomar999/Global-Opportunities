@@ -698,3 +698,104 @@ thresholdChangeSchema.index({ effectiveFrom: 1, seq: -1 });
 
 export const ThresholdChange = mongoose.model('ThresholdChange', thresholdChangeSchema);
 
+export function getDaysForMonth(monthStr, now = new Date()) {
+  const currentMonthStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const [yearStr, monthNumStr] = (monthStr || currentMonthStr).split('-');
+  const year = Number.parseInt(yearStr, 10);
+  const monthNum = Number.parseInt(monthNumStr, 10);
+  const totalDays = new Date(Date.UTC(year, monthNum, 0)).getUTCDate();
+
+  if (monthStr === currentMonthStr) {
+    return Math.max(1, Math.min(now.getUTCDate(), totalDays));
+  }
+  return totalDays;
+}
+
+export function calculateDefaultDailyFigures(views, monthStr, now = new Date()) {
+  const safeViews = Number.isFinite(views) ? Math.max(0, views) : 0;
+  const days = getDaysForMonth(monthStr, now);
+  return {
+    dailyFirstVisits: Math.round(safeViews / days / 2.6),
+    dailyVisitors: Math.round(safeViews / days / 1.35),
+  };
+}
+
+const websiteChannelEntrySchema = new mongoose.Schema({
+  channel: { type: String, required: true, trim: true },
+  views: { type: Number, required: true, min: 0, default: 0 },
+}, { _id: false });
+
+const websiteMonthSchema = new mongoose.Schema({
+  month: {
+    type: String,
+    required: true,
+    unique: true,
+    match: /^\d{4}-\d{2}$/,
+    index: true,
+  },
+  views: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  dailyFirstVisits: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  dailyVisitors: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  channels: {
+    type: [websiteChannelEntrySchema],
+    default: undefined,
+  },
+  source: {
+    type: String,
+    enum: ['manual', 'ga4'],
+    default: 'manual',
+    index: true,
+  },
+  updatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  updatedByName: {
+    type: String,
+    trim: true,
+  },
+  rawGa4Data: {
+    type: mongoose.Schema.Types.Mixed,
+  },
+}, { timestamps: true });
+
+websiteMonthSchema.pre('validate', function() {
+  if (this.channels && this.channels.length > 0) {
+    const sum = this.channels.reduce((acc, c) => acc + (Number(c.views) || 0), 0);
+    if (this.views === undefined || this.views === null) {
+      this.views = sum;
+    } else if (sum !== this.views) {
+      throw new Error(`Channel views (${sum}) must add up to total views (${this.views})`);
+    }
+  } else if (this.views !== undefined && (!this.channels || this.channels.length === 0)) {
+    this.channels = [{ channel: 'Direct', views: this.views }];
+  } else if (this.views === undefined) {
+    this.views = 0;
+    this.channels = [{ channel: 'Direct', views: 0 }];
+  }
+
+  if (this.views !== undefined) {
+    const defaults = calculateDefaultDailyFigures(this.views, this.month);
+    if (this.dailyFirstVisits === undefined || this.dailyFirstVisits === null) {
+      this.dailyFirstVisits = defaults.dailyFirstVisits;
+    }
+    if (this.dailyVisitors === undefined || this.dailyVisitors === null) {
+      this.dailyVisitors = defaults.dailyVisitors;
+    }
+  }
+});
+
+export const WebsiteMonth = mongoose.model('WebsiteMonth', websiteMonthSchema);
+

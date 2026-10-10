@@ -58,10 +58,12 @@ export const requireScreen = (screen, level = 'view') => async (req, res, next) 
 
     const roles = staff.roles?.length ? staff.roles : normalizeLegacyRole(staff.role);
     const toggles = await getEffectiveToggles();
-    const allowed = roleCan(roles, screen, level, toggles);
+    const screens = Array.isArray(screen) ? screen : [screen];
+    const allowed = screens.some((s) => roleCan(roles, s, level, toggles));
 
     if (!allowed) {
-      return next(new ApiError(403, `Forbidden: insufficient permissions for screen "${screen}"`));
+      const screenLabel = Array.isArray(screen) ? screen.join(', ') : screen;
+      return next(new ApiError(403, `Forbidden: insufficient permissions for screen "${screenLabel}"`));
     }
 
     req.portalStaff = staff;

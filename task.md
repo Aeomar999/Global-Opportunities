@@ -2059,8 +2059,18 @@ The live behaviour probe used for the 2026-10-02 audit runs `src/app.js` + `src/
 - **Verify:** "Opportunities published" counts vetted, published listings by `publishedAt` within month bounds. (Verified with `tests/be-011-listings.test.js`, 23/23 tests passing; admin API contract tests passing; full backend lint and admin typecheck/lint clean; 0 encoding errors).
 
 #### BE-012 — Website audience
-- **To do:** collection `WebsiteMonth { month, views, dailyFirstVisits, dailyVisitors, channels[] }` (daily figures are averages per day; the month's channels add up to the views; the current month is month to date). A monthly job pulls Google Analytics 4 (property ID and API secret from BE-016, never returned); an admin can also enter a month by hand. `GET /admin/website-audience?months=6`.
-- **Open decision:** Google Analytics sync, or manual entry only (see "Decisions needed").
+- **To do:**
+  - [x] Collection `WebsiteMonth { month, views, dailyFirstVisits, dailyVisitors, channels[], source, updatedBy, updatedByName, rawGa4Data }`.
+  - [x] Invariants: Daily figures are averages per day (month-to-date for open months, full days in month for past months); month's channels add up to total views (enforced via schema pre-validate hook and input validation).
+  - [x] Automatic fallbacks: Auto-defaults single Direct channel if omitted; auto-aggregates total views from channels if omitted; auto-derives dailyFirstVisits and dailyVisitors if omitted.
+  - [x] Endpoints:
+    - `GET /api/v1/admin/website-audience`: Paginated/historical list with `months` limit (default 6) and `order` ('asc' | 'desc').
+    - `GET /api/v1/admin/website-audience/:month`: Single month detail view with 404 handling.
+    - `PUT /api/v1/admin/website-audience/:month` & `POST /api/v1/admin/website-audience`: Manual entry and update with comprehensive audit logging (`AUDIT_ACTIONS.WEBSITE_AUDIENCE_UPDATE`).
+    - `POST /api/v1/admin/website-audience/sync`: Google Analytics 4 (GA4) integration trigger; pulls channel groups and views or gracefully skips with status 'skipped' when unconfigured (`AUDIT_ACTIONS.WEBSITE_AUDIENCE_SYNC`).
+  - [x] KPI integration: `dashboardMetrics(month)` queries `WebsiteMonth` and feeds `websiteViews` and `website_views` into headline KPIs, monthly reports (`reports/monthly`), and 6-month trends.
+  - [x] Admin frontend client: `kredibble-admin/src/lib/api.ts` exports `getWebsiteAudienceApi`, `getWebsiteMonthApi`, `updateWebsiteMonthApi`, and `syncWebsiteAudienceApi`.
+- **Verify:** Tests in `tests/be-012-website-audience.test.js` (26/26 passing), zero regression on contract and listings tests, clean lint and typechecks.
 
 #### BE-013 — Monthly reports
 - **To do:** `MonthlyReport { reportMonth, view ("partner" or "team"), generatedAt, generatedBy }`. `POST /admin/monthly-reports` records one report, at most once per reportMonth and view in each calendar month (the second call returns the existing one). The "Monthly reports" KPI counts reports by the month of `generatedAt`. `GET /admin/reports/partner?month=` (aggregate figures only: no person, no ambassador name, no scoreboard) and `GET /admin/reports/team?month=` (internal; Desk Lead and Super Admin only). Both come from the KPI engine.
