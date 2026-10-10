@@ -74,7 +74,17 @@ import {
   monthlyReportCreateSchema,
   monthlyReportQuerySchema,
   overviewActivityQuerySchema,
+  scorecardQuerySchema,
 } from '../schemas/admin.js';
+import {
+  SCORE_FROM_DAY,
+  isPastMonth,
+  isTooEarly,
+  buildScorecardPerson,
+  teamSummary,
+  sortTeamScorecards,
+  buildCompositeSeries,
+} from '../lib/scorecards.js';
 import { syncWebsiteAudienceFromGa4 } from '../lib/ga4-sync.js';
 import { validate } from '../middleware/validate.js';
 import { postChannelMessage, listChannelMessages, getThread, findPost, setAllowReplies } from '../lib/chat.js';
@@ -2826,85 +2836,162 @@ const leaderboardEntries = async (month, limit) => {
   return limit ? entries.slice(0, limit) : entries;
 };
 
-const staffRoles = (staff) => String(staff.role || '').split(',').map((role) => role.trim().toLowerCase());
-
-const scorecardForStaff = async (staff, month, targetsByMetric) => {
-  const { start, end } = monthBounds(month);
-  const userId = staff.userId;
-  const metrics = [];
-  const roles = staffRoles(staff);
-  if (roles.some((role) => ['opportunities officer', 'writer'].includes(role))) {
-    metrics.push({ metric: 'opportunitiesPublished', value: await Opportunity.countDocuments({ createdBy: userId, vetted: true, createdAt: { $gte: start, $lt: end } }) });
-  }
-  if (roles.includes('training and capacity development officer')) {
-    metrics.push({
-      metric: 'programsDelivered',
-      value: await Program.countDocuments({
-        createdBy: userId,
-        status: 'delivered',
-        $or: [
-          { deliveredAt: { $gte: start, $lt: end } },
-          { deliveredAt: { $exists: false }, endAt: { $gte: start, $lt: end } },
-          { deliveredAt: null, endAt: { $gte: start, $lt: end } },
-        ],
-      }),
-    });
-  }
-  if (roles.includes('partnerships officer')) {
-    metrics.push({
-      metric: 'partnersClosed',
-      value: await Partner.countDocuments({
-        assignedOwnerId: userId,
-        $or: [
-          {
-            stageHistory: {
-              $elemMatch: {
-                stage: { $in: ['onboard', 'renew', 'Onboard', 'Renew'] },
-                at: { $gte: start.toISOString().slice(0, 10), $lt: end.toISOString().slice(0, 10) },
-              },
-            },
-          },
-          {
-            $and: [
-              { stageHistory: { $size: 0 } },
-              { closed: true, updatedAt: { $gte: start, $lt: end } },
-            ],
-          },
-        ],
-      }),
-    });
-  }
-  if (roles.some((role) => ['database officer', 'country lead'].includes(role))) {
-    metrics.push({ metric: 'beneficiariesAdded', value: await Beneficiary.countDocuments({ addedBy: userId, createdAt: { $gte: start, $lt: end } }) });
-  }
-  if (roles.some((role) => ['communications officer', 'social media manager'].includes(role))) {
-    const social = await SocialPost.aggregate([{ $match: { createdBy: userId, status: 'published', postedAt: { $gte: start, $lt: end } } }, { $group: { _id: null, reach: { $sum: '$reach' } } }]);
-    metrics.push({ metric: 'socialReach', value: social[0]?.reach || 0 });
-  }
-  const scored = metrics.map((item) => {
-    const target = targetsByMetric.get(item.metric)?.target || 0;
-    return { ...item, target, attainment: target ? Math.min(100, Math.round((item.value / target) * 100)) : 0 };
+export const scorecardForStaff = async (staff, month, targetsByMetric, options = {}) => {
+  const today = options.today || new Date();
+  const metricValues = options.metricValues || await dashboardMetrics(month);
+  const thresholds = options.thresholds || await getThresholdsInForce(month);
+  return buildScorecardPerson({
+    staff,
+    metricValues,
+    targetsByMetric,
+    month,
+    today,
+    thresholds,
+    scoreFromDay: options.scoreFromDay || SCORE_FROM_DAY,
   });
-  const ordered = [...scored].sort((a, b) => b.attainment - a.attainment);
-  const score = scored.length ? Math.round(scored.reduce((sum, item) => sum + item.attainment, 0) / scored.length) : 0;
-  return { staff: { id: staff.id || staff._id.toString(), name: staff.name, role: staff.role }, score, metrics: scored, strongestMetric: ordered[0] || null, weakestMetric: ordered.at(-1) || null };
 };
 
-adminApiRouter.get('/scorecards', requireAdminOrStaffAuth, requirePortalRoles('Desk Lead', 'Admin Support'), asyncHandler(async (req, res) => {
+const handleTeamScorecards = asyncHandler(async (req, res) => {
   const { month } = monthBounds(req.query.month);
-  const [staffMembers, targets] = await Promise.all([StaffMember.find({ status: 'active' }), MonthlyTarget.find({ month })]);
-  const targetsByMetric = new Map(targets.map((target) => [target.metric, target]));
-  const scorecards = await Promise.all(staffMembers.map((staff) => scorecardForStaff(staff, month, targetsByMetric)));
-  listResponse(res, scorecards);
-}));
+  const today = req.query.today ? new Date(req.query.today) : new Date();
 
-adminApiRouter.get('/scorecards/me', requireAdminOrStaffAuth, requirePortalRoles(...ALL_PORTAL_ROLES), asyncHandler(async (req, res) => {
-  const { month } = monthBounds(req.query.month);
-  const staff = await StaffMember.findOne({ userId: req.auth.sub, status: 'active' });
-  if (!staff) throw new ApiError(403, 'An active staff profile is required');
-  const targets = await MonthlyTarget.find({ month });
-  itemResponse(res, { month, ...await scorecardForStaff(staff, month, new Map(targets.map((target) => [target.metric, target]))) });
-}));
+  const [staffMembers, metricValues, targets, thresholds] = await Promise.all([
+    StaffMember.find({ status: 'active' }).lean(),
+    dashboardMetrics(month),
+    getTargetsForMonth(month),
+    getThresholdsInForce(month),
+  ]);
+  const targetsByMetric = new Map(targets.map((t) => [t.kpi || t.metric, t]));
+
+  const people = staffMembers.map((staff) =>
+    buildScorecardPerson({
+      staff,
+      metricValues,
+      targetsByMetric,
+      month,
+      today,
+      thresholds,
+    })
+  );
+
+  const sortedPeople = sortTeamScorecards(people);
+  const summary = teamSummary(sortedPeople);
+  const isPast = isPastMonth(month, today);
+  const tooEarly = isTooEarly(month, today);
+
+  itemResponse(res, {
+    month,
+    isPast,
+    notConnected: false,
+    tooEarly,
+    people: sortedPeople,
+    series: null,
+    summary,
+  });
+});
+
+adminApiRouter.get(
+  '/scorecards/team',
+  requireAdminOrStaffAuth,
+  requireScreen('team_scorecard', 'view'),
+  validate(scorecardQuerySchema),
+  handleTeamScorecards
+);
+
+adminApiRouter.get(
+  '/scorecards',
+  requireAdminOrStaffAuth,
+  requireScreen('team_scorecard', 'view'),
+  validate(scorecardQuerySchema),
+  handleTeamScorecards
+);
+
+adminApiRouter.get(
+  '/scorecards/me',
+  requireAdminOrStaffAuth,
+  requireScreen('my_scorecard', 'view'),
+  validate(scorecardQuerySchema),
+  asyncHandler(async (req, res) => {
+    const { month } = monthBounds(req.query.month);
+    const today = req.query.today ? new Date(req.query.today) : new Date();
+
+    const staff = await StaffMember.findOne({ userId: req.auth.sub, status: 'active' }).lean();
+    let callerPerson = null;
+
+    const [metricValues, targets, thresholds] = await Promise.all([
+      dashboardMetrics(month),
+      getTargetsForMonth(month),
+      getThresholdsInForce(month),
+    ]);
+    const targetsByMetric = new Map(targets.map((t) => [t.kpi || t.metric, t]));
+
+    if (staff) {
+      callerPerson = buildScorecardPerson({
+        staff,
+        metricValues,
+        targetsByMetric,
+        month,
+        today,
+        thresholds,
+      });
+    } else if (req.auth.role === 'admin') {
+      const user = await User.findById(req.auth.sub).lean();
+      callerPerson = buildScorecardPerson({
+        staff: {
+          id: req.auth.sub,
+          name: user?.name || user?.fullName || 'Admin',
+          roles: ['super_admin'],
+        },
+        metricValues,
+        targetsByMetric,
+        month,
+        today,
+        thresholds,
+      });
+    } else {
+      throw new ApiError(403, 'An active staff profile is required');
+    }
+
+    const series = await buildCompositeSeries(
+      callerPerson.roles,
+      6,
+      month,
+      today,
+      async (m) => {
+        const [mValues, mTargets, mThresholds] = await Promise.all([
+          dashboardMetrics(m),
+          getTargetsForMonth(m),
+          getThresholdsInForce(m),
+        ]);
+        return {
+          metricValues: mValues,
+          targetsByMetric: new Map(mTargets.map((t) => [t.kpi || t.metric, t])),
+          thresholds: mThresholds,
+        };
+      }
+    );
+
+    const isPast = isPastMonth(month, today);
+    const tooEarly = callerPerson.tooEarly;
+
+    itemResponse(res, {
+      month,
+      isPast,
+      notConnected: false,
+      tooEarly,
+      people: [callerPerson],
+      series,
+      // Backward compatibility fields
+      staff: { id: callerPerson.id, name: callerPerson.name, role: callerPerson.roles.join(', ') },
+      score: callerPerson.composite,
+      status: callerPerson.status,
+      metrics: callerPerson.metrics,
+      strongestMetric: callerPerson.highlight?.kind === 'pair' ? callerPerson.highlight.strongest : callerPerson.highlight?.focus || null,
+      weakestMetric: callerPerson.highlight?.kind === 'pair' ? callerPerson.highlight.weakest : null,
+    });
+  })
+);
+
 
 adminApiRouter.get('/dashboard', requireAdminOrStaffAuth, requirePortalRoles(...ALL_PORTAL_ROLES), asyncHandler(async (req, res) => {
   const { month, start } = monthBounds(req.query.month);
@@ -3453,7 +3540,8 @@ const buildTeamReport = async (month, now = new Date()) => {
 
   const pipelineTarget = targetsByMetric.get('partners_onboarded')?.target || 0;
   const pace = await databasePace(month, targetsByMetric);
-  const teamScorecards = await Promise.all(staffMembers.map((staff) => scorecardForStaff(staff, month, targetsByMetric)));
+  const rawScorecards = await Promise.all(staffMembers.map((staff) => scorecardForStaff(staff, month, targetsByMetric, { metricValues: metrics })));
+  const teamScorecards = sortTeamScorecards(rawScorecards);
 
   return {
     month,
