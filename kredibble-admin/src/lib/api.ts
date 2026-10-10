@@ -1898,4 +1898,80 @@ export const getTeamScorecardApi = async (month?: string): Promise<ScorecardResp
   return request<ScorecardResponseData>(`/admin/scorecards/team${queryString}`);
 };
 
+// BE-016: Settings & Integrations API callers
+export interface IntegrationStatusApi {
+  saved: boolean;
+  tail: string;
+  identifier: string;
+}
+
+export interface IntegrationsSettingsResponse {
+  wordpress: IntegrationStatusApi;
+  analytics: IntegrationStatusApi;
+  [key: string]: unknown;
+}
+
+export interface AccountProfileApi {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  roles?: string[];
+  notificationPreferences: {
+    digest?: boolean;
+    verifications?: boolean;
+    reports?: boolean;
+    testimonials?: boolean;
+  };
+}
+
+export const getIntegrationsSettingsApi = async (): Promise<IntegrationsSettingsResponse> => {
+  return request<IntegrationsSettingsResponse>("/admin/settings/integrations");
+};
+
+export const updateIntegrationApi = async (
+  kind: string,
+  data: { identifier?: string; secret?: string }
+): Promise<IntegrationStatusApi> => {
+  return request<IntegrationStatusApi>(`/admin/settings/integrations/${kind}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+};
+
+export const testIntegrationApi = async (
+  kind: string
+): Promise<{ success: boolean; message: string; kind: string }> => {
+  return request<{ success: boolean; message: string; kind: string }>(`/admin/settings/integrations/${kind}/test`, {
+    method: "POST",
+  });
+};
+
+export const getAccountProfileApi = async (): Promise<AccountProfileApi> => {
+  return request<AccountProfileApi>("/admin/settings/account");
+};
+
+export const updateAccountProfileApi = async (data: {
+  name?: string;
+  notificationPreferences?: Record<string, boolean>;
+}): Promise<AccountProfileApi> => {
+  return request<AccountProfileApi>("/admin/settings/account", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+};
+
+export const changePasswordApi = async (data: {
+  currentPassword?: string;
+  current?: string;
+  newPassword?: string;
+  next?: string;
+}): Promise<{ success: boolean; message: string }> => {
+  return request<{ success: boolean; message: string }>("/admin/settings/password", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+
 

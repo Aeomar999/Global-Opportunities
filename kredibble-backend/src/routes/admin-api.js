@@ -75,7 +75,18 @@ import {
   monthlyReportQuerySchema,
   overviewActivityQuerySchema,
   scorecardQuerySchema,
+  integrationUpdateSchema,
+  accountProfileUpdateSchema,
+  passwordChangeSchema,
 } from '../schemas/admin.js';
+import bcrypt from 'bcryptjs';
+import { reauthLimiter } from '../lib/rate-limiters.js';
+import {
+  getAllIntegrationsStatus,
+  saveIntegrationSettings,
+  testIntegrationConnection,
+  normalizeIntegrationKind,
+} from '../lib/integrations.js';
 import {
   SCORE_FROM_DAY,
   isPastMonth,
@@ -3057,14 +3068,175 @@ adminApiRouter.put('/settings/pipeline-stages', requireAdminOrStaffAuth, require
   itemResponse(res, responseStages);
 }));
 
-adminApiRouter.get('/settings/integrations', requireAdminOrStaffAuth, requirePortalRoles('Desk Lead', 'Admin Support'), (req, res) => {
+// BE-016: Integrations settings (write-only credentials, connection tests)
+adminApiRouter.get('/settings/integrations', requireAdminOrStaffAuth, requireScreen('settings_admin', 'view'), asyncHandler(async (req, res) => {
+  const integrations = await getAllIntegrationsStatus();
   itemResponse(res, {
-    wordpress: { configured: configured(env.wordpressSyncBaseUrl) && configured(env.wordpressApiKey) },
+    ...integrations,
     openai: { configured: configured(env.openaiApiKey), model: env.openaiModel },
     anthropic: { configured: configured(env.anthropicApiKey), model: env.anthropicModel },
     resend: { configured: configured(env.resendApiKey) && configured(env.resendFromEmail) },
   });
+}));
+
+const handleSaveIntegration = asyncHandler(async (req, res) => {
+  const { kind } = req.params;
+  const { identifier, secret } = req.body;
+  const callerUser = await User.findById(req.auth.sub).select('name email').lean();
+
+  const saved = await saveIntegrationSettings({
+    kind,
+    identifier,
+    secret,
+    userId: req.auth.sub,
+    userName: callerUser?.name || 'Admin',
+  });
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.SETTINGS_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.SETTINGS,
+    outcome: 'success',
+    details: {
+      kind,
+      identifier: identifier !== undefined ? String(identifier).trim() : undefined,
+      secret: secret ? `••••${String(secret).trim().slice(-4)}` : (secret === '' ? 'cleared' : undefined),
+    },
+  });
+
+  itemResponse(res, saved);
 });
+
+adminApiRouter.put('/settings/integrations/:kind', requireAdminOrStaffAuth, requireScreen('settings_admin', 'edit'), validate(integrationUpdateSchema), handleSaveIntegration);
+adminApiRouter.post('/settings/integrations/:kind', requireAdminOrStaffAuth, requireScreen('settings_admin', 'edit'), validate(integrationUpdateSchema), handleSaveIntegration);
+
+adminApiRouter.post('/settings/integrations/:kind/test', requireAdminOrStaffAuth, requireScreen('settings_admin', 'edit'), asyncHandler(async (req, res) => {
+  const { kind } = req.params;
+  const result = await testIntegrationConnection(kind);
+  itemResponse(res, {
+    ...result,
+    kind: normalizeIntegrationKind(kind),
+  });
+}));
+
+// BE-016: My Account & Profile management
+const handleGetAccountProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.auth.sub).select('name email role notificationPreferences').lean();
+  if (!user || user.role === 'deleted') {
+    throw notFound('User account not found');
+  }
+
+  const staff = await StaffMember.findOne({ userId: req.auth.sub, status: 'active' }).select('roles role joinedDate').lean();
+
+  const profile = {
+    id: user._id.toString(),
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    roles: staff?.roles || (staff?.role ? [staff.role] : [user.role]),
+    notificationPreferences: user.notificationPreferences || {
+      digest: true,
+      verifications: true,
+      reports: true,
+      testimonials: false,
+    },
+  };
+  itemResponse(res, profile);
+});
+
+adminApiRouter.get('/settings/account', requireAdminOrStaffAuth, requireScreen('settings', 'view'), handleGetAccountProfile);
+adminApiRouter.get('/settings/me', requireAdminOrStaffAuth, requireScreen('settings', 'view'), handleGetAccountProfile);
+
+const handleUpdateAccountProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.auth.sub);
+  if (!user || user.role === 'deleted') {
+    throw notFound('User account not found');
+  }
+
+  const { name, notificationPreferences } = req.body;
+  if (name !== undefined) {
+    user.name = String(name).trim();
+    await StaffMember.updateOne({ userId: user._id }, { $set: { name: user.name } });
+  }
+
+  if (notificationPreferences !== undefined) {
+    const existing = user.notificationPreferences?.toObject?.() || user.notificationPreferences || {};
+    user.notificationPreferences = {
+      ...existing,
+      ...notificationPreferences,
+    };
+  }
+
+  await user.save();
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.ADMIN_USER_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.USER,
+    resourceId: user._id,
+    outcome: 'success',
+    details: {
+      updatedFields: Object.keys(req.body),
+    },
+  });
+
+  const staff = await StaffMember.findOne({ userId: user._id, status: 'active' }).select('roles role joinedDate').lean();
+
+  const profile = {
+    id: user._id.toString(),
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    roles: staff?.roles || (staff?.role ? [staff.role] : [user.role]),
+    notificationPreferences: user.notificationPreferences,
+  };
+  itemResponse(res, profile);
+});
+
+adminApiRouter.put('/settings/account', requireAdminOrStaffAuth, requireScreen('settings', 'edit'), validate(accountProfileUpdateSchema), handleUpdateAccountProfile);
+adminApiRouter.put('/settings/me', requireAdminOrStaffAuth, requireScreen('settings', 'edit'), validate(accountProfileUpdateSchema), handleUpdateAccountProfile);
+
+// BE-016: Password Change behind authenticated session
+const handleChangePassword = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.auth.sub);
+  if (!user || user.role === 'deleted') {
+    throw notFound('User account not found');
+  }
+
+  const currentPassword = req.body.currentPassword || req.body.current;
+  const newPassword = req.body.newPassword || req.body.next;
+
+  if (!user.passwordHash || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.PASSWORD_CHANGE,
+      resourceType: AUDIT_RESOURCE_TYPES.USER,
+      outcome: 'failure',
+      reason: 'Incorrect current password',
+    });
+    throw new ApiError(400, 'Current password is incorrect');
+  }
+
+  if (await bcrypt.compare(newPassword, user.passwordHash)) {
+    throw new ApiError(400, 'New password must be different from the current one');
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  user.tokenVersion = (user.tokenVersion || 0) + 1;
+  user.failedLoginAttempts = 0;
+  user.lockUntil = undefined;
+  await user.save();
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.PASSWORD_CHANGE,
+    resourceType: AUDIT_RESOURCE_TYPES.USER,
+    resourceId: user._id,
+    outcome: 'success',
+    details: { event: 'password_change' },
+  });
+
+  itemResponse(res, { success: true, message: 'Password updated successfully' });
+});
+
+adminApiRouter.post('/settings/password', requireAdminOrStaffAuth, requireScreen('settings', 'edit'), reauthLimiter, validate(passwordChangeSchema), handleChangePassword);
+adminApiRouter.post('/settings/change-password', requireAdminOrStaffAuth, requireScreen('settings', 'edit'), reauthLimiter, validate(passwordChangeSchema), handleChangePassword);
 
 adminApiRouter.get('/leaderboard', requireAdminOrStaffAuth, requirePortalRoles(...AMBASSADOR_ROLES), asyncHandler(async (req, res) => {
   const { month } = monthBounds(req.query.month);

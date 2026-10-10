@@ -572,6 +572,18 @@ const pipelineStageConfigSchema = new mongoose.Schema({
 
 export const PipelineStageConfig = mongoose.model('PipelineStageConfig', pipelineStageConfigSchema);
 
+// BE-016: Integration settings with encrypted credentials and masked secrets
+const integrationConfigSchema = new mongoose.Schema({
+  key: { type: String, required: true, unique: true }, // e.g. 'wordpress', 'analytics'
+  identifier: { type: String, default: '' },           // e.g. siteUrl, propertyId
+  encryptedSecret: { type: String, default: '' },      // AES-256-GCM encrypted payload
+  secretTail: { type: String, default: '' },           // Last 4 characters, e.g. '3f9a'
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updatedByName: { type: String, default: '' },
+}, { timestamps: true });
+
+export const IntegrationConfig = mongoose.model('IntegrationConfig', integrationConfigSchema);
+
 // BE-002: Append-only KPI TargetChange history
 const targetChangeSchema = new mongoose.Schema({
   kpi: {
