@@ -615,6 +615,24 @@ export const websiteAudienceQuerySchema = z.object({
   }).optional(),
 });
 
+// BE-013: Monthly Reports schemas
+export const monthlyReportCreateSchema = z.object({
+  body: z.object({
+    reportMonth: z.string().regex(/^\d{4}-\d{2}$/, 'reportMonth must be YYYY-MM format'),
+    view: z.enum(['partner', 'team']),
+    generatedAt: z.string().or(z.date()).optional(),
+  }),
+});
+
+export const monthlyReportQuerySchema = z.object({
+  query: z.object({
+    reportMonth: z.string().regex(/^\d{4}-\d{2}$/, 'reportMonth must be YYYY-MM format').optional(),
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format').optional(),
+    view: z.enum(['partner', 'team']).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50).optional(),
+  }).optional(),
+});
+
 
 
 

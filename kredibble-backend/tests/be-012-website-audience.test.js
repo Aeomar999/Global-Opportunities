@@ -100,6 +100,7 @@ describe('BE-012: Website Audience & KPI Integration', () => {
     });
 
     it('enforces unique index on month', async () => {
+      await WebsiteMonth.init();
       await WebsiteMonth.create({
         month: '2026-04',
         views: 5000,

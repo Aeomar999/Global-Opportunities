@@ -1730,3 +1730,108 @@ export const setPostAllowReplies = async (channelId: string, messageId: string, 
 
 export const getChannelThread = async (channelId: string, messageId: string) =>
   request<{ post: ChatMessageRecord; replies: ChatMessageRecord[] }>(`/admin/channels/${channelId}/messages/${messageId}/replies`);
+
+// BE-013: Monthly Reports
+export interface MonthlyReportRecord {
+  id: string;
+  reportMonth: string;
+  view: "partner" | "team";
+  generatedAt: string;
+  generatedBy?: string;
+  generatedByName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PartnerReportMetricRecord {
+  id: string;
+  label: string;
+  value: number;
+  previous: number | null;
+  delta: {
+    kind: "up" | "down" | "flat" | "na" | "none";
+    text: string;
+    percent: number | null;
+  };
+  description: string;
+}
+
+export interface PartnerReportResponse {
+  month: string;
+  audience: "partner";
+  metrics: PartnerReportMetricRecord[];
+  trend?: { month: string; value: number }[];
+  audienceTrend?: { month: string; value: number }[];
+  channels?: { channel: string; platform: string; posts: number; reach: number; engagement: number }[];
+  kpis: unknown[];
+  pipeline: unknown;
+  databasePace: unknown;
+  recordsBySource: { sourceType: string; count: number }[];
+  ambassadorNetwork: { size: number; activityRate: number };
+  social: { reach: number; engagement: number };
+  websiteAudience: unknown;
+  monthOverMonthGrowth: {
+    opportunitiesPublished: number | null;
+    beneficiariesAdded: number | null;
+    socialReach: number | null;
+    websiteViews: number | null;
+  };
+}
+
+export interface TeamReportResponse {
+  month: string;
+  audience: "team";
+  kpis: unknown[];
+  pipeline: unknown;
+  pipelineTarget: number;
+  pace: unknown;
+  databasePace: unknown;
+  sources: { sourceType: string; count: number }[];
+  recordsBySource: { sourceType: string; count: number }[];
+  network: { size: number; active: number; activityRate: number };
+  ambassadorNetwork: { size: number; activityRate: number };
+  top: unknown[];
+  topAmbassadors: unknown[];
+  social: {
+    reach: number;
+    engagement: number;
+    posts: number;
+    platforms: { channel: string; platform: string; posts: number; reach: number; engagement: number }[];
+  };
+  people: unknown[];
+  teamScorecards: unknown[];
+  tooEarly: boolean;
+  websiteAudience: unknown;
+  monthOverMonthGrowth: {
+    opportunitiesPublished: number | null;
+    beneficiariesAdded: number | null;
+    socialReach: number | null;
+    websiteViews: number | null;
+  };
+}
+
+export const recordMonthlyReportApi = async (data: { reportMonth: string; view: "partner" | "team"; generatedAt?: string }) =>
+  request<MonthlyReportRecord>("/admin/monthly-reports", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const getMonthlyReportsApi = async (params?: { reportMonth?: string; month?: string; view?: "partner" | "team"; limit?: number }) => {
+  const query = new URLSearchParams();
+  if (params?.reportMonth) query.set("reportMonth", params.reportMonth);
+  if (params?.month) query.set("month", params.month);
+  if (params?.view) query.set("view", params.view);
+  if (params?.limit) query.set("limit", String(params.limit));
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<MonthlyReportRecord[]>(`/admin/monthly-reports${queryString}`);
+};
+
+export const getPartnerReportApi = async (month?: string) => {
+  const queryString = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<PartnerReportResponse>(`/admin/reports/partner${queryString}`);
+};
+
+export const getTeamReportApi = async (month?: string) => {
+  const queryString = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<TeamReportResponse>(`/admin/reports/team${queryString}`);
+};

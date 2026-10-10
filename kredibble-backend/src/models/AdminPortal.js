@@ -799,3 +799,41 @@ websiteMonthSchema.pre('validate', function() {
 
 export const WebsiteMonth = mongoose.model('WebsiteMonth', websiteMonthSchema);
 
+export const MONTHLY_REPORT_VIEWS = Object.freeze(['partner', 'team']);
+
+const monthlyReportSchema = new mongoose.Schema(
+  {
+    reportMonth: {
+      type: String,
+      required: true,
+      match: /^\d{4}-\d{2}$/,
+      index: true,
+    },
+    view: {
+      type: String,
+      required: true,
+      enum: ['partner', 'team'],
+      index: true,
+    },
+    generatedAt: {
+      type: Date,
+      default: Date.now,
+      index: true,
+    },
+    generatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    generatedByName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+  },
+  { timestamps: true }
+);
+
+monthlyReportSchema.index({ reportMonth: 1, view: 1, generatedAt: 1 });
+
+export const MonthlyReport = mongoose.model('MonthlyReport', monthlyReportSchema);
