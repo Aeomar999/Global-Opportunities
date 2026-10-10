@@ -477,6 +477,108 @@ export const testimonialUpdateSchema = z.object({
   }),
 });
 
+export const OPPORTUNITY_STATUS_VALUES = ['draft', 'published', 'pending', 'approved', 'rejected', 'archived'];
+export const OPPORTUNITY_FORMAT_VALUES = ['online', 'in-person', 'hybrid'];
+
+export const opportunityCreateSchema = z.object({
+  body: z.object({
+    title: z.string().trim().min(2, 'Title must be at least 2 characters').max(200),
+    type: z.string().trim().min(2, 'Type is required').max(50),
+    company: z.string().trim().min(2).max(200).optional(),
+    organisation: z.string().trim().min(2).max(200).optional(),
+    offeringOrganization: z.string().trim().max(200).optional(),
+    location: z.string().trim().max(200).optional().default('Online'),
+    country: z.string().trim().max(100).optional(),
+    description: z.string().trim().min(5, 'Description must be at least 5 characters').max(20000),
+    status: z.enum(OPPORTUNITY_STATUS_VALUES).optional(),
+    publish: z.boolean().optional(),
+    vetted: z.boolean().optional(),
+    vettedById: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid vettedById').nullable().optional(),
+    vettedBy: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid vettedBy').nullable().optional(),
+    vettedOn: z.string().trim().optional(),
+    publishedAt: z.string().trim().optional(),
+    writerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid writerId').nullable().optional(),
+    assignedWriterId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid assignedWriterId').nullable().optional(),
+    closesAt: z.string().trim().optional(),
+    deadline: z.string().trim().optional(),
+    applyUrl: z.string().trim().optional(),
+    applicationUrl: z.string().trim().optional(),
+    applicationLink: z.string().trim().optional(),
+    costLabel: z.string().trim().max(100).optional(),
+    durationLabel: z.string().trim().max(100).optional(),
+    format: z.enum(OPPORTUNITY_FORMAT_VALUES).optional().default('online'),
+    eventAt: z.string().trim().optional(),
+    eventDateTime: z.string().trim().optional(),
+    logoUrl: z.string().trim().optional(),
+    organizationLogo: z.string().trim().optional(),
+    imageUrl: z.string().trim().optional(),
+    coverImage: z.string().trim().optional(),
+    images: z.array(z.string().trim()).optional(),
+    referralOnApply: z.boolean().optional(),
+    referralCodeOnApply: z.boolean().optional(),
+    workType: z.string().trim().optional(),
+    salary: z.string().trim().optional(),
+  }).refine((data) => Boolean(data.company || data.organisation || data.offeringOrganization), {
+    message: 'organisation or company is required',
+    path: ['organisation'],
+  }),
+});
+
+export const opportunityUpdateSchema = z.object({
+  body: z.object({
+    title: z.string().trim().min(2).max(200).optional(),
+    type: z.string().trim().min(2).max(50).optional(),
+    company: z.string().trim().min(2).max(200).optional(),
+    organisation: z.string().trim().min(2).max(200).optional(),
+    offeringOrganization: z.string().trim().max(200).optional(),
+    location: z.string().trim().max(200).optional(),
+    country: z.string().trim().max(100).optional(),
+    description: z.string().trim().min(5).max(20000).optional(),
+    status: z.enum(OPPORTUNITY_STATUS_VALUES).optional(),
+    moderationStatus: z.string().trim().optional(),
+    publish: z.boolean().optional(),
+    vetted: z.boolean().optional(),
+    vettedById: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid vettedById').nullable().optional(),
+    vettedBy: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid vettedBy').nullable().optional(),
+    vettedOn: z.string().trim().optional(),
+    publishedAt: z.string().trim().nullable().optional(),
+    writerId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid writerId').nullable().optional(),
+    assignedWriterId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid assignedWriterId').nullable().optional(),
+    closesAt: z.string().trim().optional(),
+    deadline: z.string().trim().optional(),
+    applyUrl: z.string().trim().optional(),
+    applicationUrl: z.string().trim().optional(),
+    applicationLink: z.string().trim().optional(),
+    costLabel: z.string().trim().max(100).optional(),
+    durationLabel: z.string().trim().max(100).optional(),
+    format: z.enum(OPPORTUNITY_FORMAT_VALUES).optional(),
+    eventAt: z.string().trim().optional(),
+    eventDateTime: z.string().trim().optional(),
+    logoUrl: z.string().trim().optional(),
+    organizationLogo: z.string().trim().optional(),
+    imageUrl: z.string().trim().optional(),
+    coverImage: z.string().trim().optional(),
+    images: z.array(z.string().trim()).optional(),
+    referralOnApply: z.boolean().optional(),
+    referralCodeOnApply: z.boolean().optional(),
+    workType: z.string().trim().optional(),
+    salary: z.string().trim().optional(),
+  }),
+});
+
+export const opportunityModerateDecisionSchema = z.object({
+  body: z.object({
+    decision: z.enum(['approve', 'reject']).optional(),
+    moderationStatus: z.enum(['approved', 'rejected', 'published', 'pending']).optional(),
+    vetted: z.boolean().optional(),
+    note: z.string().trim().max(1000).optional(),
+  }).refine((data) => Boolean(data.decision || data.moderationStatus || data.vetted !== undefined), {
+    message: 'Either decision, moderationStatus, or vetted must be provided',
+    path: ['decision'],
+  }),
+});
+
+
 
 
 

@@ -909,6 +909,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       pendingAmbassadorRequests,
       pendingRecords,
       pendingTestimonials,
+      unvettedDrafts,
     ] = await Promise.all([
       CompanyVerification.countDocuments({ overallStatus: 'pending' }),
       Opportunity.countDocuments({ moderationStatus: 'pending' }),
@@ -926,6 +927,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       AmbassadorRequest.countDocuments({ status: 'pending' }),
       Beneficiary.countDocuments({ verified: false }),
       Testimonial.countDocuments({ status: 'pending' }),
+      Opportunity.countDocuments({ status: 'draft', vetted: false }),
     ]);
 
     itemResponse(res, {
@@ -935,6 +937,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       pendingOpportunities,
       pendingRecords,
       pendingTestimonials,
+      unvettedDrafts,
       activeSeekers,
       activeHirers,
       openReports,
@@ -1069,15 +1072,17 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
     const opportunity = await Opportunity.findById(req.params.opportunityId);
     if (!opportunity) throw notFound('Opportunity');
     const { referralCode, ambassador } = await findReferringAmbassador(req.body.referralCode);
+    const source = req.body.source === 'website' ? 'website' : 'app';
     await OpportunityEngagement.create({
       opportunityId: opportunity._id,
       event: 'view',
-      source: req.body.source === 'website' ? 'website' : 'app',
+      source,
       userId: req.auth?.sub,
       ambassadorId: ambassador?._id,
       referralCode,
       visitorId: String(req.body.visitorId || '').trim() || undefined,
     });
+    await Opportunity.findByIdAndUpdate(opportunity._id, { $inc: { [`views.${source}`]: 1 } });
     res.status(202).json({ data: { recorded: true } });
   }));
 
@@ -1475,7 +1480,7 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       applicant.set('ambassadorId', ambassador._id);
     }
     await applicant.save();
-    await Opportunity.findByIdAndUpdate(opportunity._id, { $inc: { applicantsCount: 1 } });
+    await Opportunity.findByIdAndUpdate(opportunity._id, { $inc: { applicantsCount: 1, 'applications.app': 1 } });
     await OpportunityEngagement.create({
       opportunityId: opportunity._id,
       event: 'application',

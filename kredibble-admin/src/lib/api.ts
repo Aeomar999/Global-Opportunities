@@ -211,27 +211,53 @@ export type OpportunityRecord = {
   title: string;
   type: string;
   company: string;
+  organisation?: string;
   offeringOrganization?: string;
   organizationLogo?: string;
+  logoUrl?: string;
+  imageUrl?: string;
+  coverImage?: string;
+  images?: string[];
   location: string;
   description: string;
   workType?: string;
   salary?: string;
   date?: string;
+  eventAt?: string;
   eventDateTime?: string;
   eventRegion?: string;
   eventCategory?: string;
   grantBudgetRange?: string;
   grantSector?: string;
   deadline?: string;
+  closesAt?: string;
   eligibility?: string;
   benefits?: string;
   applicationUrl?: string;
   applicationLink?: string;
+  applyUrl?: string;
+  costLabel?: string;
+  durationLabel?: string;
+  format?: string;
+  country?: string;
   applicantsCount: number;
+  status?: string;
+  publish?: boolean;
   moderationStatus: string;
   vetted: boolean;
+  vettedBy?: string;
+  vettedById?: string;
+  vettedByName?: string;
   vettedAt?: string;
+  vettedOn?: string;
+  publishedAt?: string;
+  writerId?: string;
+  assignedWriterId?: string;
+  writerName?: string;
+  referralOnApply?: boolean;
+  referralCodeOnApply?: boolean;
+  views?: { website: number; app: number };
+  applications?: { website: number; app: number };
   createdAt: string;
   updatedAt: string;
 };
@@ -745,6 +771,43 @@ export const getOpportunityById = async (id: string) => {
 export const moderateOpportunity = async (id: string, decision: "approve" | "reject") => {
   const body = decision === "approve" ? { vetted: true, moderationStatus: "published" } : { moderationStatus: "rejected" };
   return request<OpportunityRecord>(`/admin/opportunities/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+};
+
+export interface OpportunityCountsRecord {
+  unvettedDrafts: number;
+  drafts: number;
+  published: number;
+  pending: number;
+  vetted: number;
+  total: number;
+}
+
+export const getOpportunityCountsApi = async () => {
+  return request<OpportunityCountsRecord>("/admin/opportunities/counts");
+};
+
+export const createOpportunityApi = async (data: Partial<OpportunityRecord>) => {
+  return request<OpportunityRecord>("/admin/opportunities", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateOpportunityApi = async (id: string, data: Partial<OpportunityRecord>) => {
+  return request<OpportunityRecord>(`/admin/opportunities/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+export const unpublishOpportunityApi = async (id: string) => {
+  return request<OpportunityRecord>(`/admin/opportunities/${id}/unpublish`, {
+    method: "POST",
+  });
+};
+
+export const getOpportunityMetricsApi = async (id: string) => {
+  return request<{ listingId: string; views: { website: number; app: number }; applications: { website: number; app: number } }>(`/admin/opportunities/${id}/metrics`);
 };
 
 export interface RolesPermissionsPayload {

@@ -65,6 +65,8 @@ import {
   testimonialCreateSchema,
   testimonialModerateSchema,
   testimonialUpdateSchema,
+  opportunityCreateSchema,
+  opportunityUpdateSchema,
 } from '../schemas/admin.js';
 import { validate } from '../middleware/validate.js';
 import { postChannelMessage, listChannelMessages, getThread, findPost, setAllowReplies } from '../lib/chat.js';
@@ -330,11 +332,82 @@ const addManagedRoutes = ({
 };
 
 const OPPORTUNITY_ALLOWED_FIELDS = [
-  'title', 'type', 'company', 'offeringOrganization', 'location', 'description',
-  'date', 'workType', 'salary', 'experienceLevels', 'eventDateTime', 'eventRegion',
+  'title', 'type', 'company', 'organisation', 'offeringOrganization', 'location', 'description',
+  'date', 'workType', 'salary', 'experienceLevels', 'eventDateTime', 'eventAt', 'eventRegion',
   'eventCategory', 'grantBudgetRange', 'grantSector', 'status', 'moderationStatus',
-  'vetted', 'deadline', 'url', 'coverImage', 'assignedWriterId', 'referralCodeOnApply', 'category',
+  'vetted', 'vettedById', 'vettedBy', 'vettedOn', 'publishedAt', 'closesAt', 'deadline',
+  'url', 'applyUrl', 'applicationUrl', 'applicationLink', 'costLabel', 'durationLabel',
+  'format', 'country', 'logoUrl', 'organizationLogo', 'imageUrl', 'coverImage', 'images',
+  'writerId', 'assignedWriterId', 'referralOnApply', 'referralCodeOnApply', 'category', 'publish',
 ];
+
+export const toOpportunityAdminObject = (record) => {
+  if (!record) return null;
+  const raw = record.toJSON ? record.toJSON({ virtuals: true }) : record;
+  const id = raw.id || raw._id?.toString();
+  const rawPublished = raw.publishedAt;
+  const publishedAt = rawPublished
+    ? (rawPublished instanceof Date ? rawPublished.toISOString() : String(rawPublished))
+    : undefined;
+  const rawDeadline = raw.closesAt || raw.deadline;
+  const closesAt = rawDeadline
+    ? (rawDeadline instanceof Date ? rawDeadline.toISOString() : String(rawDeadline))
+    : undefined;
+
+  const vettedByDoc = raw.vettedBy;
+  const vettedById = vettedByDoc && typeof vettedByDoc === 'object'
+    ? (vettedByDoc._id?.toString() || vettedByDoc.id)
+    : (vettedByDoc ? String(vettedByDoc) : raw.vettedById);
+  const vettedByName = vettedByDoc && typeof vettedByDoc === 'object'
+    ? (vettedByDoc.name || vettedByDoc.fullName)
+    : undefined;
+
+  const writerDoc = raw.writerId || raw.assignedWriterId;
+  const writerId = writerDoc && typeof writerDoc === 'object'
+    ? (writerDoc._id?.toString() || writerDoc.id)
+    : (writerDoc ? String(writerDoc) : undefined);
+  const writerName = writerDoc && typeof writerDoc === 'object'
+    ? (writerDoc.name || writerDoc.fullName)
+    : undefined;
+
+  const views = raw.views || { website: 0, app: 0 };
+  const applications = raw.applications || { website: 0, app: 0 };
+
+  return {
+    ...raw,
+    id,
+    _id: undefined,
+    __v: undefined,
+    status: raw.status || (raw.moderationStatus === 'published' || raw.moderationStatus === 'approved' ? 'published' : 'draft'),
+    moderationStatus: raw.moderationStatus || (raw.status === 'published' ? 'published' : 'pending'),
+    vetted: Boolean(raw.vetted),
+    vettedBy: vettedById,
+    vettedById,
+    vettedByName,
+    vettedAt: raw.vettedAt ? new Date(raw.vettedAt).toISOString() : undefined,
+    vettedOn: raw.vettedOn || (raw.vettedAt ? new Date(raw.vettedAt).toISOString().slice(0, 10) : undefined),
+    publishedAt,
+    closesAt,
+    deadline: closesAt,
+    applyUrl: raw.applyUrl || raw.applicationUrl || raw.applicationLink,
+    applicationUrl: raw.applyUrl || raw.applicationUrl || raw.applicationLink,
+    eventAt: raw.eventAt || raw.eventDateTime,
+    eventDateTime: raw.eventAt || raw.eventDateTime,
+    writerId,
+    assignedWriterId: writerId,
+    writerName,
+    company: raw.company || raw.offeringOrganization,
+    organisation: raw.organisation || raw.company || raw.offeringOrganization,
+    logoUrl: raw.logoUrl || raw.organizationLogo,
+    organizationLogo: raw.logoUrl || raw.organizationLogo,
+    imageUrl: raw.imageUrl || raw.coverImage,
+    coverImage: raw.imageUrl || raw.coverImage,
+    referralOnApply: Boolean(raw.referralOnApply || raw.referralCodeOnApply),
+    referralCodeOnApply: Boolean(raw.referralOnApply || raw.referralCodeOnApply),
+    views,
+    applications,
+  };
+};
 
 const prepareOpportunity = (data, actorId, existing = {}) => {
   const allowed = {};
@@ -344,58 +417,229 @@ const prepareOpportunity = (data, actorId, existing = {}) => {
     }
   }
 
+  const company = allowed.company || allowed.organisation || allowed.offeringOrganization || existing.company;
   const next = {
     ...allowed,
-    company: allowed.company || allowed.offeringOrganization || existing.company,
-    offeringOrganization: allowed.offeringOrganization || allowed.company || existing.offeringOrganization,
+    company,
+    offeringOrganization: allowed.offeringOrganization || company,
   };
-  if (allowed.vetted === true && !existing.vetted) {
-    next.vettedBy = actorId;
-    next.vettedAt = new Date();
+
+  // If publish flag is provided
+  if (data.publish === true) {
+    next.status = 'published';
+    next.moderationStatus = 'published';
+  } else if (data.publish === false && !next.status) {
+    next.status = 'draft';
   }
-  const publishing = next.moderationStatus === 'published' || next.moderationStatus === 'approved';
-  const vetted = next.vetted ?? existing.vetted;
-  if (publishing && !vetted) throw new ApiError(400, 'An opportunity must be vetted before it can be published');
+
+  // Alias closesAt / deadline
+  if (allowed.closesAt && !allowed.deadline) next.deadline = new Date(allowed.closesAt);
+  if (allowed.deadline && !allowed.closesAt) next.closesAt = new Date(allowed.deadline);
+
+  // Alias applyUrl / applicationUrl
+  if (allowed.applyUrl && !allowed.applicationUrl) next.applicationUrl = allowed.applyUrl;
+  if (allowed.applicationUrl && !allowed.applyUrl) next.applyUrl = allowed.applicationUrl;
+
+  // Alias eventAt / eventDateTime
+  if (allowed.eventAt && !allowed.eventDateTime) next.eventDateTime = allowed.eventAt;
+  if (allowed.eventDateTime && !allowed.eventAt) next.eventAt = allowed.eventDateTime;
+
+  // Alias writerId / assignedWriterId
+  if (allowed.writerId && !allowed.assignedWriterId) next.assignedWriterId = allowed.writerId;
+  if (allowed.assignedWriterId && !allowed.writerId) next.writerId = allowed.assignedWriterId;
+
+  // Alias images / logos
+  if (allowed.logoUrl && !allowed.organizationLogo) next.organizationLogo = allowed.logoUrl;
+  if (allowed.organizationLogo && !allowed.logoUrl) next.logoUrl = allowed.organizationLogo;
+  if (allowed.imageUrl && !allowed.coverImage) next.coverImage = allowed.imageUrl;
+  if (allowed.coverImage && !allowed.imageUrl) next.imageUrl = allowed.coverImage;
+
+  // Rule: A published listing is always vetted
+  const isPublishing = next.status === 'published' || next.moderationStatus === 'published' || next.moderationStatus === 'approved';
+  if (isPublishing) {
+    next.vetted = true;
+    if (!existing.vetted && !next.vettedBy) {
+      next.vettedBy = allowed.vettedBy || allowed.vettedById || actorId;
+      next.vettedAt = new Date();
+      next.vettedOn = next.vettedAt.toISOString().slice(0, 10);
+    }
+    if (!next.publishedAt && !existing.publishedAt) {
+      next.publishedAt = new Date();
+    }
+  }
+
+  if (allowed.vetted === true && !existing.vetted) {
+    next.vettedBy = allowed.vettedBy || allowed.vettedById || actorId;
+    next.vettedAt = new Date();
+    next.vettedOn = next.vettedAt.toISOString().slice(0, 10);
+  }
+
   return next;
 };
 
-adminApiRouter.get('/opportunities', requireAdminOrStaffAuth, requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+adminApiRouter.get('/opportunities/counts', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'view'), requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+  const [unvettedDrafts, drafts, published, pending, vetted, total] = await Promise.all([
+    Opportunity.countDocuments({ status: 'draft', vetted: false }),
+    Opportunity.countDocuments({ status: 'draft' }),
+    Opportunity.countDocuments({ $or: [{ status: 'published' }, { moderationStatus: { $in: ['published', 'approved'] } }] }),
+    Opportunity.countDocuments({ moderationStatus: 'pending' }),
+    Opportunity.countDocuments({ vetted: true }),
+    Opportunity.countDocuments({}),
+  ]);
+  itemResponse(res, { unvettedDrafts, drafts, published, pending, vetted, total });
+}));
+
+adminApiRouter.get('/opportunities', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'view'), requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
   const filter = {};
-  for (const key of ['country', 'type', 'moderationStatus', 'vetted']) {
+  for (const key of ['country', 'type', 'status', 'moderationStatus', 'vetted']) {
     const value = req.query[key];
     if (value === undefined) continue;
     // SEC-061: a filter value is a plain string, never an operator object.
     if (typeof value !== 'string') throw new ApiError(400, 'Invalid query parameters');
     filter[key] = key === 'vetted' ? value === 'true' : value;
   }
+
+  if (req.query.search || req.query.q) {
+    const rawSearch = (req.query.search || req.query.q).trim();
+    const regex = new RegExp(escapedRegex(rawSearch), 'i');
+    filter.$or = [{ title: regex }, { company: regex }, { location: regex }, { offeringOrganization: regex }];
+  }
+
   const { page, skip, limit } = pageOptions(req.query);
   // Real totals, so a client can tell when it has read every page (the admin's Opportunities Queue does).
   const [records, total] = await Promise.all([
-    Opportunity.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    Opportunity.find(filter)
+      .populate('vettedBy', 'name fullName email')
+      .populate('writerId', 'name fullName email')
+      .populate('assignedWriterId', 'name fullName email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
     Opportunity.countDocuments(filter),
   ]);
-  listResponse(res, records.map(toClientObject), total, page, limit);
+  listResponse(res, records.map(toOpportunityAdminObject), total, page, limit);
 }));
 
-adminApiRouter.post('/opportunities', requireAdminOrStaffAuth, requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
-  const record = new Opportunity({ ...prepareOpportunity(req.body, req.auth.sub), createdBy: req.auth.sub });
+adminApiRouter.get('/opportunities/:id', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'view'), requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+  const record = await Opportunity.findById(validId(req.params.id, 'Opportunity'))
+    .populate('vettedBy', 'name fullName email')
+    .populate('writerId', 'name fullName email')
+    .populate('assignedWriterId', 'name fullName email');
+  if (!record) throw notFound('Opportunity');
+  itemResponse(res, toOpportunityAdminObject(record));
+}));
+
+adminApiRouter.post('/opportunities', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'edit'), requirePortalRoles(...OPPORTUNITY_ROLES), validate(opportunityCreateSchema), asyncHandler(async (req, res) => {
+  const prepared = prepareOpportunity(req.body, req.auth.sub);
+  const record = new Opportunity({ ...prepared, createdBy: req.auth.sub });
   await record.save();
   const sync = await syncManagedRecord('opportunities', record);
   await logActivity(req.auth.sub, 'created', 'opportunities', record);
-  res.status(201).json({ data: { ...toClientObject(record), sync } });
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.OPPORTUNITY_CREATE,
+    resourceType: AUDIT_RESOURCE_TYPES.OPPORTUNITY,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: {
+      title: record.title,
+      type: record.type,
+      status: record.status,
+      vetted: record.vetted,
+    },
+  });
+
+  res.status(201).json({ data: { ...toOpportunityAdminObject(record), sync } });
 }));
 
-adminApiRouter.patch('/opportunities/:id', requireAdminOrStaffAuth, requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+adminApiRouter.patch('/opportunities/:id', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'edit'), requirePortalRoles(...OPPORTUNITY_ROLES), validate(opportunityUpdateSchema), asyncHandler(async (req, res) => {
   const record = await Opportunity.findById(validId(req.params.id, 'Opportunity'));
   if (!record) throw notFound('Opportunity');
-  Object.assign(record, prepareOpportunity(req.body, req.auth.sub, record));
+  const wasVetted = record.vetted;
+  const wasPublished = record.status === 'published';
+
+  const prepared = prepareOpportunity(req.body, req.auth.sub, record);
+  Object.assign(record, prepared);
   await record.save();
   const sync = await syncManagedRecord('opportunities', record);
   await logActivity(req.auth.sub, 'updated', 'opportunities', record);
-  itemResponse(res, { ...toClientObject(record), sync });
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.OPPORTUNITY_UPDATE,
+    resourceType: AUDIT_RESOURCE_TYPES.OPPORTUNITY,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: {
+      title: record.title,
+      status: record.status,
+      vetted: record.vetted,
+    },
+  });
+
+  if (!wasPublished && record.status === 'published') {
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.OPPORTUNITY_PUBLISH,
+      resourceType: AUDIT_RESOURCE_TYPES.OPPORTUNITY,
+      resourceId: record._id,
+      outcome: 'success',
+      metadata: { title: record.title },
+    });
+  }
+
+  if (!wasVetted && record.vetted) {
+    await auditReq(req, {
+      action: AUDIT_ACTIONS.OPPORTUNITY_VET,
+      resourceType: AUDIT_RESOURCE_TYPES.OPPORTUNITY,
+      resourceId: record._id,
+      outcome: 'success',
+      metadata: { title: record.title },
+    });
+  }
+
+  itemResponse(res, { ...toOpportunityAdminObject(record), sync });
 }));
 
-adminApiRouter.get('/opportunities/:id/analytics', requireAdminOrStaffAuth, requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+adminApiRouter.post('/opportunities/:id/unpublish', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'edit'), requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+  const record = await Opportunity.findById(validId(req.params.id, 'Opportunity'));
+  if (!record) throw notFound('Opportunity');
+
+  record.status = 'draft';
+  record.moderationStatus = 'pending';
+  record.publishedAt = undefined;
+  await record.save();
+  await logActivity(req.auth.sub, 'unpublished', 'opportunities', record);
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.OPPORTUNITY_UNPUBLISH,
+    resourceType: AUDIT_RESOURCE_TYPES.OPPORTUNITY,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: { title: record.title },
+  });
+
+  itemResponse(res, toOpportunityAdminObject(record));
+}));
+
+adminApiRouter.get('/opportunities/:id/metrics', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'view'), requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+  const record = await Opportunity.findById(validId(req.params.id, 'Opportunity'));
+  if (!record) throw notFound('Opportunity');
+
+  const views = record.views || { website: 0, app: 0 };
+  const applications = record.applications || { website: 0, app: 0 };
+  itemResponse(res, {
+    listingId: record._id.toString(),
+    views: {
+      website: Number(views.website || 0),
+      app: Number(views.app || 0),
+    },
+    applications: {
+      website: Number(applications.website || 0),
+      app: Number(applications.app || 0),
+    },
+  });
+}));
+
+adminApiRouter.get('/opportunities/:id/analytics', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'view'), requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
   const opportunity = await Opportunity.findById(validId(req.params.id, 'Opportunity'));
   if (!opportunity) throw notFound('Opportunity');
   const totals = await OpportunityEngagement.aggregate([
@@ -408,10 +652,21 @@ adminApiRouter.get('/opportunities/:id/analytics', requireAdminOrStaffAuth, requ
     analytics[key][item._id.source] = item.count;
     analytics[key].total += item.count;
   }
+  // If direct views on opportunity are higher, incorporate them
+  if (opportunity.views) {
+    analytics.views.website = Math.max(analytics.views.website, opportunity.views.website || 0);
+    analytics.views.app = Math.max(analytics.views.app, opportunity.views.app || 0);
+    analytics.views.total = analytics.views.website + analytics.views.app;
+  }
+  if (opportunity.applications) {
+    analytics.applications.website = Math.max(analytics.applications.website, opportunity.applications.website || 0);
+    analytics.applications.app = Math.max(analytics.applications.app, opportunity.applications.app || 0);
+    analytics.applications.total = analytics.applications.website + analytics.applications.app;
+  }
   itemResponse(res, analytics);
 }));
 
-adminApiRouter.delete('/opportunities/:id', requireAdminOrStaffAuth, requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+adminApiRouter.delete('/opportunities/:id', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'edit'), requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
   const record = await Opportunity.findById(validId(req.params.id, 'Opportunity'));
   if (!record) throw notFound('Opportunity');
   let sync = { status: 'pending' };
@@ -424,13 +679,22 @@ adminApiRouter.delete('/opportunities/:id', requireAdminOrStaffAuth, requirePort
   }
   await record.deleteOne();
   await logActivity(req.auth.sub, 'deleted', 'opportunities', record);
+
+  await auditReq(req, {
+    action: AUDIT_ACTIONS.OPPORTUNITY_DELETE,
+    resourceType: AUDIT_RESOURCE_TYPES.OPPORTUNITY,
+    resourceId: record._id,
+    outcome: 'success',
+    metadata: { title: record.title },
+  });
+
   itemResponse(res, { id: req.params.id, sync });
 }));
 
-adminApiRouter.post('/opportunities/:id/retry-wordpress-sync', requireAdminOrStaffAuth, requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
+adminApiRouter.post('/opportunities/:id/retry-wordpress-sync', requireAdminOrStaffAuth, requireScreen('opportunities_queue', 'edit'), requirePortalRoles(...OPPORTUNITY_ROLES), asyncHandler(async (req, res) => {
   const record = await Opportunity.findById(validId(req.params.id, 'Opportunity'));
   if (!record) throw notFound('Opportunity');
-  itemResponse(res, { ...toClientObject(record), sync: await syncManagedRecord('opportunities', record) });
+  itemResponse(res, { ...toOpportunityAdminObject(record), sync: await syncManagedRecord('opportunities', record) });
 }));
 
 export const toProgramClientObject = (document) => {
@@ -2401,7 +2665,22 @@ const metricStatus = (value, target, thresholds = {}) => {
 const dashboardMetrics = async (month) => {
   const { start, end } = monthBounds(month);
   const [opportunitiesPublished, programsActive, programsDelivered, partnersClosed, ambassadorsActive, beneficiariesVerified, beneficiariesAdded, social, applications] = await Promise.all([
-    Opportunity.countDocuments({ vetted: true, moderationStatus: { $in: ['published', 'approved'] }, createdAt: { $gte: start, $lt: end } }),
+    Opportunity.countDocuments({
+      vetted: true,
+      $or: [
+        { status: 'published' },
+        { moderationStatus: { $in: ['published', 'approved'] } },
+      ],
+      $and: [
+        {
+          $or: [
+            { publishedAt: { $gte: start, $lt: end } },
+            { publishedAt: { $exists: false }, createdAt: { $gte: start, $lt: end } },
+            { publishedAt: null, createdAt: { $gte: start, $lt: end } },
+          ],
+        },
+      ],
+    }),
     Program.countDocuments({ status: { $in: ['planned', 'running'] } }),
     Program.countDocuments({
       status: 'delivered',

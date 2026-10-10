@@ -46,6 +46,12 @@ export const AUDIT_ACTIONS = {
   TESTIMONIAL_MODERATE: 'testimonial.moderate',
   TESTIMONIAL_UPDATE: 'testimonial.update',
   TESTIMONIAL_DELETE: 'testimonial.delete',
+  OPPORTUNITY_CREATE: 'opportunity.create',
+  OPPORTUNITY_UPDATE: 'opportunity.update',
+  OPPORTUNITY_DELETE: 'opportunity.delete',
+  OPPORTUNITY_PUBLISH: 'opportunity.publish',
+  OPPORTUNITY_UNPUBLISH: 'opportunity.unpublish',
+  OPPORTUNITY_VET: 'opportunity.vet',
 
   // GDPR/CCPA
   DATA_EXPORT: 'data.export',

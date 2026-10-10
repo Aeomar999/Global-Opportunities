@@ -46,28 +46,23 @@ _dmarc          IN  TXT     "v=DMARC1; p=none; sp=none; rua=mailto:dmarc-reports
 
 ; ------------------------------------------------------------------------------
 ; TRANSACTIONAL EMAIL (Resend - Track M10 / SEC-091)
-; Replace <resend-dkim-value> when generated in Resend console
-; ------------------------------------------------------------------------------
-resend._domainkey IN TXT    "k=rsa; p=<resend-dkim-public-key>"
+; Add resend._domainkey after generating your domain in the Resend dashboard:
+; resend._domainkey IN TXT    "k=rsa; p=<resend-dkim-public-key>"
 bounces         IN  MX  10  feedback-smtp.us-east-1.amazonses.com.
 bounces         IN  TXT     "v=spf1 include:amazonses.com ~all"
 
 ; ------------------------------------------------------------------------------
 ; APPLICATION SERVICES (Plan 4b / Plan 4f - Single-level subdomains)
 ; Covered under Cloudflare Universal SSL (*.globalopportunitydesk.com)
-; Proxied through Cloudflare edge (Orange Cloud enabled in Cloudflare dashboard)
+; Note: Add these A records manually in Cloudflare after your VPS IP is known:
+; api             IN  A       YOUR_VPS_IP
+; staging-api     IN  A       YOUR_VPS_IP
+; dev-api         IN  A       YOUR_VPS_IP
 ; ------------------------------------------------------------------------------
-; Production API (Hostinger VPS Caddy Edge Proxy)
-api             IN  A       <VPS_IP>
-
-; Staging API (Hostinger VPS Caddy Edge Proxy)
-staging-api     IN  A       <VPS_IP>
-
-; Development / Preview API (Hostinger VPS Caddy Edge Proxy)
-dev-api         IN  A       <VPS_IP>
 
 ; Production Admin Dashboard (Vercel Team Deployment)
 admin           IN  CNAME   cname.vercel-dns.com.
 
 ; Staging Admin Dashboard (Vercel Preview / Staging Deployment)
 staging-admin   IN  CNAME   cname.vercel-dns.com.
+
