@@ -640,6 +640,14 @@ export const overviewActivityQuerySchema = z.object({
   }).optional(),
 });
 
+// BE-015: Scorecard schemas
+export const scorecardQuerySchema = z.object({
+  query: z.object({
+    month: z.string().regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM format').optional(),
+    today: z.string().optional(),
+  }).optional(),
+});
+
 
 
 

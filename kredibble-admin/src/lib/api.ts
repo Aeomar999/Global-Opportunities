@@ -1,3 +1,5 @@
+import type { ScorecardPerson, CompositePoint } from "./scorecard";
+
 export type AuthRole = "admin" | "seeker" | "hirer";
 
 export type AuthUser = {
@@ -1866,4 +1868,34 @@ export const getOverviewActivityApi = async (limit?: number): Promise<OverviewFe
   const queryString = query.toString() ? `?${query.toString()}` : "";
   return request<OverviewFeedItem[]>(`/admin/overview/activity${queryString}`);
 };
+
+// BE-015: Scorecard types and API callers
+export interface ScorecardResponseData {
+  month: string;
+  isPast: boolean;
+  notConnected: boolean;
+  tooEarly: boolean;
+  people: ScorecardPerson[];
+  series: CompositePoint[] | null;
+  summary?: {
+    scored: number;
+    average: number | null;
+    belowAmber: number;
+  };
+}
+
+export const getMyScorecardApi = async (month?: string): Promise<ScorecardResponseData> => {
+  const query = new URLSearchParams();
+  if (month) query.set("month", month);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<ScorecardResponseData>(`/admin/scorecards/me${queryString}`);
+};
+
+export const getTeamScorecardApi = async (month?: string): Promise<ScorecardResponseData> => {
+  const query = new URLSearchParams();
+  if (month) query.set("month", month);
+  const queryString = query.toString() ? `?${query.toString()}` : "";
+  return request<ScorecardResponseData>(`/admin/scorecards/team${queryString}`);
+};
+
 
