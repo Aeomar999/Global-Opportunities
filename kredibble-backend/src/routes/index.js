@@ -4,7 +4,7 @@ import { authRouter } from './auth.js';
 import { uploadRouter, createUploadRouter, IMAGE_MIME_TYPES } from './upload.js';
 import { assistantRouter } from './assistant.js';
 import { newsRouter } from './news.js';
-import { adminApiRouter } from './admin-api.js';
+import { adminApiRouter, getAttentionCounts } from './admin-api.js';
 import { ambassadorRouter } from './ambassador.js';
 import { asyncHandler, itemResponse, listResponse, notFound, stripSensitive, ApiError, parsePagination } from '../utils/http.js';
 import { requireAuth, requireAdminAuth, optionalAuth, requireEmailVerified } from '../middleware/auth.js';
@@ -30,7 +30,7 @@ import {
 } from '../models/Platform.js';
 import { Channel, ChannelPost, CommunityMembership, Report } from '../models/Community.js';
 import { Article, Notification } from '../models/Content.js';
-import { Ambassador, AmbassadorRequest, OpportunityEngagement, Testimonial, Beneficiary } from '../models/AdminPortal.js';
+import { Ambassador, OpportunityEngagement, Testimonial } from '../models/AdminPortal.js';
 import { auditReq, AUDIT_ACTIONS, AUDIT_RESOURCE_TYPES } from '../lib/audit.js';
 import { searchLimiter, chatLimiter, testimonialLimiter } from '../lib/rate-limiters.js';
 import { normalizeLegacyRole } from '../lib/permissions.js';
@@ -892,12 +892,11 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
   // SEC-003: platform-wide counts are admin-only. `requireAdminAuth` validates the
   // admin cookie or header and enforces role=admin + audience=kredibble-admin.
   router.get('/dashboard/summary', requireAdminAuth, asyncHandler(async (req, res) => {
+    const attentionCounts = await getAttentionCounts();
     const [
-      pendingVerifications,
       pendingOpportunities,
       activeSeekers,
       activeHirers,
-      openReports,
       totalUsers,
       totalSeekers,
       totalHirers,
@@ -906,16 +905,10 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       totalEvents,
       totalGrants,
       totalGrantApplications,
-      pendingAmbassadorRequests,
-      pendingRecords,
-      pendingTestimonials,
-      unvettedDrafts,
     ] = await Promise.all([
-      CompanyVerification.countDocuments({ overallStatus: 'pending' }),
       Opportunity.countDocuments({ moderationStatus: 'pending' }),
       SeekerProfile.countDocuments({ status: 'active' }),
       HirerAccount.countDocuments({ status: 'active' }),
-      Report.countDocuments({ status: 'open' }),
       User.countDocuments(),
       SeekerProfile.countDocuments(),
       HirerAccount.countDocuments(),
@@ -924,23 +917,14 @@ export const createApiRouter = ({ enablePopulate = false } = {}) => {
       Event.countDocuments(),
       Grant.countDocuments(),
       GrantApplication.countDocuments(),
-      AmbassadorRequest.countDocuments({ status: 'pending' }),
-      Beneficiary.countDocuments({ verified: false }),
-      Testimonial.countDocuments({ status: 'pending' }),
-      Opportunity.countDocuments({ status: 'draft', vetted: false }),
     ]);
 
     itemResponse(res, {
-      // Keys read by the admin dashboard.
-      pendingVerifications,
-      pendingAmbassadorRequests,
+      // Keys read by the admin dashboard from single shared source of truth.
+      ...attentionCounts,
       pendingOpportunities,
-      pendingRecords,
-      pendingTestimonials,
-      unvettedDrafts,
       activeSeekers,
       activeHirers,
-      openReports,
       totalUsers,
       totalOpportunities,
       // Totals added with API versioning (SEC-019).

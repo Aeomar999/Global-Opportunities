@@ -3,9 +3,9 @@ import mongoose from 'mongoose';
 import { requireAdminOrStaffAuth, requireAdminAuth } from '../middleware/auth.js';
 import { requirePortalRoles, requireScreen } from '../middleware/portal-auth.js';
 import { ApiError, asyncHandler, itemResponse, listResponse, notFound } from '../utils/http.js';
-import { Opportunity } from '../models/Platform.js';
+import { Opportunity, CompanyVerification } from '../models/Platform.js';
 import { StaffMember, User } from '../models/User.js';
-import { Channel, CommunityMembership } from '../models/Community.js';
+import { Channel, CommunityMembership, Report } from '../models/Community.js';
 import { SeekerProfile, HirerAccount } from '../models/Profiles.js';
 import {
   AdminActivity,
@@ -73,6 +73,7 @@ import {
   websiteAudienceQuerySchema,
   monthlyReportCreateSchema,
   monthlyReportQuerySchema,
+  overviewActivityQuerySchema,
 } from '../schemas/admin.js';
 import { syncWebsiteAudienceFromGa4 } from '../lib/ga4-sync.js';
 import { validate } from '../middleware/validate.js';
@@ -3762,4 +3763,236 @@ adminApiRouter.post('/website-audience/sync', requireAdminOrStaffAuth, requireSc
     message: result.message,
     month,
   });
+}));
+
+// ============================================================================
+// BE-014: Overview activity feed and attention counts
+// ============================================================================
+
+export async function getAttentionCounts() {
+  const [
+    pendingVerifications,
+    openReports,
+    pendingTestimonials,
+    unvettedDrafts,
+    pendingRecords,
+    pendingAmbassadorRequests,
+  ] = await Promise.all([
+    CompanyVerification.countDocuments({ overallStatus: 'pending' }),
+    Report.countDocuments({ status: 'open' }),
+    Testimonial.countDocuments({ status: 'pending' }),
+    Opportunity.countDocuments({ status: 'draft', vetted: false }),
+    Beneficiary.countDocuments({ verified: false }),
+    AmbassadorRequest.countDocuments({ status: 'pending' }),
+  ]);
+
+  return {
+    pendingVerifications,
+    openReports,
+    pendingTestimonials,
+    draftListings: unvettedDrafts,
+    unvettedDrafts,
+    pendingRecords,
+    pendingAmbassadorRequests,
+  };
+}
+
+const MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function formatActivityTime(input) {
+  if (!input) return 'Not recorded';
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.slice(0, 10))) {
+    const parts = input.slice(0, 10).split('-');
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1;
+    const day = Number(parts[2]);
+    return `${day} ${MONTH_NAMES_SHORT[month]} ${year}`;
+  }
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return String(input);
+  return `${d.getUTCDate()} ${MONTH_NAMES_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+const STAGE_LABELS_FALLBACK = {
+  prospect: 'Prospect',
+  outreach: 'Outreach',
+  proposal: 'Proposal',
+  mou: 'MOU',
+  MOU: 'MOU',
+  onboard: 'Onboarded',
+  renew: 'Renewed',
+};
+
+export async function buildOverviewActivity(limit) {
+  // 1. Ambassador: joined as an ambassador (at most 2)
+  const ambassadors = await Ambassador.find({
+    status: { $ne: 'applicant' },
+    joinedAt: { $exists: true, $ne: null },
+  })
+    .sort({ joinedAt: -1, createdAt: -1 })
+    .limit(2)
+    .lean();
+
+  const ambassadorItems = ambassadors.map((amb) => {
+    const at = amb.joinedAt ? String(amb.joinedAt).slice(0, 10) : (amb.createdAt ? new Date(amb.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    return {
+      key: `amb-${amb._id}`,
+      kind: 'ambassador',
+      title: `${amb.fullName || amb.name || 'Ambassador'} joined as an ambassador`,
+      description: amb.campus || amb.city || amb.country || 'Ambassador network',
+      at,
+      time: formatActivityTime(at),
+    };
+  });
+
+  // 2. Partner: moved to a stage (at most 2)
+  const partners = await Partner.find({
+    $or: [
+      { 'stageHistory.1': { $exists: true } },
+      { 'stageHistory.from': { $exists: true } },
+    ],
+  })
+    .sort({ updatedAt: -1 })
+    .limit(10)
+    .lean();
+
+  const partnerMoves = [];
+  for (const partner of partners) {
+    const history = Array.isArray(partner.stageHistory) ? partner.stageHistory : [];
+    const candidateMoves = history.filter((entry, idx) => idx > 0 || Boolean(entry.from));
+    candidateMoves.forEach((entry, idx) => {
+      const at = entry.at ? String(entry.at).slice(0, 10) : (partner.updatedAt ? new Date(partner.updatedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+      const stageKey = String(entry.stage || '').toLowerCase();
+      const label = STAGE_LABELS_FALLBACK[entry.stage] || STAGE_LABELS_FALLBACK[stageKey] || DEFAULT_PIPELINE_STAGE_LABELS[stageKey] || entry.stage;
+      partnerMoves.push({
+        key: `par-${partner._id}-${idx}`,
+        kind: 'partner',
+        title: `${partner.organizationName || partner.name || 'Partner'} moved to ${label}`,
+        description: partner.sector || partner.partnerType || 'Partner',
+        at,
+        time: formatActivityTime(at),
+      });
+    });
+  }
+  partnerMoves.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')) || String(a.key).localeCompare(String(b.key)));
+  const partnerItems = partnerMoves.slice(0, 2);
+
+  // 3. Listing: published (at most 2)
+  const listings = await Opportunity.find({
+    status: 'published',
+    vetted: true,
+    publishedAt: { $exists: true, $ne: null },
+  })
+    .sort({ publishedAt: -1, createdAt: -1 })
+    .limit(2)
+    .lean();
+
+  const listingItems = listings.map((listing) => {
+    const at = listing.publishedAt ? new Date(listing.publishedAt).toISOString().slice(0, 10) : (listing.createdAt ? new Date(listing.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    return {
+      key: `lst-${listing._id}`,
+      kind: 'listing',
+      title: `${listing.title} was published`,
+      description: listing.organization || listing.organisation || listing.location || listing.type || 'Listing',
+      at,
+      time: formatActivityTime(at),
+    };
+  });
+
+  // 4. Program: delivered (at most 2)
+  const programs = await Program.find({
+    status: 'delivered',
+    deliveredAt: { $exists: true, $ne: null },
+  })
+    .sort({ deliveredAt: -1, updatedAt: -1 })
+    .limit(2)
+    .lean();
+
+  const programItems = programs.map((program) => {
+    const at = program.deliveredAt ? new Date(program.deliveredAt).toISOString().slice(0, 10) : (program.updatedAt ? new Date(program.updatedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    return {
+      key: `prg-${program._id}`,
+      kind: 'program',
+      title: `${program.title || program.name} was delivered`,
+      description: `${program.participantCount || 0} of ${program.participantTarget || 0} participants`,
+      at,
+      time: formatActivityTime(at),
+    };
+  });
+
+  // 5. Record: verified (at most 2)
+  const records = await Beneficiary.find({
+    verified: true,
+    verifiedAt: { $exists: true, $ne: null },
+  })
+    .sort({ verifiedAt: -1, updatedAt: -1 })
+    .limit(2)
+    .lean();
+
+  const recordItems = records.map((record) => {
+    const at = record.verifiedAt ? new Date(record.verifiedAt).toISOString().slice(0, 10) : (record.updatedAt ? new Date(record.updatedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    return {
+      key: `rec-${record._id}`,
+      kind: 'record',
+      title: `${record.fullName || record.name} was verified`,
+      description: record.institution || record.organization || record.country || 'Database record',
+      at,
+      time: formatActivityTime(at),
+    };
+  });
+
+  // 6. Testimonial: approved (at most 2)
+  const testimonials = await Testimonial.find({
+    status: 'approved',
+  })
+    .sort({ decidedAt: -1, updatedAt: -1, createdAt: -1 })
+    .limit(2)
+    .lean();
+
+  const testimonialItems = testimonials.map((testimonial) => {
+    const at = testimonial.decidedAt ? new Date(testimonial.decidedAt).toISOString().slice(0, 10) : (testimonial.submittedAt ? new Date(testimonial.submittedAt).toISOString().slice(0, 10) : (testimonial.createdAt ? new Date(testimonial.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)));
+    const authorName = testimonial.author || testimonial.name || 'someone';
+    return {
+      key: `tes-${testimonial._id}`,
+      kind: 'testimonial',
+      title: `A testimonial from ${authorName} was approved`,
+      description: testimonial.role || testimonial.organization || 'Testimonial',
+      at,
+      time: formatActivityTime(at),
+    };
+  });
+
+  // Combine at most 2 of each kind (up to 12 items total)
+  const combined = [
+    ...ambassadorItems,
+    ...partnerItems,
+    ...listingItems,
+    ...programItems,
+    ...recordItems,
+    ...testimonialItems,
+  ];
+
+  // Sort newest first
+  combined.sort((a, b) => {
+    const dayCompare = String(b.at || '').slice(0, 10).localeCompare(String(a.at || '').slice(0, 10));
+    if (dayCompare !== 0) return dayCompare;
+    return String(a.key).localeCompare(String(b.key));
+  });
+
+  if (typeof limit === 'number' && limit > 0) {
+    return combined.slice(0, limit);
+  }
+
+  return combined;
+}
+
+adminApiRouter.get('/overview/attention', requireAdminOrStaffAuth, requireScreen('overview', 'view'), asyncHandler(async (req, res) => {
+  const counts = await getAttentionCounts();
+  itemResponse(res, counts);
+}));
+
+adminApiRouter.get('/overview/activity', requireAdminOrStaffAuth, requireScreen('overview', 'view'), validate(overviewActivityQuerySchema), asyncHandler(async (req, res) => {
+  const limit = req.query?.limit ? Number.parseInt(req.query.limit, 10) : undefined;
+  const activity = await buildOverviewActivity(limit);
+  itemResponse(res, activity);
 }));

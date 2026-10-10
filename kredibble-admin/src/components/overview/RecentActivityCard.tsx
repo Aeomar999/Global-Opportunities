@@ -51,7 +51,7 @@ export function RecentActivityCard({ items, loading, notConnected = false, class
             <SkeletonItem key={i} />
           ))}
         </div>
-      ) : notConnected ? (
+      ) : notConnected && items === null ? (
         <NotAvailableYet icon={Activity} />
       ) : !items ? (
         <UnavailableNote message="The activity could not be loaded." />

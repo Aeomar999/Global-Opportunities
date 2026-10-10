@@ -56,8 +56,8 @@ function Row({ href, icon, label, count, testId, noSource = false }: { href: str
   );
 }
 
-/** The queues the real API reports (GET /dashboard/summary). The others have no live source yet. */
-const LIVE_KEYS: (keyof AttentionCounts)[] = ["pendingVerifications", "openReports"];
+/** The queues the live API reports. All four now have live backend sources. */
+const LIVE_KEYS: (keyof AttentionCounts)[] = ["pendingVerifications", "openReports", "pendingTestimonials", "draftListings"];
 
 export function NeedsAttentionCard({ counts, loading, notConnected = false }: { counts: AttentionCounts | null; loading: boolean; notConnected?: boolean }) {
   const { can } = useRoles();
